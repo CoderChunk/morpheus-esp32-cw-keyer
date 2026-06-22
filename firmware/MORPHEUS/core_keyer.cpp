@@ -141,6 +141,9 @@ static unsigned long keyDownStartMs = 0;
 static int currentWpm = DEFAULT_WPM;
 static unsigned long ditLengthMs = 1200UL / (unsigned long)DEFAULT_WPM;
 
+static uint32_t currentSidetoneFreq = TONE_FREQ_HZ;
+static bool     paddleReversed      = DEFAULT_PADDLE_REVERSED;
+
 // ----------------------------------------------------------------------------
 // Common element interface. elementComplete() ends here - it no longer
 // calls into a decoder directly. The decoder finds out about each
@@ -148,7 +151,7 @@ static unsigned long ditLengthMs = 1200UL / (unsigned long)DEFAULT_WPM;
 // is the only thing that knows both this module and core_decoder exist.
 // ----------------------------------------------------------------------------
 static void elementStart(unsigned long nowMs) {
-  buzzerOn(TONE_FREQ_HZ);
+  buzzerOn(currentSidetoneFreq);
   txActive = true;
   events_onKeyDown(nowMs);
 }
@@ -172,6 +175,23 @@ void core_keyer_setWpm(int wpm) {
   if (wpm > WPM_MAX) wpm = WPM_MAX;
   applyWpm(wpm);
 }
+
+// ----------------------------------------------------------------------------
+// Side Tone
+// ----------------------------------------------------------------------------
+uint32_t core_keyer_getSidetoneFreq() { return currentSidetoneFreq; }
+
+void core_keyer_setSidetoneFreq(uint32_t hz) {
+  if (hz < SIDETONE_FREQ_MIN_HZ) hz = SIDETONE_FREQ_MIN_HZ;
+  if (hz > SIDETONE_FREQ_MAX_HZ) hz = SIDETONE_FREQ_MAX_HZ;
+  currentSidetoneFreq = hz;
+}
+
+// ----------------------------------------------------------------------------
+// Paddle Reverse
+// ----------------------------------------------------------------------------
+bool core_keyer_getPaddleReversed() { return paddleReversed; }
+void core_keyer_setPaddleReversed(bool reversed) { paddleReversed = reversed; }
 
 // ----------------------------------------------------------------------------
 // Keyer reset
@@ -322,6 +342,8 @@ void core_keyer_service(unsigned long now) {
   if (currentMode == MODE_STRAIGHT) {
     runStraightKey(tipActive, now);
   } else {
-    runIambicPaddle(tipActive, ringActive, now);
+    bool ditActive = paddleReversed ? ringActive : tipActive;
+    bool dahActive = paddleReversed ? tipActive  : ringActive;
+    runIambicPaddle(ditActive, dahActive, now);
   }
 }

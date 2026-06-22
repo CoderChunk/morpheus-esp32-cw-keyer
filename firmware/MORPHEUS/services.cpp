@@ -34,6 +34,101 @@
                             // services.h's public surface.
 #include "config.h"
 #include <string.h>
+#include <Preferences.h>
+
+static const char *SETTINGS_NVS_NAMESPACE = "morpheus_set";
+static const char *SETTINGS_NVS_KEY       = "keyerSettings";
+
+struct OperatorSettings {
+  uint16_t version;
+  uint16_t wpm;
+  uint16_t sidetoneHz;
+  bool     paddleReverse;
+};
+
+static Preferences settingsPrefs;
+static OperatorSettings lastSavedSettings;
+static unsigned long lastSettingsSaveMs = 0;
+static bool settingsLoaded = false;
+
+static OperatorSettings currentSettingsSnapshot() {
+  OperatorSettings s;
+  s.version = SETTINGS_VERSION;
+  s.wpm = (uint16_t)core_keyer_getWpm();
+#if FEATURE_SIDETONE
+  s.sidetoneHz = (uint16_t)core_keyer_getSidetoneFreq();
+#else
+  s.sidetoneHz = (uint16_t)TONE_FREQ_HZ;
+#endif
+  s.paddleReverse = core_keyer_getPaddleReversed();
+  return s;
+}
+
+void services_loadSettings() {
+  settingsPrefs.begin(SETTINGS_NVS_NAMESPACE, false);
+
+  OperatorSettings defaults;
+  defaults.version       = SETTINGS_VERSION;
+  defaults.wpm           = (uint16_t)DEFAULT_WPM;
+  defaults.sidetoneHz    = (uint16_t)TONE_FREQ_HZ;
+  defaults.paddleReverse = DEFAULT_PADDLE_REVERSED;
+
+  OperatorSettings loaded = defaults;
+  size_t got = settingsPrefs.getBytes(SETTINGS_NVS_KEY, &loaded, sizeof(loaded));
+  bool needsUpgradeWrite = (got != sizeof(loaded)) || (loaded.version != SETTINGS_VERSION);
+  if (needsUpgradeWrite) loaded = defaults;
+
+  core_keyer_setWpm(loaded.wpm);
+#if FEATURE_SIDETONE
+  core_keyer_setSidetoneFreq(loaded.sidetoneHz);
+#endif
+  core_keyer_setPaddleReversed(loaded.paddleReverse);
+
+  lastSavedSettings  = currentSettingsSnapshot();
+  lastSettingsSaveMs = millis();
+  settingsLoaded     = true;
+
+  if (needsUpgradeWrite) {
+    settingsPrefs.putBytes(SETTINGS_NVS_KEY, &lastSavedSettings, sizeof(lastSavedSettings));
+#if FEATURE_SERIAL
+    Serial.println(F("EVT SETTINGS_UPGRADE_WRITE"));
+#endif
+  }
+}
+
+void services_serviceSettings(unsigned long now) {
+  if (!settingsLoaded) return;
+  if (now - lastSettingsSaveMs < SETTINGS_SAVE_DEBOUNCE_MS) return;
+
+  OperatorSettings current = currentSettingsSnapshot();
+  bool changed = (current.wpm != lastSavedSettings.wpm) ||
+                 (current.sidetoneHz != lastSavedSettings.sidetoneHz) ||
+                 (current.paddleReverse != lastSavedSettings.paddleReverse);
+  if (!changed) return;
+
+  settingsPrefs.putBytes(SETTINGS_NVS_KEY, &current, sizeof(current));
+  lastSavedSettings  = current;
+  lastSettingsSaveMs = now;
+#if FEATURE_SERIAL
+  Serial.println(F("EVT SETTINGS_SAVE"));
+#endif
+}
+
+void services_factoryResetSettings() {
+  settingsPrefs.remove(SETTINGS_NVS_KEY);
+
+  core_keyer_setWpm(DEFAULT_WPM);
+#if FEATURE_SIDETONE
+  core_keyer_setSidetoneFreq(TONE_FREQ_HZ);
+#endif
+  core_keyer_setPaddleReversed(DEFAULT_PADDLE_REVERSED);
+
+  lastSavedSettings  = currentSettingsSnapshot();
+  lastSettingsSaveMs = millis();
+#if FEATURE_SERIAL
+  Serial.println(F("EVT SETTINGS_FACTORY_RESET"));
+#endif
+}
 
 #if FEATURE_POTENTIOMETER
 static float smoothedAdc = 0.0f;

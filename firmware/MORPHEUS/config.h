@@ -34,11 +34,14 @@
 // ----------------------------------------------------------------------------
 // Feature flags - toggle 0/1.
 // ----------------------------------------------------------------------------
-#define FEATURE_OLED          1
-#define FEATURE_BLE           1
-#define FEATURE_POTENTIOMETER 0   // optional hardware, not currently installed
-#define FEATURE_SIDETONE      1
-#define FEATURE_SERIAL        1
+#define FEATURE_OLED                  1
+#define FEATURE_BLE                   1
+#define FEATURE_POTENTIOMETER         0   // optional hardware, not currently installed
+#define FEATURE_SIDETONE              1
+#define FEATURE_SERIAL                1
+#define FEATURE_DEBUG_SERIAL_COMMANDS 0   // TEMPORARY: settings validation only.
+                                          // Remove once v1.2's real config menu exists.
+                                          // Requires FEATURE_SERIAL=1 (uses Serial for I/O).
 
 // ----------------------------------------------------------------------------
 // Pin map (validated on ESP32-WROOM-32)
@@ -70,6 +73,11 @@ static const uint8_t       MAX_PATTERN_LEN           = 8;
 static const uint8_t       MAX_WORD_LEN              = 64;
 static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
+static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
+static const bool          DEFAULT_PADDLE_REVERSED   = false;
+static const uint16_t      SETTINGS_VERSION          = 1;
+static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
+static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 
 static const int DEFAULT_WPM = 15;
 

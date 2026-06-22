@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Build files
+build/
+
+# Logs
+*.log
+*.csv
+*.jsonl
+
+# Temporary files
+*.bak
+*.tmp
+
+# Linux
+*~

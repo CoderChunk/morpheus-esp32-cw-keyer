@@ -79,6 +79,29 @@ void events_onWordComplete(const char *word, unsigned long now) {
 #endif
 }
 
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+static void handleDebugSerialCommand() {
+  if (!Serial.available()) return;
+  String line = Serial.readStringUntil('\n');
+  line.trim();
+  if (line.length() == 0) return;
+
+  if (line.startsWith("SET WPM ")) {
+    core_keyer_setWpm(line.substring(8).toInt());
+    Serial.print(F("EVT DEBUG_SET wpm=")); Serial.println(core_keyer_getWpm());
+  } else if (line.startsWith("SET TONE ")) {
+    core_keyer_setSidetoneFreq((uint32_t)line.substring(9).toInt());
+    Serial.print(F("EVT DEBUG_SET sidetoneHz=")); Serial.println(core_keyer_getSidetoneFreq());
+  } else if (line.startsWith("SET PADDLE_REV ")) {
+    core_keyer_setPaddleReversed(line.substring(15).toInt() != 0);
+    Serial.print(F("EVT DEBUG_SET paddleReversed=")); Serial.println(core_keyer_getPaddleReversed());
+  } else if (line == "RESET SETTINGS") {
+    services_factoryResetSettings();
+    Serial.println(F("EVT DEBUG_FACTORY_RESET"));
+  }
+}
+#endif
+
 // ----------------------------------------------------------------------------
 // Setup
 // ----------------------------------------------------------------------------
@@ -91,6 +114,8 @@ void setup() {
 
   core_keyer_init();
   core_decoder_init();
+
+  services_loadSettings();
 
 #if FEATURE_OLED
   display_init();
@@ -126,6 +151,8 @@ void loop() {
 
   core_decoder_service(now);
 
+  services_serviceSettings(now);
+
 #if FEATURE_POTENTIOMETER
   services_servicePotentiometer(now);
 #endif
@@ -140,5 +167,9 @@ void loop() {
 
 #if FEATURE_SERIAL
   services_serviceDiagnostics(now);
+#endif
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+  handleDebugSerialCommand();
 #endif
 }

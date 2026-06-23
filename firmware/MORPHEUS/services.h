@@ -56,4 +56,13 @@ void services_servicePotentiometer(unsigned long now);
 unsigned long services_getUptimeMs();
 uint32_t      services_getFreeHeapBytes();
 
+// Operator settings persistence - loads saved settings during startup.
+void services_loadSettings();
+
+// Periodic settings service - performs debounced NVS saves when settings change.
+void services_serviceSettings(unsigned long now);
+
+// Restores operator settings to defaults without affecting BLE bonding data.
+void services_factoryResetSettings();
+
 #endif // MORPHEUS_SERVICES_H

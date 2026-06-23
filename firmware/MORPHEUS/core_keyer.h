@@ -51,13 +51,20 @@ int           core_keyer_getWpm();
 unsigned long core_keyer_getDitLengthMs();
 bool          core_keyer_isTxActive();
 KeyState      core_keyer_getKeyState(unsigned long now);
+uint32_t      core_keyer_getSidetoneFreq();
+bool          core_keyer_getPaddleReversed();
 
 // ----------------------------------------------------------------------------
-// Public setter - the one write path into the keyer's timing state from
-// outside. Used by services.cpp for potentiometer-driven WPM. Clamped
-// internally to [WPM_MIN, WPM_MAX].
+// Public setters - write paths into the keyer's runtime state from outside.
+// core_keyer_setWpm() is used by services.cpp for potentiometer-driven WPM
+// (clamped internally to [WPM_MIN, WPM_MAX]). core_keyer_setSidetoneFreq()
+// and core_keyer_setPaddleReversed() are used by services.cpp's settings
+// persistence layer to restore saved values at boot. Sidetone frequency is
+// clamped internally to [SIDETONE_FREQ_MIN_HZ, SIDETONE_FREQ_MAX_HZ].
 // ----------------------------------------------------------------------------
 void core_keyer_setWpm(int wpm);
+void core_keyer_setSidetoneFreq(uint32_t hz);
+void core_keyer_setPaddleReversed(bool reversed);
 
 // ----------------------------------------------------------------------------
 // Event hooks - DECLARED here (the keyer is the producer) but DEFINED in

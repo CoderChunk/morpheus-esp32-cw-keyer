@@ -98,6 +98,9 @@ static void handleDebugSerialCommand() {
   } else if (line == "RESET SETTINGS") {
     services_factoryResetSettings();
     Serial.println(F("EVT DEBUG_FACTORY_RESET"));
+  } else if (line == "RESET BOND") {
+    transport_resetBond();
+    Serial.println(F("EVT DEBUG_BOND_RESET"));
   }
 }
 #endif
@@ -112,6 +115,37 @@ void setup() {
   Serial.println(F("=== MORPHEUS Boot ==="));
 #endif
 
+  // Bond reset button check - sampled once, very early, before any module
+  // is initialized. The check itself always runs; only the log lines are
+  // gated behind FEATURE_SERIAL. The actual effect is naturally gated by
+  // transport_resetBond() being an empty stub when FEATURE_BLE=0.
+  bool bondResetRequested = false;
+  pinMode(PIN_BOND_RESET, INPUT_PULLUP);
+  if (digitalRead(PIN_BOND_RESET) == LOW) {
+#if FEATURE_SERIAL
+    Serial.println(F("EVT BOND_RESET_HOLD_START"));
+#endif
+    unsigned long holdStartMs = millis();
+    bool stillHeld = true;
+    while (millis() - holdStartMs < BOND_RESET_HOLD_MS) {
+      if (digitalRead(PIN_BOND_RESET) != LOW) {
+        stillHeld = false;
+        break;
+      }
+      delay(10);
+    }
+    if (stillHeld) {
+      bondResetRequested = true;
+#if FEATURE_SERIAL
+      Serial.println(F("EVT BOND_RESET_HOLD_CONFIRMED"));
+#endif
+    } else {
+#if FEATURE_SERIAL
+      Serial.println(F("EVT BOND_RESET_HOLD_ABORTED"));
+#endif
+    }
+  }
+
   core_keyer_init();
   core_decoder_init();
 
@@ -124,9 +158,17 @@ void setup() {
   services_init();
 
   // BLE last - brought up only after all other hardware is ready, exactly
-  // as in the validated Stage 2 boot order.
+  // as in the validated Stage 2 boot order. Bond reset (if requested)
+  // happens AFTER transport_init(), once NimBLE is already initialized,
+  // not before.
 #if FEATURE_BLE
   transport_init();
+
+  if (bondResetRequested) {
+    transport_resetBond();
+  }
+#else
+  (void)bondResetRequested;
 #endif
 
 #if FEATURE_SERIAL

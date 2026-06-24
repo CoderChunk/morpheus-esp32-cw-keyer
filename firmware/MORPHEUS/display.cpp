@@ -45,12 +45,32 @@ static U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 // FEATURE_OLED guard; the heavy rendering work below is what's actually
 // gated.
 static char displayTranscript[TRANSCRIPT_LEN];
-static DisplayLinkStatus linkStatus = DISPLAY_LINK_ADV;
-static uint32_t lastPasskey = 0;
+static volatile DisplayLinkStatus linkStatus = DISPLAY_LINK_ADV;
+static volatile uint32_t lastPasskey = 0;
+
+// ----------------------------------------------------------------------------
+// v1.2.1 fix: linkStatus and lastPasskey are written from NimBLE's host task
+// (via display_setTransportStatus(), called from onConnect()/onPassKeyDisplay()/
+// onAuthenticationComplete() in transport.cpp) and read from the Arduino
+// loop() task (display_service()). Identified during the v1.2.1 race-condition
+// investigation as a structurally identical, smaller-impact hazard to the one
+// that caused the stuck-PAIRED bug: a torn read of these two fields could show
+// the passkey overlay with a stale/zero value instead of the real passkey.
+// Not directly observed in testing, but the same shared-state-without-
+// synchronization shape, fixed in this same pass per the approved v1.2.1
+// design scope.
+//
+// This lock must never wrap I2C/Wire calls - display_service() takes a
+// snapshot under the lock, releases immediately, then does all the slow
+// rendering work from the local copy.
+// ----------------------------------------------------------------------------
+static portMUX_TYPE displayStateMux = portMUX_INITIALIZER_UNLOCKED;
 
 void display_setTransportStatus(DisplayLinkStatus status, uint32_t passkey) {
+  portENTER_CRITICAL(&displayStateMux);
   linkStatus = status;
   lastPasskey = passkey;
+  portEXIT_CRITICAL(&displayStateMux);
 }
 
 void display_appendWord(const char *word) {
@@ -79,7 +99,7 @@ void display_appendWord(const char *word) {
 
 static unsigned long lastDisplayUpdateMs = 0;
 
-static void renderPairingOverlay() {
+static void renderPairingOverlay(uint32_t passkey) {
   char line[24];
   u8g2.clearBuffer();
 
@@ -87,7 +107,7 @@ static void renderPairingOverlay() {
   u8g2.drawStr(0, 10, "BLE PAIRING REQUEST");
 
   u8g2.setFont(u8g2_font_7x14B_tr);
-  snprintf(line, sizeof(line), "%06u", (unsigned)lastPasskey);
+  snprintf(line, sizeof(line), "%06u", (unsigned)passkey);
   int w = u8g2.getStrWidth(line);
   int x = (128 - w) / 2;
   if (x < 0) x = 0;
@@ -110,19 +130,20 @@ static void renderPairResult(bool success) {
   u8g2.sendBuffer();
 }
 
-static void renderOperatorScreen() {
+static void renderOperatorScreen(DisplayLinkStatus status) {
   char line[32];
   u8g2.clearBuffer();
 
   u8g2.setFont(u8g2_font_6x10_tr);
 
 #if FEATURE_BLE
-  const char *bleCode = (linkStatus == DISPLAY_LINK_SECURE)    ? "SECR" :
-                        (linkStatus == DISPLAY_LINK_CONNECTED) ? "CONN" : "ADV";
+  const char *bleCode = (status == DISPLAY_LINK_SECURE)    ? "SECR" :
+                        (status == DISPLAY_LINK_CONNECTED) ? "CONN" : "ADV";
   snprintf(line, sizeof(line), "%s %dWPM %s",
            core_keyer_getMode() == MODE_STRAIGHT ? "STR" : "PAD",
            core_keyer_getWpm(), bleCode);
 #else
+  (void)status;
   snprintf(line, sizeof(line), "%s %dWPM",
            core_keyer_getMode() == MODE_STRAIGHT ? "STR" : "PAD",
            core_keyer_getWpm());
@@ -189,11 +210,21 @@ void display_service(unsigned long now) {
   if (now - lastDisplayUpdateMs < DISPLAY_INTERVAL_MS) return;
   lastDisplayUpdateMs = now;
 
-  if (linkStatus == DISPLAY_LINK_PAIRING)   { renderPairingOverlay();    return; }
-  if (linkStatus == DISPLAY_LINK_PAIR_OK)   { renderPairResult(true);    return; }
-  if (linkStatus == DISPLAY_LINK_PAIR_FAIL) { renderPairResult(false);   return; }
+  // v1.2.1: snapshot under the lock, release immediately, then render from
+  // the local copy - the critical section must never wrap the slow I2C
+  // calls below.
+  DisplayLinkStatus statusSnapshot;
+  uint32_t passkeySnapshot;
+  portENTER_CRITICAL(&displayStateMux);
+  statusSnapshot = linkStatus;
+  passkeySnapshot = lastPasskey;
+  portEXIT_CRITICAL(&displayStateMux);
 
-  renderOperatorScreen();
+  if (statusSnapshot == DISPLAY_LINK_PAIRING)   { renderPairingOverlay(passkeySnapshot); return; }
+  if (statusSnapshot == DISPLAY_LINK_PAIR_OK)   { renderPairResult(true);    return; }
+  if (statusSnapshot == DISPLAY_LINK_PAIR_FAIL) { renderPairResult(false);   return; }
+
+  renderOperatorScreen(statusSnapshot);
 }
 
 #else // !FEATURE_OLED - stub implementations so the public API stays linkable

@@ -54,6 +54,29 @@ static volatile bool bleAwaitingTimeout = false; // true while showing PAIR_OK/P
 static bool hasTrustedDevice = false;
 static char trustedAddress[24] = {0};
 
+// ----------------------------------------------------------------------------
+// v1.2.1 fix: bleAwaitingTimeout and bleStateChangeMs must always be read and
+// written together, as one consistent pair - never one updated without the
+// other. They're written from NimBLE's host task (onAuthenticationComplete(),
+// possibly a different CPU core) and read from the Arduino loop() task
+// (transport_service()). `volatile` alone only prevents per-core compiler
+// caching; it provides no cross-task atomicity for a multi-field update, which
+// is exactly the gap that produced the v1.2.0 "stuck on PAIRED" bug: a reader
+// could observe a just-set `true` flag paired with a still-stale timestamp
+// from a previous event, conclude the display timeout had already elapsed,
+// clear the flag, and push the "settled" display state - only for the
+// original writer's own display push to land immediately after and silently
+// overwrite it back to PAIR_OK, with bleAwaitingTimeout now permanently
+// false and nothing left to ever trigger another clear attempt.
+//
+// This spinlock makes the flag+timestamp+display-push update indivisible.
+// NEEDS HARDWARE/COMPILE VERIFICATION on this Arduino-ESP32 core version,
+// though portENTER_CRITICAL/portMUX_TYPE are the standard, widely-used
+// pattern for exactly this shape of problem and are normally available
+// transitively via Arduino.h on this platform.
+// ----------------------------------------------------------------------------
+static portMUX_TYPE bleStateMux = portMUX_INITIALIZER_UNLOCKED;
+
 static bool isCurrentlyConnected() { return bleConnHandle != BLE_CONN_HANDLE_INVALID; }
 
 static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
@@ -124,9 +147,13 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 #endif
 
     if (!secure) {
+      // v1.2.1: flag + timestamp + display push updated as one atomic unit.
+      portENTER_CRITICAL(&bleStateMux);
       bleAwaitingTimeout = true;
       bleStateChangeMs = millis();
       pushDisplayStatus(DISPLAY_LINK_PAIR_FAIL);
+      portEXIT_CRITICAL(&bleStateMux);
+
       if (bleServer != nullptr) bleServer->disconnect(connInfo);
       return;
     }
@@ -146,9 +173,14 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 #endif
     }
 
+    // v1.2.1: flag + timestamp + display push updated as one atomic unit.
+    // This is the exact sequence that produced the v1.2.0 stuck-PAIRED bug
+    // when read mid-update from transport_service() on another task/core.
+    portENTER_CRITICAL(&bleStateMux);
     bleAwaitingTimeout = true;
     bleStateChangeMs = millis();
     pushDisplayStatus(DISPLAY_LINK_PAIR_OK);
+    portEXIT_CRITICAL(&bleStateMux);
   }
 };
 
@@ -199,12 +231,15 @@ void transport_init() {
 }
 
 void transport_service(unsigned long now) {
-  if (bleAwaitingTimeout) {
-    if (now - bleStateChangeMs >= BLE_PAIR_MSG_DURATION_MS) {
-      bleAwaitingTimeout = false;
-      pushDisplayStatus(isCurrentlyConnected() ? DISPLAY_LINK_SECURE : DISPLAY_LINK_ADV);
-    }
+  // v1.2.1: read-check-clear-and-display as one atomic unit under the same
+  // lock the writers use, so this can never observe a torn flag/timestamp
+  // pair from onAuthenticationComplete().
+  portENTER_CRITICAL(&bleStateMux);
+  if (bleAwaitingTimeout && (now - bleStateChangeMs >= BLE_PAIR_MSG_DURATION_MS)) {
+    bleAwaitingTimeout = false;
+    pushDisplayStatus(isCurrentlyConnected() ? DISPLAY_LINK_SECURE : DISPLAY_LINK_ADV);
   }
+  portEXIT_CRITICAL(&bleStateMux);
 }
 
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {
@@ -252,6 +287,35 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
 #endif
 }
 
+// ----------------------------------------------------------------------------
+// Bond Reset (v1.2.0)
+// ----------------------------------------------------------------------------
+void transport_resetBond() {
+#if FEATURE_SERIAL
+  Serial.println(F("EVT BLE_BOND_RESET_START"));
+#endif
+
+  if (bleServer != nullptr && isCurrentlyConnected()) {
+    NimBLEConnInfo connInfo = bleServer->getPeerInfo(0);
+    bleServer->disconnect(connInfo);
+  }
+
+  NimBLEDevice::deleteAllBonds();
+
+  blePrefs.remove("hasBond");
+  blePrefs.remove("trustedAddr");
+  hasTrustedDevice = false;
+  trustedAddress[0] = '\0';
+
+  NimBLEDevice::startAdvertising();
+
+  pushDisplayStatus(DISPLAY_LINK_ADV);
+
+#if FEATURE_SERIAL
+  Serial.println(F("EVT BLE_BOND_RESET_COMPLETE"));
+#endif
+}
+
 #else // !FEATURE_BLE - stub implementations, no NimBLE/Preferences dependency at all
 
 void transport_init() {}
@@ -259,5 +323,6 @@ void transport_service(unsigned long now) { (void)now; }
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {
   (void)word; (void)wpm; (void)mode; (void)now;
 }
+void transport_resetBond() {}
 
 #endif

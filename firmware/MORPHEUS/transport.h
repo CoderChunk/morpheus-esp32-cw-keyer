@@ -33,4 +33,13 @@ void transport_service(unsigned long now);
 // Called from MORPHEUS.ino's events_onWordComplete() fan-out.
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now);
 
+// Clears the BLE bond: disconnects any currently connected peer, wipes
+// NimBLE's own internal bond store, clears this app's trusted-device
+// allowlist, and reopens advertising to a new pairing. Never touches
+// operator settings (services.cpp's NVS namespace) - that separation is
+// load-bearing, not incidental. Called from MORPHEUS.ino, either after a
+// boot-time held button (see PIN_BOND_RESET) or via the temporary
+// FEATURE_DEBUG_SERIAL_COMMANDS "RESET BOND" command.
+void transport_resetBond();
+
 #endif // MORPHEUS_TRANSPORT_H

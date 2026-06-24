@@ -39,7 +39,7 @@
 #define FEATURE_POTENTIOMETER         0   // optional hardware, not currently installed
 #define FEATURE_SIDETONE              1
 #define FEATURE_SERIAL                1
-#define FEATURE_DEBUG_SERIAL_COMMANDS 0   // TEMPORARY: settings validation only.
+#define FEATURE_DEBUG_SERIAL_COMMANDS 0   // TEMPORARY: settings/bond validation only.
                                           // Remove once v1.2's real config menu exists.
                                           // Requires FEATURE_SERIAL=1 (uses Serial for I/O).
 
@@ -53,7 +53,9 @@
 #define PIN_JACK_TIP      25   // STRAIGHT: key; PADDLE: DIT
 #define PIN_JACK_RING     26   // STRAIGHT: ignored; PADDLE: DAH
 #define PIN_BUZZER        18
-// GPIO27 intentionally unassigned - reserved for future use.
+#define PIN_BOND_RESET    27   // Active-low momentary button to GND.
+                               // Hold at boot for BOND_RESET_HOLD_MS to
+                               // clear the BLE bond. See transport_resetBond().
 
 #define OLED_I2C_ADDR     0x3C
 
@@ -78,6 +80,7 @@ static const bool          DEFAULT_PADDLE_REVERSED   = false;
 static const uint16_t      SETTINGS_VERSION          = 1;
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
+static const unsigned long BOND_RESET_HOLD_MS        = 2000;
 
 static const int DEFAULT_WPM = 15;
 

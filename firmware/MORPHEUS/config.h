@@ -36,7 +36,6 @@
 // ----------------------------------------------------------------------------
 #define FEATURE_OLED                  1
 #define FEATURE_BLE                   1
-#define FEATURE_POTENTIOMETER         0   // optional hardware, not currently installed
 #define FEATURE_SIDETONE              1
 #define FEATURE_SERIAL                1
 #define FEATURE_DEBUG_SERIAL_COMMANDS 0   // TEMPORARY: settings/bond validation only.
@@ -48,7 +47,6 @@
 // ----------------------------------------------------------------------------
 #define PIN_OLED_SDA      21
 #define PIN_OLED_SCL      22
-#define PIN_POT_WPM       34   // ADC1_CH6 - only read if FEATURE_POTENTIOMETER
 #define PIN_MODE_SWITCH   33   // HIGH = STRAIGHT, LOW = PADDLE
 #define PIN_JACK_TIP      25   // STRAIGHT: key; PADDLE: DIT
 #define PIN_JACK_RING     26   // STRAIGHT: ignored; PADDLE: DAH
@@ -56,6 +54,8 @@
 #define PIN_BOND_RESET    27   // Active-low momentary button to GND.
                                // Hold at boot for BOND_RESET_HOLD_MS to
                                // clear the BLE bond. See transport_resetBond().
+// GPIO34 (ADC1) reserved for the navigation keypad (analog resistor ladder),
+// added in a later step. No electrical assignment yet.
 
 #define OLED_I2C_ADDR     0x3C
 
@@ -68,7 +68,6 @@ static const unsigned long DEBOUNCE_MS               = 5;
 static const uint32_t      TONE_FREQ_HZ              = 600;
 static const unsigned long DISPLAY_INTERVAL_MS       = 100;
 static const unsigned long SERIAL_STATUS_INTERVAL_MS = 1000;
-static const float         ADC_SMOOTHING_ALPHA       = 0.15f;
 static const float         CHAR_GAP_MULT             = 3.0f;
 static const float         WORD_GAP_MULT             = 7.0f;
 static const uint8_t       MAX_PATTERN_LEN           = 8;

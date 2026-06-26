@@ -195,10 +195,6 @@ void loop() {
 
   services_serviceSettings(now);
 
-#if FEATURE_POTENTIOMETER
-  services_servicePotentiometer(now);
-#endif
-
 #if FEATURE_BLE
   transport_service(now);
 #endif

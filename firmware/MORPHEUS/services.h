@@ -45,11 +45,6 @@ void services_logKeyUp(ElementType type, unsigned long durMs, unsigned long thre
 void services_logCharacterComplete(char decodedChar, const char *pattern);
 void services_logWordComplete(const char *word, unsigned long now);
 
-// Potentiometer-driven WPM (FEATURE_POTENTIOMETER only). Reads, smooths,
-// maps, then pushes the result into core_keyer via the public
-// core_keyer_setWpm() setter.
-void services_servicePotentiometer(unsigned long now);
-
 // Session info - exposed per the architecture's stated scope, not currently
 // auto-printed anywhere (kept unwired to preserve identical behavior
 // pending a decision on where to surface it).

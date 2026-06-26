@@ -130,29 +130,11 @@ void services_factoryResetSettings() {
 #endif
 }
 
-#if FEATURE_POTENTIOMETER
-static float smoothedAdc = 0.0f;
-#endif
-
 void services_init() {
-#if FEATURE_POTENTIOMETER
-  analogReadResolution(12);
-  analogSetAttenuation(ADC_11db);
-  smoothedAdc = (float)analogRead(PIN_POT_WPM);
-#endif
-}
-
-void services_servicePotentiometer(unsigned long now) {
-  (void)now;
-#if FEATURE_POTENTIOMETER
-  int raw = analogRead(PIN_POT_WPM);
-  smoothedAdc += (raw - smoothedAdc) * ADC_SMOOTHING_ALPHA;
-
-  int wpm = map((long)smoothedAdc, 0, 4095, WPM_MIN, WPM_MAX);
-  wpm = constrain(wpm, WPM_MIN, WPM_MAX);
-
-  core_keyer_setWpm(wpm);
-#endif
+  // No hardware services to initialize at present. The potentiometer ADC
+  // setup that formerly lived here was removed when the WPM pot was retired
+  // (GPIO34 is now reserved for the navigation keypad). Retained as a stable
+  // lifecycle hook called from setup().
 }
 
 #if FEATURE_SERIAL

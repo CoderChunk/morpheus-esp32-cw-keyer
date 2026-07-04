@@ -83,6 +83,9 @@ static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
   display_setTransportStatus(status, passkey);
 }
 
+// Escape only the JSON string field contents. The caller provides a buffer
+// sized to the peer MTU budget, so truncation happens before the JSON envelope
+// is composed and never leaves a dangling backslash escape.
 static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
   if (outputSize == 0) return;
 
@@ -283,6 +286,14 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
     return;
   }
 
+  // The configured word cap is measured before escaping. A JSON string can
+  // expand to six bytes for a control character ("\\u00XX"), so size the
+  // temporary field for the worst case and then clamp it to the MTU budget.
+  const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 6;
+  size_t payloadCap = escapedFieldCap;
+  if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
+
+  char escapedWord[(BLE_WORD_FIELD_CAP * 6) + 1];
   const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 2;
   size_t payloadCap = escapedFieldCap;
   if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
@@ -294,6 +305,7 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
     jsonEscapeWord(word, escapedWord, sizeof(escapedWord));
   }
 
+  char json[(BLE_WORD_FIELD_CAP * 6) + BLE_JSON_OVERHEAD_BYTES + 8];
   char json[(BLE_WORD_FIELD_CAP * 2) + BLE_JSON_OVERHEAD_BYTES + 8];
   snprintf(json, sizeof(json),
            "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",

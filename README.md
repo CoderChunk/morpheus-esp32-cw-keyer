@@ -124,6 +124,16 @@ This separation allows contributors to improve individual systems without affect
 
 # Pin Assignment
 
+| Function             | GPIO |
+| -------------------- | ---: |
+| OLED SDA             |   21 |
+| OLED SCL             |   22 |
+| Key / DIT            |   25 |
+| DAH                  |   26 |
+| Buzzer               |   18 |
+| Mode Switch          |   33 |
+| Bond Reset Button    |   27 |
+| Reserved Keypad ADC  |   34 |
 | Function          | GPIO |
 | ----------------- | ---: |
 | OLED SDA          |   21 |
@@ -158,9 +168,9 @@ morpheus-esp32-cw-keyer/
 │       ├── services.h
 │       ├── transport.cpp
 │       └── transport.h
+├── tests
+│   └── test_decoder_logic.py
 ├── LICENSE
-├── python
-│   └── receiver
 └── README.md
 
 ```
@@ -173,9 +183,15 @@ morpheus-esp32-cw-keyer/
 
 1. Install ESP32 board support.
 2. Install required libraries.
-3. Open `MORPHEUS.ino`.
+3. Open `firmware/MORPHEUS/MORPHEUS.ino`.
 4. Select your ESP32 board.
 5. Compile and upload.
+
+Host-side decoder tests can be run with:
+
+```sh
+python -m unittest discover -s tests
+```
 
 ---
 

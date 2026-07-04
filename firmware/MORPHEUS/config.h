@@ -95,7 +95,12 @@ static const char     BLE_SERVICE_UUID[]       = "7a48a2b0-0001-4ad4-9f1a-1c2d3e
 static const char     BLE_WORD_CHAR_UUID[]     = "7a48a2b0-0002-4ad4-9f1a-1c2d3e4f5a6b";
 static const uint16_t BLE_REQUESTED_MTU        = 128;
 static const uint8_t  BLE_WORD_FIELD_CAP       = 24;
-static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 60;
+// Worst-case JSON envelope length around the escaped word field, excluding the
+// word itself and the null terminator:
+// {"word":"","wpm":40,"mode":"STRAIGHT","timestamp":4294967295}
+// is 61 bytes. Keep a small margin so MTU budgeting remains conservative if
+// limits or field formatting are adjusted.
+static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;
 static const uint16_t BLE_CONN_HANDLE_INVALID  = 0xFFFF;
 

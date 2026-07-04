@@ -54,6 +54,8 @@ static volatile bool bleAwaitingTimeout = false; // true while showing PAIR_OK/P
 static bool hasTrustedDevice = false;
 static char trustedAddress[24] = {0};
 
+static const size_t BLE_ESCAPED_WORD_FIELD_CAP = BLE_WORD_FIELD_CAP * 6;
+
 // ----------------------------------------------------------------------------
 // v1.2.1 fix: bleAwaitingTimeout and bleStateChangeMs must always be read and
 // written together, as one consistent pair - never one updated without the
@@ -89,19 +91,24 @@ static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
 static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
   if (outputSize == 0) return;
 
+  static const char HEX[] = "0123456789abcdef";
   size_t out = 0;
   for (size_t i = 0; input[i] != '\0' && out < outputSize - 1; i++) {
-    char c = input[i];
+    uint8_t c = (uint8_t)input[i];
     if (c == '"' || c == '\\') {
       if (out + 2 >= outputSize) break;
       output[out++] = '\\';
-      output[out++] = c;
-    } else if ((uint8_t)c < 0x20) {
+      output[out++] = (char)c;
+    } else if (c < 0x20) {
       if (out + 6 >= outputSize) break;
-      snprintf(output + out, outputSize - out, "\\u%04x", (unsigned)c);
-      out += 6;
+      output[out++] = '\\';
+      output[out++] = 'u';
+      output[out++] = '0';
+      output[out++] = '0';
+      output[out++] = HEX[(c >> 4) & 0x0F];
+      output[out++] = HEX[c & 0x0F];
     } else {
-      output[out++] = c;
+      output[out++] = (char)c;
     }
   }
   output[out] = '\0';
@@ -286,27 +293,17 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
     return;
   }
 
-  // The configured word cap is measured before escaping. A JSON string can
-  // expand to six bytes for a control character ("\\u00XX"), so size the
-  // temporary field for the worst case and then clamp it to the MTU budget.
-  const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 6;
-  size_t payloadCap = escapedFieldCap;
+  size_t payloadCap = BLE_ESCAPED_WORD_FIELD_CAP;
   if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
 
-  char escapedWord[(BLE_WORD_FIELD_CAP * 6) + 1];
-  const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 2;
-  size_t payloadCap = escapedFieldCap;
-  if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
-
-  char escapedWord[(BLE_WORD_FIELD_CAP * 2) + 1];
+  char escapedWord[BLE_ESCAPED_WORD_FIELD_CAP + 1];
   if (payloadCap + 1 < sizeof(escapedWord)) {
     jsonEscapeWord(word, escapedWord, payloadCap + 1);
   } else {
     jsonEscapeWord(word, escapedWord, sizeof(escapedWord));
   }
 
-  char json[(BLE_WORD_FIELD_CAP * 6) + BLE_JSON_OVERHEAD_BYTES + 8];
-  char json[(BLE_WORD_FIELD_CAP * 2) + BLE_JSON_OVERHEAD_BYTES + 8];
+  char json[BLE_ESCAPED_WORD_FIELD_CAP + BLE_JSON_OVERHEAD_BYTES + 1];
   snprintf(json, sizeof(json),
            "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
            escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);

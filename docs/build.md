@@ -33,22 +33,15 @@ and leaves transport functions as no-op stubs.
 
 The repository includes a small Python `unittest` suite for decoder timing
 behavior that can run without ESP32 hardware:
-## Firmware build
-
-Open `firmware/MORPHEUS/MORPHEUS.ino` in Arduino IDE with ESP32 board support installed, then install the required libraries listed in the README before compiling and uploading.
-
-## Host-side tests
-
-A small Python test suite covers decoder timing behavior that can be exercised without ESP32 hardware:
 
 ```sh
 python -m unittest discover -s tests
 ```
 
 The host tests model element accumulation, character-gap finalization,
-word-gap finalization, TX-active gating, and pattern-length bounds. They do not
-replace an Arduino/ESP32 compile or hardware validation for GPIO, LEDC, OLED,
-NimBLE, NVS, or pairing behavior.
+word-gap finalization, TX-active gating, pattern-length bounds, and BLE JSON
+payload budget constants. They do not replace an Arduino/ESP32 compile or
+hardware validation for GPIO, LEDC, OLED, NimBLE, NVS, or pairing behavior.
 
 ## Suggested validation before a pull request
 
@@ -56,4 +49,3 @@ Run the host tests and perform at least one firmware compile with the feature
 set you changed. For BLE, display, sidetone, settings persistence, or wiring
 changes, also validate on hardware because those paths depend on ESP32
 peripherals and attached devices.
-These tests model the decoder's public behavior: element accumulation, character-gap finalization, word-gap finalization, and pattern-length bounds. Hardware-specific modules such as OLED, BLE, GPIO, and LEDC still require Arduino/ESP32 compile or device validation.

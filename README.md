@@ -134,15 +134,6 @@ This separation allows contributors to improve individual systems without affect
 | Mode Switch          |   33 |
 | Bond Reset Button    |   27 |
 | Reserved Keypad ADC  |   34 |
-| Function          | GPIO |
-| ----------------- | ---: |
-| OLED SDA          |   21 |
-| OLED SCL          |   22 |
-| Key / DIT         |   25 |
-| DAH               |   26 |
-| Buzzer            |   18 |
-| Mode Switch       |   33 |
-| Reserved keypad ADC |   34 |
 
 ---
 
@@ -169,6 +160,7 @@ morpheus-esp32-cw-keyer/
 │       ├── transport.cpp
 │       └── transport.h
 ├── tests
+│   ├── test_ble_json_budget.py
 │   └── test_decoder_logic.py
 ├── LICENSE
 └── README.md
@@ -216,6 +208,7 @@ Features can be enabled or disabled:
 ```cpp
 #define FEATURE_OLED      1
 #define FEATURE_BLE       1
+#define FEATURE_SIDETONE  1
 #define FEATURE_SERIAL    1
 ```
 

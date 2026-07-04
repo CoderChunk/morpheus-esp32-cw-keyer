@@ -177,7 +177,7 @@ void core_keyer_setWpm(int wpm) {
 }
 
 // ----------------------------------------------------------------------------
-// Side Tone
+// Sidetone
 // ----------------------------------------------------------------------------
 uint32_t core_keyer_getSidetoneFreq() { return currentSidetoneFreq; }
 

@@ -294,6 +294,11 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
 
   char escapedWord[(BLE_WORD_FIELD_CAP * 6) + 1];
+  const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 2;
+  size_t payloadCap = escapedFieldCap;
+  if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
+
+  char escapedWord[(BLE_WORD_FIELD_CAP * 2) + 1];
   if (payloadCap + 1 < sizeof(escapedWord)) {
     jsonEscapeWord(word, escapedWord, payloadCap + 1);
   } else {
@@ -301,6 +306,7 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   }
 
   char json[(BLE_WORD_FIELD_CAP * 6) + BLE_JSON_OVERHEAD_BYTES + 8];
+  char json[(BLE_WORD_FIELD_CAP * 2) + BLE_JSON_OVERHEAD_BYTES + 8];
   snprintf(json, sizeof(json),
            "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
            escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);

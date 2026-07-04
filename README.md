@@ -134,6 +134,15 @@ This separation allows contributors to improve individual systems without affect
 | Mode Switch          |   33 |
 | Bond Reset Button    |   27 |
 | Reserved Keypad ADC  |   34 |
+| Function          | GPIO |
+| ----------------- | ---: |
+| OLED SDA          |   21 |
+| OLED SCL          |   22 |
+| Key / DIT         |   25 |
+| DAH               |   26 |
+| Buzzer            |   18 |
+| Mode Switch       |   33 |
+| Reserved keypad ADC |   34 |
 
 ---
 

@@ -132,7 +132,7 @@ This separation allows contributors to improve individual systems without affect
 | DAH               |   26 |
 | Buzzer            |   18 |
 | Mode Switch       |   33 |
-| WPM Potentiometer |   34 |
+| Reserved keypad ADC |   34 |
 
 ---
 

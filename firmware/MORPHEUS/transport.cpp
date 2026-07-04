@@ -83,6 +83,27 @@ static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
   display_setTransportStatus(status, passkey);
 }
 
+static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
+  if (outputSize == 0) return;
+
+  size_t out = 0;
+  for (size_t i = 0; input[i] != '\0' && out < outputSize - 1; i++) {
+    char c = input[i];
+    if (c == '"' || c == '\\') {
+      if (out + 2 >= outputSize) break;
+      output[out++] = '\\';
+      output[out++] = c;
+    } else if ((uint8_t)c < 0x20) {
+      if (out + 6 >= outputSize) break;
+      snprintf(output + out, outputSize - out, "\\u%04x", (unsigned)c);
+      out += 6;
+    } else {
+      output[out++] = c;
+    }
+  }
+  output[out] = '\0';
+}
+
 class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 
   void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
@@ -253,31 +274,30 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   if (mtu == 0) mtu = 23;
 
   int available = (int)mtu - 3 /* ATT header */ - 2 /* safety margin */;
-  int maxWordChars = available - (int)BLE_JSON_OVERHEAD_BYTES;
+  int maxWordPayloadChars = available - (int)BLE_JSON_OVERHEAD_BYTES;
 
-  if (maxWordChars <= 0) {
+  if (maxWordPayloadChars <= 0) {
 #if FEATURE_SERIAL
     Serial.print(F("EVT BLE_SKIP reason=mtu_too_small mtu=")); Serial.println(mtu);
 #endif
     return;
   }
 
-  uint8_t cap = BLE_WORD_FIELD_CAP;
-  if (maxWordChars < cap) cap = (uint8_t)maxWordChars;
+  const size_t escapedFieldCap = BLE_WORD_FIELD_CAP * 2;
+  size_t payloadCap = escapedFieldCap;
+  if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
 
-  size_t wordLenLocal = strlen(word);
-  const char *wordToSend = word;
-  char truncated[BLE_WORD_FIELD_CAP + 1];
-  if (wordLenLocal > cap) {
-    strncpy(truncated, word, cap);
-    truncated[cap] = '\0';
-    wordToSend = truncated;
+  char escapedWord[(BLE_WORD_FIELD_CAP * 2) + 1];
+  if (payloadCap + 1 < sizeof(escapedWord)) {
+    jsonEscapeWord(word, escapedWord, payloadCap + 1);
+  } else {
+    jsonEscapeWord(word, escapedWord, sizeof(escapedWord));
   }
 
-  char json[BLE_WORD_FIELD_CAP + BLE_JSON_OVERHEAD_BYTES + 8];
+  char json[(BLE_WORD_FIELD_CAP * 2) + BLE_JSON_OVERHEAD_BYTES + 8];
   snprintf(json, sizeof(json),
            "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
-           wordToSend, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
+           escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
 
   bleWordChar->setValue(json);
   bleWordChar->notify();

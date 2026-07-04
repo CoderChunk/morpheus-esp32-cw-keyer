@@ -54,6 +54,8 @@ static volatile bool bleAwaitingTimeout = false; // true while showing PAIR_OK/P
 static bool hasTrustedDevice = false;
 static char trustedAddress[24] = {0};
 
+static const size_t BLE_ESCAPED_WORD_FIELD_CAP = BLE_WORD_FIELD_CAP * 6;
+
 // ----------------------------------------------------------------------------
 // v1.2.1 fix: bleAwaitingTimeout and bleStateChangeMs must always be read and
 // written together, as one consistent pair - never one updated without the
@@ -81,6 +83,35 @@ static bool isCurrentlyConnected() { return bleConnHandle != BLE_CONN_HANDLE_INV
 
 static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
   display_setTransportStatus(status, passkey);
+}
+
+// Escape only the JSON string field contents. The caller provides a buffer
+// sized to the peer MTU budget, so truncation happens before the JSON envelope
+// is composed and never leaves a dangling backslash escape.
+static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
+  if (outputSize == 0) return;
+
+  static const char HEX[] = "0123456789abcdef";
+  size_t out = 0;
+  for (size_t i = 0; input[i] != '\0' && out < outputSize - 1; i++) {
+    uint8_t c = (uint8_t)input[i];
+    if (c == '"' || c == '\\') {
+      if (out + 2 >= outputSize) break;
+      output[out++] = '\\';
+      output[out++] = (char)c;
+    } else if (c < 0x20) {
+      if (out + 6 >= outputSize) break;
+      output[out++] = '\\';
+      output[out++] = 'u';
+      output[out++] = '0';
+      output[out++] = '0';
+      output[out++] = HEX[(c >> 4) & 0x0F];
+      output[out++] = HEX[c & 0x0F];
+    } else {
+      output[out++] = (char)c;
+    }
+  }
+  output[out] = '\0';
 }
 
 class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
@@ -253,31 +284,29 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   if (mtu == 0) mtu = 23;
 
   int available = (int)mtu - 3 /* ATT header */ - 2 /* safety margin */;
-  int maxWordChars = available - (int)BLE_JSON_OVERHEAD_BYTES;
+  int maxWordPayloadChars = available - (int)BLE_JSON_OVERHEAD_BYTES;
 
-  if (maxWordChars <= 0) {
+  if (maxWordPayloadChars <= 0) {
 #if FEATURE_SERIAL
     Serial.print(F("EVT BLE_SKIP reason=mtu_too_small mtu=")); Serial.println(mtu);
 #endif
     return;
   }
 
-  uint8_t cap = BLE_WORD_FIELD_CAP;
-  if (maxWordChars < cap) cap = (uint8_t)maxWordChars;
+  size_t payloadCap = BLE_ESCAPED_WORD_FIELD_CAP;
+  if ((size_t)maxWordPayloadChars < payloadCap) payloadCap = (size_t)maxWordPayloadChars;
 
-  size_t wordLenLocal = strlen(word);
-  const char *wordToSend = word;
-  char truncated[BLE_WORD_FIELD_CAP + 1];
-  if (wordLenLocal > cap) {
-    strncpy(truncated, word, cap);
-    truncated[cap] = '\0';
-    wordToSend = truncated;
+  char escapedWord[BLE_ESCAPED_WORD_FIELD_CAP + 1];
+  if (payloadCap + 1 < sizeof(escapedWord)) {
+    jsonEscapeWord(word, escapedWord, payloadCap + 1);
+  } else {
+    jsonEscapeWord(word, escapedWord, sizeof(escapedWord));
   }
 
-  char json[BLE_WORD_FIELD_CAP + BLE_JSON_OVERHEAD_BYTES + 8];
+  char json[BLE_ESCAPED_WORD_FIELD_CAP + BLE_JSON_OVERHEAD_BYTES + 1];
   snprintf(json, sizeof(json),
            "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
-           wordToSend, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
+           escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
 
   bleWordChar->setValue(json);
   bleWordChar->notify();

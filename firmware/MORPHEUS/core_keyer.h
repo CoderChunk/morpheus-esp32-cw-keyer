@@ -56,8 +56,8 @@ bool          core_keyer_getPaddleReversed();
 
 // ----------------------------------------------------------------------------
 // Public setters - write paths into the keyer's runtime state from outside.
-// core_keyer_setWpm() is used by services.cpp for potentiometer-driven WPM
-// (clamped internally to [WPM_MIN, WPM_MAX]). core_keyer_setSidetoneFreq()
+// core_keyer_setWpm() is used by settings/debug-command flows for runtime WPM
+// updates (clamped internally to [WPM_MIN, WPM_MAX]). core_keyer_setSidetoneFreq()
 // and core_keyer_setPaddleReversed() are used by services.cpp's settings
 // persistence layer to restore saved values at boot. Sidetone frequency is
 // clamped internally to [SIDETONE_FREQ_MIN_HZ, SIDETONE_FREQ_MAX_HZ].

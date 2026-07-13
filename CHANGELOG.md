@@ -34,7 +34,7 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 - No architectural changes — split-core structure (`core_keyer` / `core_decoder` / `display` / `transport` / `services`) unchanged.
 - First-boot/unconfigured-board behavior is unchanged: falls back to existing `config.h` defaults (15 WPM, 600 Hz, paddle not reversed).
 - BLE bonding/pairing state is unaffected by any part of this feature.
-- All existing feature flags (`FEATURE_OLED`, `FEATURE_BLE`, `FEATURE_POTENTIOMETER`, `FEATURE_SIDETONE`, `FEATURE_SERIAL`) continue to work in all combinations.
+- All current feature flags (`FEATURE_OLED`, `FEATURE_BLE`, `FEATURE_SIDETONE`, `FEATURE_SERIAL`, `FEATURE_DEBUG_SERIAL_COMMANDS`) continue to work in their supported combinations.
 
 ### Files changed
 `config.h`, `core_keyer.h`, `core_keyer.cpp`, `services.h`, `services.cpp`, `MORPHEUS.ino`

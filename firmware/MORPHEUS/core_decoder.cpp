@@ -107,6 +107,9 @@ static unsigned long lastElementEndMs = 0;
 
 static char wordBuffer[MAX_WORD_LEN];
 static uint8_t wordLen = 0;
+static TrainingCharSink trainingSink = nullptr;
+
+void core_decoder_setTrainingSink(TrainingCharSink sink) { trainingSink = sink; }
 
 void core_decoder_setEnabled(bool enabled) {
   decoderEnabled = enabled;
@@ -138,11 +141,12 @@ static void finalizeCharacter() {
   char decoded = lookupMorse(charPattern);
   if (decoded == 0) decoded = '?';
 
-  events_onCharacterComplete(decoded, charPattern);
-
-  if (wordLen < MAX_WORD_LEN - 1) {
-    wordBuffer[wordLen++] = decoded;
-    wordBuffer[wordLen] = '\0';
+  if (trainingSink != nullptr) {
+    trainingSink(decoded, charPattern);
+    // Training active: word buffer/normal events deliberately untouched.
+  } else {
+    events_onCharacterComplete(decoded, charPattern);
+    if (wordLen < MAX_WORD_LEN - 1) { wordBuffer[wordLen++] = decoded; wordBuffer[wordLen] = '\0'; }
   }
 
   charPattern[0] = '\0';

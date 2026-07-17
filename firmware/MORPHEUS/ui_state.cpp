@@ -73,6 +73,8 @@ static unsigned long menuAnimLastMs = 0;
 static uint8_t menuAnimLastCarouselIndex = 0;
 static UiScreen menuAnimLastScreen = UI_SCREEN_SPLASH;
 
+static bool audioResourceBusy();
+
 uint16_t ui_state_getMenuAnimFrame() { return menuAnimFrame; }
 
 static void markDirty() { dirty = true; }
@@ -524,11 +526,44 @@ static void handleLiveMonitor(const UiEvent &ev) {
   if (ev.type == UI_EV_BACK) popList_forward_declared: ;   // placeholder, replaced below
 }
 
+static uint8_t currentTrainDrillId = TRAIN_DRILL_NONE;
+static uint8_t lastTrainPhaseSeen = 255;
+static uint8_t lastTrainTypedLenSeen = 255;
+static bool    lastFarnsworthPlayingSeen = false;
+
+static void pushTrainDrill(uint8_t drillId, const char *label) {
+  if (audioResourceBusy()) { showActionToast("AUDIO BUSY"); return; }
+  setInfoTitleFrom(label);
+  currentTrainDrillId = drillId;
+  ui_backend_trainStartSession(drillId);
+  lastTrainPhaseSeen = 255;
+  lastTrainTypedLenSeen = 255;
+  currentScreen = UI_SCREEN_TRAIN_DRILL;
+  markDirty();
+}
+
+static void pushTrainFarnsworth(const char *label) {
+  setInfoTitleFrom(label);
+  currentScreen = UI_SCREEN_TRAIN_FARNSWORTH;
+  markDirty();
+}
+
 // ============================================================================
 // CW KEYER SUBMENU: TUNE
 // ============================================================================
 static bool          tuneActive = false;
 static unsigned long tuneStartMs = 0;
+
+// Centralized audio-resource guard - fixes a real gap: with two more
+// audio-owning features added (drills, Farnsworth), the previous
+// pairwise "check ui_backend_isMemoryPlaying()" checks scattered across
+// handleDiagAudio/handleTune/the memory trigger no longer cover every
+// combination. This one helper is now used everywhere an audio-owning
+// action is about to start.
+static bool audioResourceBusy() {
+  return diagAudioPlaying || tuneActive || ui_backend_isMemoryPlaying() ||
+         ui_backend_isTrainingSessionActive() || ui_backend_isFarnsworthPlaying();
+}
 
 bool ui_state_getTuneActive() { return tuneActive; }
 uint16_t ui_state_getTuneFreq() { return ui_backend_getToneHz(); }
@@ -692,14 +727,22 @@ static void handleList(const UiEvent &ev) {
         tuneActive = false;
         currentScreen = UI_SCREEN_TUNE;
         markDirty();
+      } else if (n.type == NODE_TRAIN_DRILL && n.paramId != TRAIN_DRILL_NONE) {
+        pushTrainDrill(n.paramId, n.label);
+      } else if (n.type == NODE_TRAIN_FARNSWORTH) {
+        pushTrainFarnsworth(n.label);
       } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
         // Immediate, non-destructive: play now, stay on this list, toast.
         uint8_t slot = (uint8_t)(n.paramId - 1);
-        bool ok = ui_backend_playMemory(slot);
-        char toast[20];
-        if (ok) snprintf(toast, sizeof(toast), "PLAYING %u/%u", (unsigned)n.paramId, 5);
-        else    snprintf(toast, sizeof(toast), "BUSY - CANT PLAY");
-        showActionToast(toast);
+        if (audioResourceBusy() && !ui_backend_isMemoryPlaying()) {
+          showActionToast("AUDIO BUSY");
+        } else {
+          bool ok = ui_backend_playMemory(slot);
+          char toast[20];
+          if (ok) snprintf(toast, sizeof(toast), "PLAYING %u/%u", (unsigned)n.paramId, 5);
+          else    snprintf(toast, sizeof(toast), "BUSY - CANT PLAY");
+          showActionToast(toast);
+        }
         markDirty();
       } else if (n.type == NODE_INFO) {
         pushInfo(n.paramId, n.label);
@@ -829,9 +872,8 @@ static void handleDiagAudio(const UiEvent &ev) {
       if (diagAudioPlaying) {
         ui_backend_diagToneStop();
         diagAudioPlaying = false;
-      } else if (ui_backend_isMemoryPlaying()) {
-        // New guard: memory playback owns the shared tone slot right now.
-        showActionToast("MEMORY PLAYING");
+      } else if (audioResourceBusy()) {
+        showActionToast("AUDIO BUSY");
       } else {
         uint16_t freq = (diagAudioPage < DIAG_AUDIO_PRESET_COUNT)
                           ? DIAG_AUDIO_PRESETS[diagAudioPage] : diagAudioManualFreq;
@@ -890,8 +932,8 @@ static void handleTune(const UiEvent &ev) {
       if (tuneActive) {
         ui_backend_diagToneStop();
         tuneActive = false;
-      } else if (ui_backend_isMemoryPlaying()) {
-        showActionToast("MEMORY PLAYING");
+      } else if (audioResourceBusy()) {
+        showActionToast("AUDIO BUSY");
       } else if (ui_backend_diagToneStart(ui_backend_getToneHz())) {
         tuneActive = true;
         tuneStartMs = lastEventNow;
@@ -903,6 +945,52 @@ static void handleTune(const UiEvent &ev) {
       popList();
       break;
     default: break;   // rotate is a no-op on this screen
+  }
+}
+
+static void handleTrainDrill(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_SELECT: ui_backend_trainConfirmPressed(); markDirty(); break;
+    case UI_EV_BACK:   ui_backend_trainStopSession(); popList(); break;
+    default: break;   // rotate unused during a drill
+  }
+}
+
+static void handleTrainFarnsworth(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int v = ui_backend_farnsworthGetWpm() + ev.detents;
+      if (v < UI_WPM_MIN) v = UI_WPM_MIN;
+      if (v > UI_WPM_MAX) v = UI_WPM_MAX;
+      ui_backend_farnsworthSetWpm(v);
+      if (ui_backend_isFarnsworthPlaying()) {
+        ui_backend_farnsworthTogglePlay();   // stop
+        ui_backend_farnsworthTogglePlay();   // restart at new timing
+      }
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+      if (audioResourceBusy() && !ui_backend_isFarnsworthPlaying()) {
+        showActionToast("AUDIO BUSY");
+      } else {
+        ui_backend_farnsworthTogglePlay();
+      }
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      if (ui_backend_isFarnsworthPlaying()) ui_backend_farnsworthTogglePlay();
+      popList();
+      break;
+    default: break;
+  }
+}
+
+static void handleTrainExamResult(const UiEvent &ev) {
+  if (ev.type == UI_EV_BACK || ev.type == UI_EV_SELECT) {
+    ui_backend_trainClearExamResult();
+    currentScreen = (stackTop >= 0) ? UI_SCREEN_LIST : UI_SCREEN_MENU;
+    markDirty();
   }
 }
 
@@ -932,26 +1020,33 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
       ui_backend_diagToneStop();
       tuneActive = false;
     }
+    if (currentScreen == UI_SCREEN_TRAIN_DRILL) ui_backend_trainStopSession();
+    if (currentScreen == UI_SCREEN_TRAIN_FARNSWORTH && ui_backend_isFarnsworthPlaying()) {
+      ui_backend_farnsworthTogglePlay();
+    }
     ui_backend_stopMemory();   // long-Back is a "return to safe state" panic gesture
     if (currentScreen != UI_SCREEN_HOME) goHome();
     return;
   }
 
   switch (currentScreen) {
-    case UI_SCREEN_HOME:          handleHome(ev);          break;
-    case UI_SCREEN_MENU:          handleMenu(ev);          break;
-    case UI_SCREEN_LIST:          handleList(ev);          break;
-    case UI_SCREEN_EDIT_VALUE:    handleEditValue(ev);     break;
-    case UI_SCREEN_EDIT_TOGGLE:   handleEditToggle(ev);    break;
-    case UI_SCREEN_INFO:          handleInfo(ev);          break;
-    case UI_SCREEN_DIALOG_CONFIRM:handleDialogConfirm(ev); break;
-    case UI_SCREEN_DIAG_INPUT:    handleDiagInput(ev);     break;
-    case UI_SCREEN_DIAG_DISPLAY:  handleDiagDisplay(ev);   break;
-    case UI_SCREEN_DIAG_AUDIO:    handleDiagAudio(ev);     break;
-    case UI_SCREEN_DIAG_GPIO:     handleDiagGpio(ev);      break;
-    case UI_SCREEN_DIAG_LIVE:     handleDiagLive(ev);      break;
-    case UI_SCREEN_LIVE_MONITOR:  handleLiveMonitorReal(ev); break;
-    case UI_SCREEN_TUNE:          handleTune(ev);          break;
+    case UI_SCREEN_HOME:              handleHome(ev);             break;
+    case UI_SCREEN_MENU:              handleMenu(ev);             break;
+    case UI_SCREEN_LIST:              handleList(ev);             break;
+    case UI_SCREEN_EDIT_VALUE:        handleEditValue(ev);        break;
+    case UI_SCREEN_EDIT_TOGGLE:       handleEditToggle(ev);       break;
+    case UI_SCREEN_INFO:              handleInfo(ev);             break;
+    case UI_SCREEN_DIALOG_CONFIRM:    handleDialogConfirm(ev);    break;
+    case UI_SCREEN_DIAG_INPUT:        handleDiagInput(ev);        break;
+    case UI_SCREEN_DIAG_DISPLAY:      handleDiagDisplay(ev);      break;
+    case UI_SCREEN_DIAG_AUDIO:        handleDiagAudio(ev);        break;
+    case UI_SCREEN_DIAG_GPIO:         handleDiagGpio(ev);         break;
+    case UI_SCREEN_DIAG_LIVE:         handleDiagLive(ev);         break;
+    case UI_SCREEN_LIVE_MONITOR:      handleLiveMonitorReal(ev);  break;
+    case UI_SCREEN_TUNE:              handleTune(ev);             break;
+    case UI_SCREEN_TRAIN_DRILL:       handleTrainDrill(ev);       break;
+    case UI_SCREEN_TRAIN_FARNSWORTH:  handleTrainFarnsworth(ev);  break;
+    case UI_SCREEN_TRAIN_EXAM_RESULT: handleTrainExamResult(ev);  break;
     default: break;
   }
 }
@@ -1033,6 +1128,27 @@ void ui_state_service(unsigned long now) {
       markDirty();
     }
   }
+
+  if (currentScreen == UI_SCREEN_TRAIN_DRILL) {
+    uint8_t curPhase = ui_backend_trainGetPhase();
+    uint8_t curTypedLen = (uint8_t)strlen(ui_backend_trainGetTyped());
+    if (curPhase != lastTrainPhaseSeen || curTypedLen != lastTrainTypedLenSeen) {
+      lastTrainPhaseSeen = curPhase;
+      lastTrainTypedLenSeen = curTypedLen;
+      markDirty();
+    }
+    if (ui_backend_trainIsExamResultReady()) {
+      currentScreen = UI_SCREEN_TRAIN_EXAM_RESULT;
+      markDirty();
+    }
+  }
+  if (currentScreen == UI_SCREEN_TRAIN_FARNSWORTH) {
+    bool nowPlaying = ui_backend_isFarnsworthPlaying();
+    if (nowPlaying != lastFarnsworthPlayingSeen) {
+      lastFarnsworthPlayingSeen = nowPlaying;
+      markDirty();
+    }
+  }
 }
 
 void ui_state_init(unsigned long now) {
@@ -1050,6 +1166,9 @@ void ui_state_init(unsigned long now) {
   actionToastActive = false;
   pendingRestart = false;
   tuneActive = false;
+  currentTrainDrillId = TRAIN_DRILL_NONE;
+  lastTrainPhaseSeen = 255;
+  lastTrainTypedLenSeen = 255;
   dirty = true;
   menuAnimFrame = 0;
   menuAnimLastMs = now;
@@ -1070,3 +1189,22 @@ const UiMenuNode *ui_state_getList(uint8_t &count, uint8_t &sel, uint8_t &window
 const char *ui_state_getListTitle() {
   return (stackTop >= 0) ? stack[stackTop].title : "";
 }
+
+uint8_t     ui_state_getTrainPhase()        { return ui_backend_trainGetPhase(); }
+const char *ui_state_getTrainTarget()       { return ui_backend_trainGetTarget(); }
+const char *ui_state_getTrainTyped()        { return ui_backend_trainGetTyped(); }
+uint32_t    ui_state_getTrainCorrectCount() { return ui_backend_trainGetCorrectCount(); }
+uint32_t    ui_state_getTrainTotalCount()   { return ui_backend_trainGetTotalCount(); }
+uint8_t     ui_state_getTrainDrillId()      { return currentTrainDrillId; }
+uint8_t     ui_state_getTrainKochLevel()    { return ui_backend_trainGetKochLevel(); }
+void        ui_state_getTrainKochCharset(char *out, size_t outSize) { ui_backend_trainGetKochCharset(out, outSize); }
+int         ui_state_getTrainAdaptiveWpm()  { return ui_backend_trainGetAdaptiveWpm(); }
+
+uint8_t ui_state_getExamScorePercent() { return ui_backend_trainGetExamScorePercent(); }
+uint8_t ui_state_getExamCorrectCount() { return ui_backend_trainGetExamCorrectCount(); }
+bool    ui_state_getExamPassed()       { return ui_backend_trainGetExamPassed(); }
+uint8_t ui_state_getExamTotalCount()   { return ui_backend_trainGetExamTotalCount(); }
+uint8_t ui_state_getExamTargetLength() { return ui_backend_trainGetExamTargetLength(); }
+
+int  ui_state_getFarnsworthWpm()     { return ui_backend_farnsworthGetWpm(); }
+bool ui_state_getFarnsworthPlaying() { return ui_backend_isFarnsworthPlaying(); }

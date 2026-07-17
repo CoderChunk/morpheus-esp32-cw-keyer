@@ -17,6 +17,7 @@
 #include "core_keyer.h"
 #include "core_decoder.h"
 #include "core_memory.h"
+#include "core_trainer.h"
 #include "display.h"
 #include "transport.h"
 #include "services.h"
@@ -88,6 +89,7 @@ void setup() {
   core_keyer_init();
   core_decoder_init();
   core_memory_init();
+  core_trainer_init();
 
   services_loadSettings();
 
@@ -120,6 +122,7 @@ void loop() {
   core_keyer_service(now);
   core_decoder_service(now);
   core_memory_service(now);
+  core_trainer_service(now);
   services_serviceSettings(now);
 
 #if FEATURE_BLE

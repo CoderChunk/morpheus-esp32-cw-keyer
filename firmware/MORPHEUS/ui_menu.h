@@ -5,7 +5,16 @@
 
 enum UiNodeType : uint8_t {
   NODE_SUBMENU, NODE_VALUE, NODE_TOGGLE, NODE_ACTION, NODE_INFO, NODE_STUB,
-  NODE_DIAG, NODE_MONITOR, NODE_TUNE, NODE_TRIGGER
+  NODE_DIAG, NODE_MONITOR, NODE_TUNE, NODE_TRIGGER,
+  NODE_TRAIN_DRILL, NODE_TRAIN_FARNSWORTH
+};
+
+// Consumed only within ui_state.cpp/ui_backend.cpp - never crosses into
+// core_trainer.h directly (ui_state.cpp's frozen no-core-includes rule).
+// Positional mapping documented at ui_backend_trainStartSession().
+enum UiTrainDrillId : uint8_t {
+  TRAIN_DRILL_NONE = 0, TRAIN_DRILL_KOCH, TRAIN_DRILL_CHARACTERS,
+  TRAIN_DRILL_WORDS, TRAIN_DRILL_CALLSIGNS, TRAIN_DRILL_ADAPTIVE, TRAIN_DRILL_EXAM
 };
 
 enum UiParamId : uint8_t {

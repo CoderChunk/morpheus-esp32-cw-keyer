@@ -27,7 +27,8 @@ enum UiScreen {
   UI_SCREEN_DIALOG_CONFIRM,
   UI_SCREEN_DIAG_INPUT, UI_SCREEN_DIAG_DISPLAY, UI_SCREEN_DIAG_AUDIO,
   UI_SCREEN_DIAG_GPIO, UI_SCREEN_DIAG_LIVE,
-  UI_SCREEN_LIVE_MONITOR, UI_SCREEN_TUNE
+  UI_SCREEN_LIVE_MONITOR, UI_SCREEN_TUNE,
+  UI_SCREEN_TRAIN_DRILL, UI_SCREEN_TRAIN_FARNSWORTH, UI_SCREEN_TRAIN_EXAM_RESULT
 };
 
 void ui_state_init(unsigned long now);
@@ -111,5 +112,24 @@ const char *ui_state_getLiveMonitorLine(uint8_t i);   // 4 lines, always current
 bool          ui_state_getTuneActive();
 uint16_t      ui_state_getTuneFreq();
 unsigned long ui_state_getTuneRemainingMs();
+
+uint8_t     ui_state_getTrainPhase();
+const char *ui_state_getTrainTarget();
+const char *ui_state_getTrainTyped();
+uint32_t    ui_state_getTrainCorrectCount();
+uint32_t    ui_state_getTrainTotalCount();
+uint8_t     ui_state_getTrainDrillId();
+uint8_t     ui_state_getTrainKochLevel();
+void        ui_state_getTrainKochCharset(char *out, size_t outSize);
+int         ui_state_getTrainAdaptiveWpm();
+
+uint8_t ui_state_getExamScorePercent();
+uint8_t ui_state_getExamCorrectCount();
+bool    ui_state_getExamPassed();
+uint8_t ui_state_getExamTotalCount();
+uint8_t ui_state_getExamTargetLength();
+
+int  ui_state_getFarnsworthWpm();
+bool ui_state_getFarnsworthPlaying();
 
 #endif

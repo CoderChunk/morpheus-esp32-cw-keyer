@@ -90,4 +90,30 @@ const char *ui_backend_getMemorySlotText(uint8_t slot);
 bool        ui_backend_playMemory(uint8_t slot);
 void        ui_backend_stopMemory();
 
+void        ui_backend_trainStartSession(uint8_t uiDrillId);
+void        ui_backend_trainStopSession();
+bool        ui_backend_isTrainingSessionActive();
+void        ui_backend_trainConfirmPressed();
+uint8_t     ui_backend_trainGetPhase();
+const char *ui_backend_trainGetTarget();
+const char *ui_backend_trainGetTyped();
+uint32_t    ui_backend_trainGetCorrectCount();
+uint32_t    ui_backend_trainGetTotalCount();
+uint8_t     ui_backend_trainGetKochLevel();
+void        ui_backend_trainGetKochCharset(char *out, size_t outSize);
+int         ui_backend_trainGetAdaptiveWpm();
+
+bool    ui_backend_trainIsExamResultReady();
+uint8_t ui_backend_trainGetExamScorePercent();
+uint8_t ui_backend_trainGetExamCorrectCount();
+bool    ui_backend_trainGetExamPassed();
+uint8_t ui_backend_trainGetExamTotalCount();
+uint8_t ui_backend_trainGetExamTargetLength();
+void    ui_backend_trainClearExamResult();
+
+void ui_backend_farnsworthSetWpm(int wpm);
+int  ui_backend_farnsworthGetWpm();
+bool ui_backend_farnsworthTogglePlay();
+bool ui_backend_isFarnsworthPlaying();
+
 #endif // UI_BACKEND_H

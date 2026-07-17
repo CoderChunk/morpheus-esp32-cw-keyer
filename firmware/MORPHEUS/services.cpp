@@ -14,6 +14,7 @@
 
 #include "services.h"
 #include "core_decoder.h"
+#include "core_trainer.h"
 #include "config.h"
 #include <string.h>
 #include <Preferences.h>
@@ -28,6 +29,7 @@ struct OperatorSettings {
   bool          paddleReverse;
   OperatingMode mode;
   bool          decoderEnabled;
+  uint8_t       kochLevel;
 };
 
 static Preferences settingsPrefs;
@@ -48,6 +50,7 @@ static OperatorSettings currentSettingsSnapshot() {
   s.paddleReverse = core_keyer_getPaddleReversed();
   s.mode = core_keyer_getMode();
   s.decoderEnabled = core_decoder_isEnabled();
+  s.kochLevel = core_trainer_getKochLevel();
   return s;
 }
 
@@ -61,6 +64,7 @@ void services_loadSettings() {
   defaults.paddleReverse  = DEFAULT_PADDLE_REVERSED;
   defaults.mode           = MODE_STRAIGHT;
   defaults.decoderEnabled = true;
+  defaults.kochLevel      = DEFAULT_KOCH_LEVEL;
 
   OperatorSettings loaded = defaults;
   size_t got = settingsPrefs.getBytes(SETTINGS_NVS_KEY, &loaded, sizeof(loaded));
@@ -75,6 +79,7 @@ void services_loadSettings() {
   core_keyer_setPaddleReversed(loaded.paddleReverse);
   core_keyer_setMode(loaded.mode);
   core_decoder_setEnabled(loaded.decoderEnabled);
+  core_trainer_setKochLevel(loaded.kochLevel);
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();
@@ -97,7 +102,8 @@ void services_serviceSettings(unsigned long now) {
                  (current.sidetoneHz != lastSavedSettings.sidetoneHz) ||
                  (current.paddleReverse != lastSavedSettings.paddleReverse) ||
                  (current.mode != lastSavedSettings.mode) ||
-                 (current.decoderEnabled != lastSavedSettings.decoderEnabled);
+                 (current.decoderEnabled != lastSavedSettings.decoderEnabled) ||
+                 (current.kochLevel != lastSavedSettings.kochLevel);
   if (!changed) return;
 
   settingsPrefs.putBytes(SETTINGS_NVS_KEY, &current, sizeof(current));
@@ -118,6 +124,7 @@ void services_factoryResetSettings() {
   core_keyer_setPaddleReversed(DEFAULT_PADDLE_REVERSED);
   core_keyer_setMode(MODE_STRAIGHT);
   core_decoder_setEnabled(true);
+  core_trainer_resetKochProgress();
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();

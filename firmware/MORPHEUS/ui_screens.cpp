@@ -24,6 +24,13 @@
 #include <stdio.h>
 #include <string.h>
 
+// Mirrors core_trainer.h's DrillPhase ordering (DRILL_IDLE=0 ..
+// DRILL_EXAM_DONE=4) - kept as plain uint8_t since this file doesn't
+// include core headers.
+static const uint8_t DRILL_PHASE_PLAYING   = 1;
+static const uint8_t DRILL_PHASE_LISTENING = 2;
+static const uint8_t DRILL_PHASE_FEEDBACK  = 3;
+
 static void drawBarRule(U8G2 &u8g2) {
   u8g2.drawHLine(UI_CONTENT_X0, UI_HEADER_RULE_Y, UI_CONTENT_WIDTH);
 }
@@ -622,4 +629,121 @@ void ui_screens_drawTune(U8G2 &u8g2) {
   // const char *hint = "CONFIRM=ON/OFF";
   // int hw = u8g2.getStrWidth(hint);
   // u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 2, hint);
+}
+
+void ui_screens_drawTrainDrill(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, ui_state_getInfoTitle());
+
+  uint8_t phase = ui_state_getTrainPhase();
+  uint8_t drillId = ui_state_getTrainDrillId();
+  char line[24];
+  int y1 = UI_HEADER_RULE_Y + 20;
+
+  u8g2.setFont(UI_FONT_BOLD);
+  if (phase == DRILL_PHASE_PLAYING) {
+    const char *msg = "LISTEN...";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, y1, msg);
+    drawActiveDot(u8g2);
+  } else if (phase == DRILL_PHASE_LISTENING) {
+    const char *msg = "YOUR TURN";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, y1, msg);
+    const char *typed = ui_state_getTrainTyped();
+    if (typed[0] != '\0') {
+      u8g2.setFont(UI_FONT_HERO);
+      int tw = u8g2.getStrWidth(typed);
+      u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - tw) / 2, y1 + 24, typed);
+    }
+  } else if (phase == DRILL_PHASE_FEEDBACK) {
+    const char *target = ui_state_getTrainTarget();
+    const char *typed = ui_state_getTrainTyped();
+    bool ok = (strcmp(target, typed) == 0);
+
+    snprintf(line, sizeof(line), "SENT: %s", target);
+    u8g2.drawStr(UI_CONTENT_X0, y1 - 10, line);
+    snprintf(line, sizeof(line), "COPY: %s", typed);
+    u8g2.drawStr(UI_CONTENT_X0, y1 + 4, line);
+
+    u8g2.setFont(UI_FONT_SMALL);
+    const char *verdict = ok ? "OK" : "MISS";
+    int vw = u8g2.getStrWidth(verdict);
+    u8g2.drawStr(UI_CONTENT_X1 - vw, y1 - 10, verdict);
+  }
+
+  u8g2.setFont(UI_FONT_SMALL);
+  int extraY = UI_CONTENT_Y1 - 14;
+  if (drillId == TRAIN_DRILL_KOCH) {
+    char charset[24];
+    ui_state_getTrainKochCharset(charset, sizeof(charset));
+    snprintf(line, sizeof(line), "LVL %u  %s", (unsigned)ui_state_getTrainKochLevel(), charset);
+    u8g2.drawStr(UI_CONTENT_X0, extraY, line);
+  } else if (drillId == TRAIN_DRILL_ADAPTIVE) {
+    snprintf(line, sizeof(line), "%d WPM", ui_state_getTrainAdaptiveWpm());
+    u8g2.drawStr(UI_CONTENT_X0, extraY, line);
+  }
+
+  uint32_t correct = ui_state_getTrainCorrectCount();
+  uint32_t total = ui_state_getTrainTotalCount();
+  uint8_t pct = (total > 0) ? (uint8_t)((correct * 100UL) / total) : 0;
+  snprintf(line, sizeof(line), "SCORE %lu/%lu (%u%%)",
+           (unsigned long)correct, (unsigned long)total, (unsigned)pct);
+  int scoreW = u8g2.getStrWidth(line);
+  u8g2.drawStr(UI_CONTENT_X1 - scoreW, UI_CONTENT_Y1 - 2, line);
+}
+
+void ui_screens_drawTrainFarnsworth(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "FARNSWORTH");
+
+  int wpm = ui_state_getFarnsworthWpm();
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%d", wpm);
+  u8g2.setFont(UI_FONT_HERO);
+  int w = u8g2.getStrWidth(buf);
+  const int valueBaseline = UI_HEADER_RULE_Y + 32;
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, valueBaseline, buf);
+
+  const int chevY = valueBaseline - 9;
+  if (wpm > UI_WPM_MIN) {
+    u8g2.drawTriangle(UI_CONTENT_X0 + UI_CHEVRON_INSET, chevY - 6,
+                       UI_CONTENT_X0 + UI_CHEVRON_INSET, chevY + 6,
+                       UI_CONTENT_X0 + UI_CHEVRON_INSET - 6, chevY);
+  }
+  if (wpm < UI_WPM_MAX) {
+    u8g2.drawTriangle(UI_CONTENT_X1 - UI_CHEVRON_INSET, chevY - 6,
+                       UI_CONTENT_X1 - UI_CHEVRON_INSET, chevY + 6,
+                       UI_CONTENT_X1 - UI_CHEVRON_INSET + 6, chevY);
+  }
+
+  u8g2.setFont(UI_FONT_SMALL);
+  const char *lbl = "WPM (spacing)";
+  int lw = u8g2.getStrWidth(lbl);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - lw) / 2, valueBaseline + 12, lbl);
+
+  if (ui_state_getFarnsworthPlaying()) drawActiveDot(u8g2);
+}
+
+void ui_screens_drawTrainExamResult(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "EXAM RESULT");
+
+  uint8_t pct = ui_state_getExamScorePercent();
+  bool passed = ui_state_getExamPassed();
+
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%u%%", (unsigned)pct);
+  u8g2.setFont(UI_FONT_HERO);
+  int w = u8g2.getStrWidth(buf);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 30, buf);
+
+  u8g2.setFont(UI_FONT_BOLD);
+  const char *verdict = passed ? "PASS" : "FAIL";
+  int vw = u8g2.getStrWidth(verdict);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - vw) / 2, UI_HEADER_RULE_Y + 44, verdict);
+
+  u8g2.setFont(UI_FONT_SMALL);
+  char line[24];
+  snprintf(line, sizeof(line), "%u / %u correct",
+           (unsigned)ui_state_getExamCorrectCount(), (unsigned)ui_state_getExamTargetLength());
+  int lw = u8g2.getStrWidth(line);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - lw) / 2, UI_CONTENT_Y1 - 2, line);
 }

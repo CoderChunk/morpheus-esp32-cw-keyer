@@ -54,6 +54,13 @@ bool core_decoder_isEnabled();
 // ----------------------------------------------------------------------------
 bool core_decoder_lookupPattern(char ch, char *out, size_t outSize);
 
+// Training sink: when set, finalized characters route here instead of
+// the normal events_onCharacterComplete()/word-buffer path - keeps the
+// Home transcript and BLE notifications clean during a training
+// session. Pass nullptr to release (resume normal decoding).
+typedef void (*TrainingCharSink)(char decoded, const char *pattern);
+void core_decoder_setTrainingSink(TrainingCharSink sink);
+
 void events_onCharacterComplete(char decodedChar, const char *pattern);
 void events_onWordComplete(const char *word, unsigned long now);
 

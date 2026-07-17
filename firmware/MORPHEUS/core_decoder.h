@@ -26,39 +26,34 @@
 #define MORPHEUS_CORE_DECODER_H
 
 #include <Arduino.h>
-#include "core_keyer.h"   // ElementType - the decoder consumes keyer-produced
-                           // elements; this is the decoder's one allowed
-                           // dependency, in this direction only.
+#include "core_keyer.h"
 
-// ----------------------------------------------------------------------------
-// Lifecycle - called only from MORPHEUS.ino
-// ----------------------------------------------------------------------------
 void core_decoder_init();
 void core_decoder_service(unsigned long now);
-
-// ----------------------------------------------------------------------------
-// Feed path - called from MORPHEUS.ino's events_onKeyUp() fan-out, once per
-// completed keying element. This is the ONLY way elements reach the
-// decoder; core_keyer never calls this directly, so core_keyer stays fully
-// ignorant of the decoder's existence.
-// ----------------------------------------------------------------------------
 void core_decoder_addElement(ElementType type, unsigned long now);
 
-// ----------------------------------------------------------------------------
-// Public getters - read-only window into decode-in-progress state, for
-// display's live-word/pattern footer and services' STATUS heartbeat. Do
-// not expose the lookup table or any future Koch/adaptive-timing internals
-// here - keep this surface to "what's currently in progress."
-// ----------------------------------------------------------------------------
 const char *core_decoder_getWordBuffer();
 uint8_t     core_decoder_getWordLen();
 const char *core_decoder_getCharPattern();
 uint8_t     core_decoder_getCharPatternLen();
 
 // ----------------------------------------------------------------------------
-// Event hooks - DECLARED here (the decoder is the producer) but DEFINED in
-// MORPHEUS.ino.
+// Runtime enable/disable. When disabled, incoming elements are ignored
+// and gap timeouts are not evaluated; in-progress pattern/word state is
+// cleared on disable so no stale partial decode lingers on screen.
 // ----------------------------------------------------------------------------
+void core_decoder_setEnabled(bool enabled);
+bool core_decoder_isEnabled();
+
+// ----------------------------------------------------------------------------
+// Reverse lookup: character -> Morse pattern, using the SAME table this
+// module already maintains for pattern -> character decoding (no second
+// alphabet table exists anywhere in the firmware). Case-insensitive.
+// Returns false (out untouched beyond a null terminator) for characters
+// with no table entry (e.g. space).
+// ----------------------------------------------------------------------------
+bool core_decoder_lookupPattern(char ch, char *out, size_t outSize);
+
 void events_onCharacterComplete(char decodedChar, const char *pattern);
 void events_onWordComplete(const char *word, unsigned long now);
 

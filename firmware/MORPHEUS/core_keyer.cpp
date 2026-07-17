@@ -7,19 +7,17 @@
  * Author: Coder Chunk
  * License: GNU General Public License v3.0 (GPLv3)
  *
- * The heart of MORPHEUS.
+ * HARDWARE SIMPLIFICATION NOTE: the physical Mode Switch (formerly
+ * GPIO33) is no longer read. Mode is now explicitly set via
+ * core_keyer_setMode(), called from the UI layer (toggle editor commit)
+ * and from services_loadSettings() at boot (persisted value). The
+ * per-tick debounce/compare logic that used to poll the switch is
+ * removed entirely - resetKeyerState() still runs on any actual mode
+ * change, preserving the same "never leave a mid-element keying state
+ * behind a mode flip" guarantee as before.
  *
- * This module converts physical operator input into precise Morse timing.
- * It supports straight keys, iambic paddles, automatic element timing,
- * memory functions, sidetone generation, and state management.
- *
- * Great Morse operators depend on timing.
- * Great firmware guarantees timing.
- *
- * The architecture intentionally separates the keyer from the decoder,
- * display, BLE transport, and diagnostics systems, allowing future
- * contributors to experiment with advanced keying techniques without
- * changing the rest of the project.
+ * DEBUG_KEYER_TONE instrumentation (ongoing buzzer investigation)
+ * preserved unchanged.
  *
  * Copyright (C) 2026 Coder Chunk
  *
@@ -28,11 +26,8 @@
 
 #include "core_keyer.h"
 #include "config.h"
+#include "services.h"
 
-// ----------------------------------------------------------------------------
-// Sidetone - LEDC PWM, gated by FEATURE_SIDETONE. Compatibility shim
-// unchanged from earlier stages.
-// ----------------------------------------------------------------------------
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
   #define USE_LEDC_V3_API 1
 #else
@@ -67,6 +62,10 @@ static void buzzerOn(uint32_t freqHz) {
 #else
   (void)freqHz;
 #endif
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+  Serial.print(F("[DBG_TONE] BUZZER_ON  freq=")); Serial.print(freqHz);
+  Serial.print(F("Hz t=")); Serial.println(millis());
+#endif
 }
 
 static void buzzerOff() {
@@ -77,11 +76,11 @@ static void buzzerOff() {
     ledcWriteTone(BUZZER_LEDC_CHANNEL, 0);
   #endif
 #endif
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+  Serial.print(F("[DBG_TONE] BUZZER_OFF t=")); Serial.println(millis());
+#endif
 }
 
-// ----------------------------------------------------------------------------
-// Internal-only types (not exposed via core_keyer.h)
-// ----------------------------------------------------------------------------
 enum KeyerPhase { PHASE_IDLE, PHASE_SENDING, PHASE_SPACING };
 
 struct Debouncer {
@@ -98,9 +97,6 @@ struct KeyElement {
   unsigned long endMs;
 };
 
-// ----------------------------------------------------------------------------
-// Debounce
-// ----------------------------------------------------------------------------
 static void debouncerInit(Debouncer &d, uint8_t pin) {
   d.pin = pin;
   d.stableState = digitalRead(pin);
@@ -121,11 +117,8 @@ static int debouncerRead(Debouncer &d) {
   return d.stableState;
 }
 
-static Debouncer modeDeb, tipDeb, ringDeb;
+static Debouncer tipDeb, ringDeb;   // modeDeb removed
 
-// ----------------------------------------------------------------------------
-// Keyer state
-// ----------------------------------------------------------------------------
 static OperatingMode currentMode = MODE_STRAIGHT;
 
 static ElementType   currentElement    = ELEM_NONE;
@@ -144,13 +137,12 @@ static unsigned long ditLengthMs = 1200UL / (unsigned long)DEFAULT_WPM;
 static uint32_t currentSidetoneFreq = TONE_FREQ_HZ;
 static bool     paddleReversed      = DEFAULT_PADDLE_REVERSED;
 
-// ----------------------------------------------------------------------------
-// Common element interface. elementComplete() ends here - it no longer
-// calls into a decoder directly. The decoder finds out about each
-// completed element through MORPHEUS.ino's events_onKeyUp() fan-out, which
-// is the only thing that knows both this module and core_decoder exist.
-// ----------------------------------------------------------------------------
+static bool lastTipActive  = false;
+static bool lastRingActive = false;
+static bool diagToneActive = false;
+
 static void elementStart(unsigned long nowMs) {
+  if (diagToneActive) diagToneActive = false;
   buzzerOn(currentSidetoneFreq);
   txActive = true;
   events_onKeyDown(nowMs);
@@ -162,9 +154,6 @@ static void elementComplete(const KeyElement &ev) {
   events_onKeyUp(ev.type, ev.durationMs, ev.thresholdMs, ev.endMs);
 }
 
-// ----------------------------------------------------------------------------
-// WPM
-// ----------------------------------------------------------------------------
 static void applyWpm(int wpm) {
   currentWpm = wpm;
   ditLengthMs = 1200UL / (unsigned long)currentWpm;
@@ -176,29 +165,28 @@ void core_keyer_setWpm(int wpm) {
   applyWpm(wpm);
 }
 
-// ----------------------------------------------------------------------------
-// Sidetone
-// ----------------------------------------------------------------------------
 uint32_t core_keyer_getSidetoneFreq() { return currentSidetoneFreq; }
 
 void core_keyer_setSidetoneFreq(uint32_t hz) {
   if (hz < SIDETONE_FREQ_MIN_HZ) hz = SIDETONE_FREQ_MIN_HZ;
   if (hz > SIDETONE_FREQ_MAX_HZ) hz = SIDETONE_FREQ_MAX_HZ;
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+  if (hz != currentSidetoneFreq) {
+    Serial.print(F("[DBG_TONE] FREQ_CHANGE old=")); Serial.print(currentSidetoneFreq);
+    Serial.print(F(" new=")); Serial.print(hz);
+    Serial.print(F(" t=")); Serial.println(millis());
+  }
+#endif
   currentSidetoneFreq = hz;
 }
 
-// ----------------------------------------------------------------------------
-// Paddle Reverse
-// ----------------------------------------------------------------------------
 bool core_keyer_getPaddleReversed() { return paddleReversed; }
 void core_keyer_setPaddleReversed(bool reversed) { paddleReversed = reversed; }
 
-// ----------------------------------------------------------------------------
-// Keyer reset
-// ----------------------------------------------------------------------------
 static void resetKeyerState() {
   buzzerOff();
   txActive = false;
+  diagToneActive = false;
   keyerPhase = PHASE_IDLE;
   currentElement = ELEM_NONE;
   ditMemory = false;
@@ -206,8 +194,15 @@ static void resetKeyerState() {
 }
 
 // ----------------------------------------------------------------------------
-// Input handling - straight key
+// Mode - now explicitly set, not hardware-polled
 // ----------------------------------------------------------------------------
+void core_keyer_setMode(OperatingMode mode) {
+  if (mode != currentMode) {
+    currentMode = mode;
+    resetKeyerState();
+  }
+}
+
 static void runStraightKey(bool keyDown, unsigned long now) {
   if (keyDown && !txActive) {
     keyDownStartMs = now;
@@ -217,15 +212,11 @@ static void runStraightKey(bool keyDown, unsigned long now) {
     unsigned long threshold =
         (unsigned long)(ditLengthMs * STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT);
     ElementType classified = (durMs < threshold) ? ELEM_DIT : ELEM_DAH;
-
     KeyElement ev = { classified, durMs, threshold, now };
     elementComplete(ev);
   }
 }
 
-// ----------------------------------------------------------------------------
-// Input handling - iambic paddle, Mode B
-// ----------------------------------------------------------------------------
 static void startElement(ElementType e, unsigned long now) {
   currentElement = e;
   currentElementMs = (e == ELEM_DIT) ? ditLengthMs : (ditLengthMs * 3UL);
@@ -236,13 +227,9 @@ static void startElement(ElementType e, unsigned long now) {
 
 static void runIambicPaddle(bool ditPressed, bool dahPressed, unsigned long now) {
   switch (keyerPhase) {
-
     case PHASE_IDLE:
-      if (ditPressed) {
-        startElement(ELEM_DIT, now);
-      } else if (dahPressed) {
-        startElement(ELEM_DAH, now);
-      }
+      if (ditPressed) startElement(ELEM_DIT, now);
+      else if (dahPressed) startElement(ELEM_DAH, now);
       break;
 
     case PHASE_SENDING:
@@ -255,7 +242,6 @@ static void runIambicPaddle(bool ditPressed, bool dahPressed, unsigned long now)
             (unsigned long)(ditLengthMs * STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT);
         KeyElement ev = { currentElement, durMs, threshold, now };
         elementComplete(ev);
-
         keyerPhase = PHASE_SPACING;
         phaseStartMs = now;
       }
@@ -266,30 +252,17 @@ static void runIambicPaddle(bool ditPressed, bool dahPressed, unsigned long now)
       if (currentElement == ELEM_DAH && ditPressed) ditMemory = true;
 
       if (now - phaseStartMs >= ditLengthMs) {
-        if (dahMemory) {
-          dahMemory = false;
-          startElement(ELEM_DAH, now);
-        } else if (ditMemory) {
-          ditMemory = false;
-          startElement(ELEM_DIT, now);
-        } else if (ditPressed && dahPressed) {
-          startElement(currentElement == ELEM_DIT ? ELEM_DAH : ELEM_DIT, now);
-        } else if (ditPressed) {
-          startElement(ELEM_DIT, now);
-        } else if (dahPressed) {
-          startElement(ELEM_DAH, now);
-        } else {
-          keyerPhase = PHASE_IDLE;
-          currentElement = ELEM_NONE;
-        }
+        if (dahMemory) { dahMemory = false; startElement(ELEM_DAH, now); }
+        else if (ditMemory) { ditMemory = false; startElement(ELEM_DIT, now); }
+        else if (ditPressed && dahPressed) startElement(currentElement == ELEM_DIT ? ELEM_DAH : ELEM_DIT, now);
+        else if (ditPressed) startElement(ELEM_DIT, now);
+        else if (dahPressed) startElement(ELEM_DAH, now);
+        else { keyerPhase = PHASE_IDLE; currentElement = ELEM_NONE; }
       }
       break;
   }
 }
 
-// ----------------------------------------------------------------------------
-// Public getters
-// ----------------------------------------------------------------------------
 OperatingMode core_keyer_getMode() { return currentMode; }
 int core_keyer_getWpm() { return currentWpm; }
 unsigned long core_keyer_getDitLengthMs() { return ditLengthMs; }
@@ -297,47 +270,81 @@ bool core_keyer_isTxActive() { return txActive; }
 
 KeyState core_keyer_getKeyState(unsigned long now) {
   if (!txActive) return STATE_IDLE;
-
   if (currentMode == MODE_PADDLE) {
     return (currentElement == ELEM_DAH) ? STATE_DAH : STATE_DIT;
   }
-
   unsigned long heldMs = now - keyDownStartMs;
   unsigned long threshold =
       (unsigned long)(ditLengthMs * STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT);
   return (heldMs < threshold) ? STATE_DIT : STATE_DAH;
 }
 
-// ----------------------------------------------------------------------------
-// Lifecycle
-// ----------------------------------------------------------------------------
+bool core_keyer_isTipActive()  { return lastTipActive; }
+bool core_keyer_isRingActive() { return lastRingActive; }
+
+bool core_keyer_diagToneStart(uint32_t hz) {
+  if (txActive) return false;
+  if (hz < SIDETONE_FREQ_MIN_HZ) hz = SIDETONE_FREQ_MIN_HZ;
+  if (hz > SIDETONE_FREQ_MAX_HZ) hz = SIDETONE_FREQ_MAX_HZ;
+  buzzerOn(hz);
+  diagToneActive = true;
+  return true;
+}
+
+void core_keyer_diagToneStop() {
+  if (diagToneActive) { buzzerOff(); diagToneActive = false; }
+}
+
+bool core_keyer_isDiagToneActive() { return diagToneActive; }
+
 void core_keyer_init() {
-  pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);
+  // Mode Switch pin removed - no pinMode/debouncer for it anymore.
   pinMode(PIN_JACK_TIP, INPUT_PULLUP);
   pinMode(PIN_JACK_RING, INPUT_PULLUP);
 
-  debouncerInit(modeDeb, PIN_MODE_SWITCH);
   debouncerInit(tipDeb, PIN_JACK_TIP);
   debouncerInit(ringDeb, PIN_JACK_RING);
 
   applyWpm(DEFAULT_WPM);
-
   buzzerInit();
 
-  currentMode = (digitalRead(PIN_MODE_SWITCH) == HIGH) ? MODE_STRAIGHT : MODE_PADDLE;
+  // currentMode keeps its static-initializer default (MODE_STRAIGHT) until
+  // services_loadSettings() restores the persisted value.
   resetKeyerState();
 }
 
-void core_keyer_service(unsigned long now) {
-  bool modeStraight = (debouncerRead(modeDeb) == HIGH);
-  bool tipActive    = (debouncerRead(tipDeb)  == LOW);
-  bool ringActive   = (debouncerRead(ringDeb) == LOW);
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+static unsigned long toneHeartbeatLastMs = 0;
+static uint32_t       toneHeartbeatLoopCount = 0;
+static const unsigned long TONE_HEARTBEAT_INTERVAL_MS = 500;
+#endif
 
-  OperatingMode newMode = modeStraight ? MODE_STRAIGHT : MODE_PADDLE;
-  if (newMode != currentMode) {
-    currentMode = newMode;
-    resetKeyerState();
+void core_keyer_service(unsigned long now) {
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+  toneHeartbeatLoopCount++;
+  if (txActive && (now - toneHeartbeatLastMs >= TONE_HEARTBEAT_INTERVAL_MS)) {
+    Serial.print(F("[DBG_TONE] HOLD_HB t=")); Serial.print(now);
+    Serial.print(F(" mode=")); Serial.print(currentMode == MODE_STRAIGHT ? "STR" : "PAD");
+    Serial.print(F(" elem=")); Serial.print(
+        currentElement == ELEM_DIT ? "DIT" : currentElement == ELEM_DAH ? "DAH" : "-");
+    Serial.print(F(" freq=")); Serial.print(currentSidetoneFreq);
+    Serial.print(F(" loops/500ms=")); Serial.print(toneHeartbeatLoopCount);
+    Serial.print(F(" freeHeap=")); Serial.println(services_getFreeHeapBytes());
+    toneHeartbeatLastMs = now;
+    toneHeartbeatLoopCount = 0;
+  } else if (!txActive) {
+    toneHeartbeatLastMs = now;
+    toneHeartbeatLoopCount = 0;
   }
+#endif
+
+  bool tipActive  = (debouncerRead(tipDeb)  == LOW);
+  bool ringActive = (debouncerRead(ringDeb) == LOW);
+  lastTipActive  = tipActive;
+  lastRingActive = ringActive;
+
+  // No per-tick mode polling anymore - currentMode only changes via
+  // explicit core_keyer_setMode() calls (UI/settings-driven).
 
   if (currentMode == MODE_STRAIGHT) {
     runStraightKey(tipActive, now);

@@ -14,6 +14,7 @@
 #include "core_keyer.h"
 #include "core_decoder.h"
 #include "core_memory.h"
+#include "core_trainer.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -225,3 +226,48 @@ uint8_t ui_backend_getPlayingMemorySlot() { return core_memory_getPlayingSlot();
 const char *ui_backend_getMemorySlotText(uint8_t slot) { return core_memory_getSlotText(slot); }
 bool ui_backend_playMemory(uint8_t slot) { return core_memory_play(slot); }
 void ui_backend_stopMemory()            { core_memory_stop(); }
+
+// ----------------------------------------------------------------------------
+// Training - uiDrillId values match ui_menu.h's UiTrainDrillId ordering
+// (TRAIN_DRILL_KOCH=1 .. TRAIN_DRILL_EXAM=6): documented positional
+// mapping, not a shared header - ui_state.cpp may not include
+// core_trainer.h directly, per this project's frozen constraint.
+// ----------------------------------------------------------------------------
+void ui_backend_trainStartSession(uint8_t uiDrillId) {
+  TrainMode mode;
+  switch (uiDrillId) {
+    case 1: mode = TRAIN_MODE_KOCH;       break;
+    case 2: mode = TRAIN_MODE_CHARACTERS; break;
+    case 3: mode = TRAIN_MODE_WORDS;      break;
+    case 4: mode = TRAIN_MODE_CALLSIGNS;  break;
+    case 5: mode = TRAIN_MODE_ADAPTIVE;   break;
+    case 6: mode = TRAIN_MODE_EXAM;       break;
+    default: return;
+  }
+  core_trainer_startSession(mode);
+}
+
+void        ui_backend_trainStopSession()           { core_trainer_stopSession(); }
+bool        ui_backend_isTrainingSessionActive()     { return core_trainer_isSessionActive(); }
+void        ui_backend_trainConfirmPressed()         { core_trainer_confirmPressed(); }
+uint8_t     ui_backend_trainGetPhase()               { return (uint8_t)core_trainer_getPhase(); }
+const char *ui_backend_trainGetTarget()              { return core_trainer_getTargetText(); }
+const char *ui_backend_trainGetTyped()               { return core_trainer_getTypedText(); }
+uint32_t    ui_backend_trainGetCorrectCount()        { return core_trainer_getCorrectCount(); }
+uint32_t    ui_backend_trainGetTotalCount()          { return core_trainer_getTotalCount(); }
+uint8_t     ui_backend_trainGetKochLevel()           { return core_trainer_getKochLevel(); }
+void        ui_backend_trainGetKochCharset(char *out, size_t outSize) { core_trainer_getKochCharset(out, outSize); }
+int         ui_backend_trainGetAdaptiveWpm()         { return core_trainer_getAdaptiveWpm(); }
+
+bool    ui_backend_trainIsExamResultReady()   { return core_trainer_isExamResultReady(); }
+uint8_t ui_backend_trainGetExamScorePercent() { return core_trainer_getExamScorePercent(); }
+uint8_t ui_backend_trainGetExamCorrectCount() { return core_trainer_getExamCorrectCount(); }
+bool    ui_backend_trainGetExamPassed()       { return core_trainer_getExamPassed(); }
+uint8_t ui_backend_trainGetExamTotalCount()   { return core_trainer_getExamTotalCount(); }
+uint8_t ui_backend_trainGetExamTargetLength() { return core_trainer_getExamTargetLength(); }
+void    ui_backend_trainClearExamResult()     { core_trainer_clearExamResult(); }
+
+void ui_backend_farnsworthSetWpm(int wpm)     { core_trainer_farnsworthSetEffectiveWpm(wpm); }
+int  ui_backend_farnsworthGetWpm()            { return core_trainer_farnsworthGetEffectiveWpm(); }
+bool ui_backend_farnsworthTogglePlay()        { return core_trainer_farnsworthTogglePlay(); }
+bool ui_backend_isFarnsworthPlaying()         { return core_trainer_farnsworthIsPlaying(); }

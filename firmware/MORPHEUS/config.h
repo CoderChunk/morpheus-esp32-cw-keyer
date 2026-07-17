@@ -53,7 +53,7 @@ static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 3;   // bumped: +decoderEnabled
+static const uint16_t      SETTINGS_VERSION          = 4;   // bumped: +kochLevel
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 
@@ -69,5 +69,19 @@ static const uint8_t  BLE_WORD_FIELD_CAP       = 24;
 static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;
 static const uint16_t BLE_CONN_HANDLE_INVALID  = 0xFFFF;
+
+// ----------------------------------------------------------------------------
+// Training module tunables
+// ----------------------------------------------------------------------------
+static const uint8_t       DEFAULT_KOCH_LEVEL       = 2;
+static const uint8_t       TRAIN_KOCH_WINDOW        = 20;
+static const uint8_t       TRAIN_KOCH_LEVELUP_PCT   = 90;
+static const uint8_t       TRAIN_EXAM_LENGTH        = 25;
+static const uint8_t       TRAIN_EXAM_PASS_PCT      = 90;
+static const unsigned long TRAIN_FEEDBACK_MS        = 1200;
+static const uint8_t       TRAIN_ADAPTIVE_STREAK    = 3;
+static const int           TRAIN_ADAPTIVE_STEP_UP   = 1;
+static const int           TRAIN_ADAPTIVE_STEP_DOWN = 2;
+static const int           DEFAULT_FARNSWORTH_WPM   = 10;
 
 #endif // MORPHEUS_CONFIG_H

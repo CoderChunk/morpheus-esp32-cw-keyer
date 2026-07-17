@@ -29,6 +29,7 @@
 #define N_MON(lbl)       { lbl, NODE_MONITOR, nullptr, 0, 0 }
 #define N_TUNE(lbl)      { lbl, NODE_TUNE, nullptr, 0, 0 }
 #define N_TRIG(lbl, s1)  { lbl, NODE_TRIGGER, nullptr, 0, s1 }   // s1 = 1-based slot
+#define N_TRAIN(lbl, did){ lbl, NODE_TRAIN_DRILL, nullptr, 0, did }
 
 // --- Memory Msgs: 5 fixed canned messages, must match core_memory.cpp ---------
 static const UiMenuNode MENU_MEM[] = {
@@ -48,13 +49,13 @@ static const UiMenuNode MENU_KEYER[] = {
 };
 
 static const UiMenuNode MENU_TRAINING[] = {
-  N_ROW("KOCH METHOD",  NODE_STUB),
-  N_ROW("FARNSWORTH",   NODE_STUB),
-  N_ROW("CHARACTERS",   NODE_STUB),
-  N_ROW("WORDS",        NODE_STUB),
-  N_ROW("CALLSIGNS",    NODE_STUB),
-  N_ROW("ADAPTIVE",     NODE_STUB),
-  N_ROW("EXAM MODE",    NODE_STUB),
+  N_TRAIN("KOCH METHOD", TRAIN_DRILL_KOCH),
+  { "FARNSWORTH", NODE_TRAIN_FARNSWORTH, nullptr, 0, 0 },
+  N_TRAIN("CHARACTERS",  TRAIN_DRILL_CHARACTERS),
+  N_TRAIN("WORDS",       TRAIN_DRILL_WORDS),
+  N_TRAIN("CALLSIGNS",   TRAIN_DRILL_CALLSIGNS),
+  N_TRAIN("ADAPTIVE",    TRAIN_DRILL_ADAPTIVE),
+  N_TRAIN("EXAM MODE",   TRAIN_DRILL_EXAM),
 };
 
 static const UiMenuNode MENU_STATS[] = {

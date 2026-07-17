@@ -2,34 +2,14 @@
  * ============================================================================
  * MORPHEUS - Morse Decoder Engine
  * ============================================================================
+ * File: core_decoder.cpp | Author: Coder Chunk | License: GPLv3
  *
- * File: core_decoder.cpp
- * Author: Coder Chunk
- * License: GNU General Public License v3.0 (GPLv3)
- *
- * The decoder transforms raw keying elements into meaningful language.
- *
- * Dits and dahs become characters.
- * Characters become words.
- * Words become communication.
- *
- * This module contains the Morse decoding engine, timing analysis,
- * character detection, and word reconstruction logic.
- *
- * Future contributors can extend this subsystem with:
- *
- *   • Koch training
- *   • Farnsworth spacing
- *   • Adaptive timing
- *   • Learning statistics
- *   • Signal quality analysis
- *   • Intelligent decoding algorithms
- *
- * The decoder remains completely isolated from hardware, making it easy
- * to improve and experiment with new decoding techniques.
+ * This revision adds runtime enable/disable (core_decoder_setEnabled) and
+ * a reverse pattern lookup (core_decoder_lookupPattern) reusing the same
+ * PROGMEM morseTable already defined below - core_memory.cpp's message
+ * player calls this instead of maintaining a second alphabet table.
  *
  * Copyright (C) 2026 Coder Chunk
- *
  * ============================================================================
  */
 
@@ -37,14 +17,6 @@
 #include "config.h"
 #include <string.h>
 
-// ----------------------------------------------------------------------------
-// Morse lookup table - flash-resident (PROGMEM). This, the char-pattern/
-// word-buffer accumulation below, and the gap-timing logic in
-// core_decoder_service() are exactly the kind of decoder-internal detail
-// this split is meant to isolate: future Koch training, Farnsworth
-// spacing, adaptive timing, and learning statistics all land in this file
-// (or new files alongside it) without ever touching core_keyer.
-// ----------------------------------------------------------------------------
 static const char MORSE_A[] PROGMEM = ".-";
 static const char MORSE_B[] PROGMEM = "-...";
 static const char MORSE_C[] PROGMEM = "-.-.";
@@ -124,9 +96,10 @@ static char lookupMorse(const char *pattern) {
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-// Decoder state
-// ----------------------------------------------------------------------------
+static bool decoderEnabled = true;
+
+bool core_decoder_isEnabled() { return decoderEnabled; }
+
 static char charPattern[MAX_PATTERN_LEN];
 static uint8_t charPatternLen = 0;
 static bool charPending = false;
@@ -135,10 +108,32 @@ static unsigned long lastElementEndMs = 0;
 static char wordBuffer[MAX_WORD_LEN];
 static uint8_t wordLen = 0;
 
-// ----------------------------------------------------------------------------
-// Character/word finalization - the two places that call into the event
-// hooks (defined in MORPHEUS.ino).
-// ----------------------------------------------------------------------------
+void core_decoder_setEnabled(bool enabled) {
+  decoderEnabled = enabled;
+  if (!enabled) {
+    charPattern[0] = '\0';
+    charPatternLen = 0;
+    charPending = false;
+    wordBuffer[0] = '\0';
+    wordLen = 0;
+  }
+}
+
+bool core_decoder_lookupPattern(char ch, char *out, size_t outSize) {
+  if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
+  for (uint8_t i = 0; i < MORSE_TABLE_SIZE; i++) {
+    MorseEntry entry;
+    memcpy_P(&entry, &morseTable[i], sizeof(MorseEntry));
+    if (entry.ch == ch) {
+      strncpy_P(out, entry.code, outSize - 1);
+      out[outSize - 1] = '\0';
+      return true;
+    }
+  }
+  if (outSize > 0) out[0] = '\0';
+  return false;
+}
+
 static void finalizeCharacter() {
   char decoded = lookupMorse(charPattern);
   if (decoded == 0) decoded = '?';
@@ -162,10 +157,8 @@ static void finalizeWord() {
   wordLen = 0;
 }
 
-// ----------------------------------------------------------------------------
-// Feed path + service tick
-// ----------------------------------------------------------------------------
 void core_decoder_addElement(ElementType type, unsigned long now) {
+  if (!decoderEnabled) return;
   if (charPatternLen < (uint8_t)(MAX_PATTERN_LEN - 1)) {
     charPattern[charPatternLen++] = (type == ELEM_DIT) ? '.' : '-';
     charPattern[charPatternLen] = '\0';
@@ -175,9 +168,7 @@ void core_decoder_addElement(ElementType type, unsigned long now) {
 }
 
 void core_decoder_service(unsigned long now) {
-  // Mirrors the original txActive guard: don't evaluate gap timeouts while
-  // a key element is actively being sent - there's no real "silence" to
-  // measure yet, and lastElementEndMs isn't meaningful mid-element.
+  if (!decoderEnabled) return;
   if (core_keyer_isTxActive()) return;
 
   unsigned long ditLengthMs = core_keyer_getDitLengthMs();
@@ -191,9 +182,6 @@ void core_decoder_service(unsigned long now) {
   }
 }
 
-// ----------------------------------------------------------------------------
-// Lifecycle
-// ----------------------------------------------------------------------------
 void core_decoder_init() {
   charPattern[0] = '\0';
   charPatternLen = 0;
@@ -203,9 +191,6 @@ void core_decoder_init() {
   lastElementEndMs = millis();
 }
 
-// ----------------------------------------------------------------------------
-// Public getters
-// ----------------------------------------------------------------------------
 const char *core_decoder_getWordBuffer() { return wordBuffer; }
 uint8_t core_decoder_getWordLen() { return wordLen; }
 const char *core_decoder_getCharPattern() { return charPattern; }

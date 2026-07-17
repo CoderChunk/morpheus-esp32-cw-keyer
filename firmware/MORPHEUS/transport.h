@@ -13,6 +13,10 @@
  * and external communication technologies, allowing future transport
  * methods to be added without affecting the rest of the system.
  *
+ * INTEGRATION ADDITION: three read-only status getters, for the UI's
+ * Connectivity > Bluetooth > Status info page (via ui_backend.cpp). They
+ * return the module's existing internal state - no new BLE behavior.
+ *
  * Copyright (C) 2026 Coder Chunk
  *
  * ============================================================================
@@ -41,5 +45,13 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
 // boot-time held button (see PIN_BOND_RESET) or via the temporary
 // FEATURE_DEBUG_SERIAL_COMMANDS "RESET BOND" command.
 void transport_resetBond();
+
+// Read-only status - added for UI info screens (ui_backend.cpp).
+bool transport_isConnected();
+bool transport_isSecure();
+bool transport_hasTrustedDevice();
+
+// Diagnostics addition - current negotiated MTU, 0 if not connected.
+uint16_t transport_getCurrentMtu();
 
 #endif // MORPHEUS_TRANSPORT_H

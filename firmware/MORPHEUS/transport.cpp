@@ -91,7 +91,7 @@ static void pushDisplayStatus(DisplayLinkStatus status, uint32_t passkey = 0) {
 static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
   if (outputSize == 0) return;
 
-  static const char HEX[] = "0123456789abcdef";
+  static const char HEX_DIGITS[] = "0123456789abcdef";
   size_t out = 0;
   for (size_t i = 0; input[i] != '\0' && out < outputSize - 1; i++) {
     uint8_t c = (uint8_t)input[i];
@@ -105,8 +105,8 @@ static void jsonEscapeWord(const char *input, char *output, size_t outputSize) {
       output[out++] = 'u';
       output[out++] = '0';
       output[out++] = '0';
-      output[out++] = HEX[(c >> 4) & 0x0F];
-      output[out++] = HEX[c & 0x0F];
+      output[out++] = HEX_DIGITS[(c >> 4) & 0x0F];
+      output[out++] = HEX_DIGITS[c & 0x0F];
     } else {
       output[out++] = (char)c;
     }
@@ -345,6 +345,21 @@ void transport_resetBond() {
 #endif
 }
 
+// ----------------------------------------------------------------------------
+// Read-only status getters - added for UI info screens. Return existing
+// internal state; same cross-task read convention already used elsewhere
+// in this file for bleConnHandle/bleLinkSecure (volatile, read from
+// loop()-task callers like transport_notifyWordCompleted()).
+// ----------------------------------------------------------------------------
+bool transport_isConnected()      { return isCurrentlyConnected(); }
+bool transport_isSecure()         { return bleLinkSecure; }
+bool transport_hasTrustedDevice() { return hasTrustedDevice; }
+
+uint16_t transport_getCurrentMtu() {
+  if (bleServer == nullptr || !isCurrentlyConnected()) return 0;
+  return bleServer->getPeerMTU(bleConnHandle);
+}
+
 #else // !FEATURE_BLE - stub implementations, no NimBLE/Preferences dependency at all
 
 void transport_init() {}
@@ -353,5 +368,10 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   (void)word; (void)wpm; (void)mode; (void)now;
 }
 void transport_resetBond() {}
+
+bool transport_isConnected()      { return false; }
+bool transport_isSecure()         { return false; }
+bool transport_hasTrustedDevice() { return false; }
+uint16_t transport_getCurrentMtu() { return 0; }
 
 #endif

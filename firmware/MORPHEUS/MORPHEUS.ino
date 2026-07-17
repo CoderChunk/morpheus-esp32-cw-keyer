@@ -3,48 +3,23 @@
  * MORPHEUS
  * Forge the Sound of Morse.
  * ============================================================================
+ * File: MORPHEUS.ino | Author: Coder Chunk | License: GPLv3
  *
- * File: MORPHEUS.ino
- * Author: Coder Chunk
- * License: GNU General Public License v3.0 (GPLv3)
- *
- * MORPHEUS is an open-source ESP32 Morse keyer designed around modular
- * architecture, secure wireless telemetry, and real-time decoding.
- *
- * This file is the project's central integration layer.
- *
- * Every subsystem meets here:
- *
- *   • Keying engine
- *   • Morse decoder
- *   • OLED display
- *   • BLE transport
- *   • Diagnostics services
- *
- * Contributors looking to understand the overall architecture should
- * begin here.
- *
- * The goal of MORPHEUS is not simply to send Morse code.
- * It is to build a platform that encourages experimentation, learning,
- * and innovation in modern CW technology.
- *
- * Pull requests, improvements, and new ideas are always welcome.
+ * This revision adds core_memory_init()/service() - the memory message
+ * player runs unconditionally alongside the keyer/decoder, since
+ * playback is designed to continue across UI screens.
  *
  * Copyright (C) 2026 Coder Chunk
- *
  * ============================================================================
  */
 
 #include "config.h"
 #include "core_keyer.h"
 #include "core_decoder.h"
+#include "core_memory.h"
 #include "display.h"
 #include "transport.h"
 #include "services.h"
-
-// ----------------------------------------------------------------------------
-// Event hook definitions
-// ----------------------------------------------------------------------------
 
 void events_onKeyDown(unsigned long now) {
 #if FEATURE_SERIAL
@@ -56,8 +31,6 @@ void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresho
 #if FEATURE_SERIAL
   services_logKeyUp(type, durMs, thresholdMs, now);
 #endif
-  // Hand the completed element off to the decoder. Not flag-gated - the
-  // decoder is a core feature, same as the keyer.
   core_decoder_addElement(type, now);
 }
 
@@ -105,9 +78,6 @@ static void handleDebugSerialCommand() {
 }
 #endif
 
-// ----------------------------------------------------------------------------
-// Setup
-// ----------------------------------------------------------------------------
 void setup() {
 #if FEATURE_SERIAL
   Serial.begin(115200);
@@ -115,39 +85,9 @@ void setup() {
   Serial.println(F("=== MORPHEUS Boot ==="));
 #endif
 
-  // Bond reset button check - sampled once, very early, before any module
-  // is initialized. The check itself always runs; only the log lines are
-  // gated behind FEATURE_SERIAL. The actual effect is naturally gated by
-  // transport_resetBond() being an empty stub when FEATURE_BLE=0.
-  bool bondResetRequested = false;
-  pinMode(PIN_BOND_RESET, INPUT_PULLUP);
-  if (digitalRead(PIN_BOND_RESET) == LOW) {
-#if FEATURE_SERIAL
-    Serial.println(F("EVT BOND_RESET_HOLD_START"));
-#endif
-    unsigned long holdStartMs = millis();
-    bool stillHeld = true;
-    while (millis() - holdStartMs < BOND_RESET_HOLD_MS) {
-      if (digitalRead(PIN_BOND_RESET) != LOW) {
-        stillHeld = false;
-        break;
-      }
-      delay(10);
-    }
-    if (stillHeld) {
-      bondResetRequested = true;
-#if FEATURE_SERIAL
-      Serial.println(F("EVT BOND_RESET_HOLD_CONFIRMED"));
-#endif
-    } else {
-#if FEATURE_SERIAL
-      Serial.println(F("EVT BOND_RESET_HOLD_ABORTED"));
-#endif
-    }
-  }
-
   core_keyer_init();
   core_decoder_init();
+  core_memory_init();
 
   services_loadSettings();
 
@@ -157,18 +97,8 @@ void setup() {
 
   services_init();
 
-  // BLE last - brought up only after all other hardware is ready, exactly
-  // as in the validated Stage 2 boot order. Bond reset (if requested)
-  // happens AFTER transport_init(), once NimBLE is already initialized,
-  // not before.
 #if FEATURE_BLE
   transport_init();
-
-  if (bondResetRequested) {
-    transport_resetBond();
-  }
-#else
-  (void)bondResetRequested;
 #endif
 
 #if FEATURE_SERIAL
@@ -176,23 +106,20 @@ void setup() {
 #endif
 }
 
-// ----------------------------------------------------------------------------
-// Main loop - fully non-blocking, no delay() anywhere in the timing path
-// ----------------------------------------------------------------------------
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+static unsigned long sysHeartbeatLastMs = 0;
+static const unsigned long SYS_HEARTBEAT_INTERVAL_MS = 1000;
+static uint32_t sysHeartbeatLoopCount = 0;
+#endif
+
 void loop() {
   unsigned long now = millis();
 
-  OperatingMode modeBefore = core_keyer_getMode();
+  services_tickLoopCounter(now);
+
   core_keyer_service(now);
-  OperatingMode modeAfter = core_keyer_getMode();
-  if (modeAfter != modeBefore) {
-#if FEATURE_SERIAL
-    services_logModeChange(modeAfter);
-#endif
-  }
-
   core_decoder_service(now);
-
+  core_memory_service(now);
   services_serviceSettings(now);
 
 #if FEATURE_BLE
@@ -209,5 +136,20 @@ void loop() {
 
 #if FEATURE_DEBUG_SERIAL_COMMANDS
   handleDebugSerialCommand();
+#endif
+
+#if DEBUG_KEYER_TONE && FEATURE_SERIAL
+  sysHeartbeatLoopCount++;
+  if (now - sysHeartbeatLastMs >= SYS_HEARTBEAT_INTERVAL_MS) {
+    Serial.print(F("[DBG_SYS]  t=")); Serial.print(now);
+#if FEATURE_BLE
+    Serial.print(F(" bleConn=")); Serial.print(transport_isConnected() ? 1 : 0);
+    Serial.print(F(" bleSecure=")); Serial.print(transport_isSecure() ? 1 : 0);
+#endif
+    Serial.print(F(" freeHeap=")); Serial.print(services_getFreeHeapBytes());
+    Serial.print(F(" loops/1000ms=")); Serial.println(sysHeartbeatLoopCount);
+    sysHeartbeatLastMs = now;
+    sysHeartbeatLoopCount = 0;
+  }
 #endif
 }

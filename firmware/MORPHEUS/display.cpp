@@ -1,27 +1,29 @@
 /*
  * ============================================================================
- * MORPHEUS - Operator Display System
+ * MORPHEUS - Operator Display System (UI Integration Adapter)
  * ============================================================================
  *
  * File: display.cpp
  * Author: Coder Chunk
  * License: GNU General Public License v3.0 (GPLv3)
  *
- * Morse is meant to be heard, but MORPHEUS also makes it visible.
+ * INTEGRATION COMPLETE (this pass):
  *
- * This module renders operating information, decoded text, live patterns,
- * connection status, and pairing information on the OLED display.
+ * 1. Thread-safe BLE bridge: display_setTransportStatus() (called from
+ *    NimBLE's host task) now snapshots under portMUX, exactly the
+ *    pattern this file's earlier version documented as mandatory. The
+ *    loop()-task side reads the snapshot and translates it into
+ *    ui_state's BLE vocabulary.
  *
- * The display system was designed to remain independent from the transport
- * and decoding layers, allowing contributors to experiment with:
+ * 2. Live data polling: WPM, mode, decoder live-word/pattern, and the
+ *    receiving indicator are pulled from ui_backend (which wraps
+ *    core_keyer/core_decoder) on a throttled, change-detected basis
+ *    (reusing config.h's existing DISPLAY_INTERVAL_MS, unused since the
+ *    original adapter rewrite - restored to its original purpose here).
  *
- *   • Alternative display technologies
- *   • Different layouts
- *   • Large-screen interfaces
- *   • Spectrum displays
- *   • Training visualizations
- *
- * User interfaces evolve. The architecture allows them to evolve freely.
+ * 3. display_appendWord() now feeds the real transcript via
+ *    ui_backend_appendWord()/getTranscriptLines(), replacing the
+ *    previous no-op stub.
  *
  * Copyright (C) 2026 Coder Chunk
  *
@@ -30,204 +32,144 @@
 
 #include "display.h"
 #include "config.h"
-#include "core_keyer.h"
-#include "core_decoder.h"
-#include <string.h>
 
 #if FEATURE_OLED
-#include <Wire.h>
-#include <U8g2lib.h>
-static U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+#include "ui_input.h"
+#include "ui_state.h"
+#include "ui_renderer.h"
+#include "ui_backend.h"
+#include "ui_mockdata.h"
+#include <string.h>
 #endif
 
-// Shared state - written unconditionally so transport.cpp can always call
-// display_setTransportStatus()/display_appendWord() without its own
-// FEATURE_OLED guard; the heavy rendering work below is what's actually
-// gated.
-static char displayTranscript[TRANSCRIPT_LEN];
-static volatile DisplayLinkStatus linkStatus = DISPLAY_LINK_ADV;
-static volatile uint32_t lastPasskey = 0;
-
-// ----------------------------------------------------------------------------
-// v1.2.1 fix: linkStatus and lastPasskey are written from NimBLE's host task
-// (via display_setTransportStatus(), called from onConnect()/onPassKeyDisplay()/
-// onAuthenticationComplete() in transport.cpp) and read from the Arduino
-// loop() task (display_service()). Identified during the v1.2.1 race-condition
-// investigation as a structurally identical, smaller-impact hazard to the one
-// that caused the stuck-PAIRED bug: a torn read of these two fields could show
-// the passkey overlay with a stale/zero value instead of the real passkey.
-// Not directly observed in testing, but the same shared-state-without-
-// synchronization shape, fixed in this same pass per the approved v1.2.1
-// design scope.
-//
-// This lock must never wrap I2C/Wire calls - display_service() takes a
-// snapshot under the lock, releases immediately, then does all the slow
-// rendering work from the local copy.
-// ----------------------------------------------------------------------------
-static portMUX_TYPE displayStateMux = portMUX_INITIALIZER_UNLOCKED;
+#if FEATURE_OLED
+static portMUX_TYPE bleDisplayMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile DisplayLinkStatus pendingBleStatus = DISPLAY_LINK_ADV;
+static volatile uint32_t pendingBlePasskey = 0;
+static volatile bool bleStatusChanged = false;
+#endif
 
 void display_setTransportStatus(DisplayLinkStatus status, uint32_t passkey) {
-  portENTER_CRITICAL(&displayStateMux);
-  linkStatus = status;
-  lastPasskey = passkey;
-  portEXIT_CRITICAL(&displayStateMux);
+#if FEATURE_OLED
+  portENTER_CRITICAL(&bleDisplayMux);
+  pendingBleStatus = status;
+  pendingBlePasskey = passkey;
+  bleStatusChanged = true;
+  portEXIT_CRITICAL(&bleDisplayMux);
+#else
+  (void)status; (void)passkey;
+#endif
 }
 
 void display_appendWord(const char *word) {
-  if (word == NULL || word[0] == '\0') return;
-
 #if FEATURE_OLED
-  char temp[TRANSCRIPT_LEN + MAX_WORD_LEN + 2];
-  if (displayTranscript[0] == '\0') {
-    snprintf(temp, sizeof(temp), "%s", word);
-  } else {
-    snprintf(temp, sizeof(temp), "%s %s", displayTranscript, word);
-  }
-
-  size_t newLen = strlen(temp);
-  if (newLen < TRANSCRIPT_LEN) {
-    strncpy(displayTranscript, temp, TRANSCRIPT_LEN - 1);
-  } else {
-    size_t start = newLen - (TRANSCRIPT_LEN - 1);
-    strncpy(displayTranscript, temp + start, TRANSCRIPT_LEN - 1);
-  }
-  displayTranscript[TRANSCRIPT_LEN - 1] = '\0';
-#endif
-}
-
-#if FEATURE_OLED
-
-static unsigned long lastDisplayUpdateMs = 0;
-
-static void renderPairingOverlay(uint32_t passkey) {
-  char line[24];
-  u8g2.clearBuffer();
-
-  u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(0, 10, "BLE PAIRING REQUEST");
-
-  u8g2.setFont(u8g2_font_7x14B_tr);
-  snprintf(line, sizeof(line), "%06u", (unsigned)passkey);
-  int w = u8g2.getStrWidth(line);
-  int x = (128 - w) / 2;
-  if (x < 0) x = 0;
-  u8g2.drawStr(x, 38, line);
-
-  u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(0, 60, "Enter on device");
-
-  u8g2.sendBuffer();
-}
-
-static void renderPairResult(bool success) {
-  const char *msg = success ? "PAIRED" : "PAIRING FAILED";
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_7x14B_tr);
-  int w = u8g2.getStrWidth(msg);
-  int x = (128 - w) / 2;
-  if (x < 0) x = 0;
-  u8g2.drawStr(x, 36, msg);
-  u8g2.sendBuffer();
-}
-
-static void renderOperatorScreen(DisplayLinkStatus status) {
-  char line[32];
-  u8g2.clearBuffer();
-
-  u8g2.setFont(u8g2_font_6x10_tr);
-
-#if FEATURE_BLE
-  const char *bleCode = (status == DISPLAY_LINK_SECURE)    ? "SECR" :
-                        (status == DISPLAY_LINK_CONNECTED) ? "CONN" : "ADV";
-  snprintf(line, sizeof(line), "%s %dWPM %s",
-           core_keyer_getMode() == MODE_STRAIGHT ? "STR" : "PAD",
-           core_keyer_getWpm(), bleCode);
+  ui_backend_appendWord(word);
+  ui_state_notifyDataChanged();
 #else
-  (void)status;
-  snprintf(line, sizeof(line), "%s %dWPM",
-           core_keyer_getMode() == MODE_STRAIGHT ? "STR" : "PAD",
-           core_keyer_getWpm());
+  (void)word;
 #endif
-  u8g2.drawStr(0, 9, line);
+}
 
-  size_t fullLen = strlen(displayTranscript);
-  char lineA[LINE_CHARS + 1];
-  char lineB[LINE_CHARS + 1];
+#if FEATURE_OLED
 
-  if (fullLen <= LINE_CHARS) {
-    strncpy(lineB, displayTranscript, LINE_CHARS);
-    lineB[LINE_CHARS] = '\0';
-    lineA[0] = '\0';
-  } else {
-    size_t bStart = fullLen - LINE_CHARS;
-    strncpy(lineB, displayTranscript + bStart, LINE_CHARS);
-    lineB[LINE_CHARS] = '\0';
+static UiBleStatus mapBleStatus(DisplayLinkStatus s) {
+  switch (s) {
+    case DISPLAY_LINK_ADV:       return UI_BLE_ADV;
+    case DISPLAY_LINK_CONNECTED: return UI_BLE_CONNECTED;
+    case DISPLAY_LINK_PAIRING:   return UI_BLE_PAIRING;
+    case DISPLAY_LINK_PAIR_OK:   return UI_BLE_PAIR_OK;
+    case DISPLAY_LINK_PAIR_FAIL: return UI_BLE_PAIR_FAIL;
+    case DISPLAY_LINK_SECURE:    return UI_BLE_SECURE;
+    default:                     return UI_BLE_ADV;
+  }
+}
 
-    size_t aLen = (bStart > LINE_CHARS) ? LINE_CHARS : bStart;
-    size_t aStart = bStart - aLen;
-    strncpy(lineA, displayTranscript + aStart, aLen);
-    lineA[aLen] = '\0';
+static unsigned long lastPollMs = 0;
+static uint8_t lastWpm = 0xFF;
+static UiMockMode lastMode = (UiMockMode)0xFF;
+static bool lastReceiving = false;
+static bool lastDecoderEnabled = true;
+static char lastLiveWord[UI_LINE_CHARS + 1] = "";
+static char lastLivePattern[UI_PATTERN_CHARS + 1] = "";
+
+static void pollLiveData(unsigned long now) {
+  if (now - lastPollMs < DISPLAY_INTERVAL_MS) return;
+  lastPollMs = now;
+
+  bool changed = false;
+
+  uint8_t wpm = (uint8_t)ui_backend_getWpm();
+  if (wpm != lastWpm) { uiStatus.wpm = wpm; lastWpm = wpm; changed = true; }
+
+  UiMockMode mode = (strcmp(ui_backend_getModeStr(), "STR") == 0) ? UI_MODE_STRAIGHT : UI_MODE_PADDLE;
+  if (mode != lastMode) { uiStatus.mode = mode; lastMode = mode; changed = true; }
+
+  bool receiving = ui_backend_isReceiving();
+  if (receiving != lastReceiving) { uiStatus.isReceiving = receiving; lastReceiving = receiving; changed = true; }
+
+  bool decoderEn = ui_backend_getDecoderEnabled();
+  if (decoderEn != lastDecoderEnabled) { uiStatus.decoderEnabled = decoderEn; lastDecoderEnabled = decoderEn; changed = true; }
+
+  char liveWord[UI_LINE_CHARS + 1];
+  ui_backend_getLiveWord(liveWord, sizeof(liveWord));
+  if (strcmp(liveWord, lastLiveWord) != 0) {
+    strncpy(uiStatus.liveWord, liveWord, sizeof(uiStatus.liveWord) - 1);
+    uiStatus.liveWord[sizeof(uiStatus.liveWord) - 1] = '\0';
+    strncpy(lastLiveWord, liveWord, sizeof(lastLiveWord) - 1);
+    lastLiveWord[sizeof(lastLiveWord) - 1] = '\0';
+    changed = true;
   }
 
-  u8g2.setFont(u8g2_font_7x14B_tr);
-  u8g2.drawStr(0, 24, lineA);
-  u8g2.drawStr(0, 39, lineB);
-
-  const char *liveWord = core_decoder_getWordBuffer();
-  uint8_t wLen = core_decoder_getWordLen();
-  if (wLen > LINE_CHARS) {
-    liveWord = liveWord + (wLen - LINE_CHARS);
+  char livePattern[UI_PATTERN_CHARS + 1];
+  ui_backend_getLivePattern(livePattern, sizeof(livePattern));
+  if (strcmp(livePattern, lastLivePattern) != 0) {
+    strncpy(uiStatus.livePattern, livePattern, sizeof(uiStatus.livePattern) - 1);
+    uiStatus.livePattern[sizeof(uiStatus.livePattern) - 1] = '\0';
+    strncpy(lastLivePattern, livePattern, sizeof(lastLivePattern) - 1);
+    lastLivePattern[sizeof(lastLivePattern) - 1] = '\0';
+    changed = true;
   }
-  u8g2.setFont(u8g2_font_7x14_tr);
-  u8g2.drawStr(0, 54, liveWord);
 
-  u8g2.setFont(u8g2_font_6x10_tr);
-  uint8_t patLen = core_decoder_getCharPatternLen();
-  snprintf(line, sizeof(line), "PAT: %s", patLen > 0 ? core_decoder_getCharPattern() : "-");
-  u8g2.drawStr(0, 63, line);
+  ui_backend_getTranscriptLines(uiStatus.transcriptA, sizeof(uiStatus.transcriptA),
+                                 uiStatus.transcriptB, sizeof(uiStatus.transcriptB));
 
-  u8g2.sendBuffer();
+  if (changed) ui_state_notifyDataChanged();
 }
 
 void display_init() {
-  Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
-  Wire.setClock(400000);
-  u8g2.begin();
-  u8g2.setI2CAddress(OLED_I2C_ADDR << 1);
-
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_7x14B_tr);
-  u8g2.drawStr(0, 30, "MORPHEUS");
-  u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(0, 46, "Booting...");
-  u8g2.sendBuffer();
-  delay(800);
-
-  displayTranscript[0] = '\0';
+  ui_input_init();
+  ui_state_init(millis());
+  ui_renderer_init();
 }
 
 void display_service(unsigned long now) {
-  if (now - lastDisplayUpdateMs < DISPLAY_INTERVAL_MS) return;
-  lastDisplayUpdateMs = now;
+  ui_input_service(now);
 
-  // v1.2.1: snapshot under the lock, release immediately, then render from
-  // the local copy - the critical section must never wrap the slow I2C
-  // calls below.
+  UiEvent ev;
+  while (ui_input_poll(ev)) {
+    ui_state_handleEvent(ev, now);
+  }
+
   DisplayLinkStatus statusSnapshot;
   uint32_t passkeySnapshot;
-  portENTER_CRITICAL(&displayStateMux);
-  statusSnapshot = linkStatus;
-  passkeySnapshot = lastPasskey;
-  portEXIT_CRITICAL(&displayStateMux);
+  bool changed;
+  portENTER_CRITICAL(&bleDisplayMux);
+  changed = bleStatusChanged;
+  statusSnapshot = pendingBleStatus;
+  passkeySnapshot = pendingBlePasskey;
+  bleStatusChanged = false;
+  portEXIT_CRITICAL(&bleDisplayMux);
+  if (changed) {
+    ui_state_setBleStatus(mapBleStatus(statusSnapshot), passkeySnapshot, now);
+  }
 
-  if (statusSnapshot == DISPLAY_LINK_PAIRING)   { renderPairingOverlay(passkeySnapshot); return; }
-  if (statusSnapshot == DISPLAY_LINK_PAIR_OK)   { renderPairResult(true);    return; }
-  if (statusSnapshot == DISPLAY_LINK_PAIR_FAIL) { renderPairResult(false);   return; }
+  pollLiveData(now);
 
-  renderOperatorScreen(statusSnapshot);
+  ui_state_service(now);
+  ui_renderer_service(now);
 }
 
-#else // !FEATURE_OLED - stub implementations so the public API stays linkable
+#else
 
 void display_init() {}
 void display_service(unsigned long now) { (void)now; }

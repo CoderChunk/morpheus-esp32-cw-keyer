@@ -73,6 +73,8 @@ static const unsigned long UI_DIAG_ICON_CYCLE_MS = 1200;
 // no new refresh constant needed there.
 // ----------------------------------------------------------------------------
 static const unsigned long UI_TUNE_TIMEOUT_MS = 30000;
+static const unsigned long UI_VOLUME_PREVIEW_PERIOD_MS = 1000;
+static const unsigned long UI_VOLUME_PREVIEW_ON_MS     = 150;   // audible beep duration within each period
 
 // Adopted from the reference animation source (FRAME_DELAY=42, ~24fps),
 // tuned for this specific frame set - the XBM/bit-order fallback from
@@ -80,5 +82,8 @@ static const unsigned long UI_TUNE_TIMEOUT_MS = 30000;
 // Adafruit_GFX::drawBitmap() and u8g2::drawBitmap() share the same
 // MSB-first convention.
 static const unsigned long UI_ICON_ANIM_FRAME_MS = 42;
+
+static const unsigned long UI_GAME_ANIM_MS = 40;   // animation tick cadence
+static const unsigned long UI_GAME_HELP_MS = 4000; // first-entry help overlay duration
 
 #endif // UI_CONFIG_H

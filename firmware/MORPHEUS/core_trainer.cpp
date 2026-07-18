@@ -85,6 +85,9 @@ static int  farnsworthEffectiveWpm = DEFAULT_FARNSWORTH_WPM;
 static bool farnsworthPlaying = false;
 static const char *FARNSWORTH_SAMPLE = "PARIS PARIS CQ DE TEST";
 
+static TrainerStatsHook statsHook = nullptr;
+static TrainerExamHook  examHook  = nullptr;
+
 static void generateNextTarget() {
   switch (currentMode) {
     case TRAIN_MODE_KOCH: {
@@ -136,6 +139,12 @@ static void maybeLevelUpKoch() {
   if (pct >= TRAIN_KOCH_LEVELUP_PCT && kochLevel < KOCH_ORDER_LEN) kochLevel++;
 }
 
+void core_trainer_recordKochResult(bool correct) {
+  kochRollingTotal++;
+  if (correct) kochRollingCorrect++;
+  maybeLevelUpKoch();
+}
+
 static void adjustAdaptiveWpm(bool correct) {
   if (correct) {
     adaptiveStreak++;
@@ -149,6 +158,9 @@ static void adjustAdaptiveWpm(bool correct) {
     if (adaptiveWpm < WPM_MIN) adaptiveWpm = WPM_MIN;
   }
 }
+
+void core_trainer_setStatsHook(TrainerStatsHook hook) { statsHook = hook; }
+void core_trainer_setExamCompleteHook(TrainerExamHook hook) { examHook = hook; }
 
 static void onTrainingCharDecoded(char decoded, const char *pattern) {
   (void)pattern;
@@ -165,10 +177,10 @@ static void onTrainingCharDecoded(char decoded, const char *pattern) {
   if (correct) correctCount++;
   targetPos++;
 
+  if (statsHook != nullptr) statsHook(currentMode, correct);
+
   if (currentMode == TRAIN_MODE_KOCH) {
-    kochRollingTotal++;
-    if (correct) kochRollingCorrect++;
-    maybeLevelUpKoch();
+    core_trainer_recordKochResult(correct);
   }
   if (currentMode == TRAIN_MODE_ADAPTIVE) adjustAdaptiveWpm(correct);
 
@@ -178,6 +190,9 @@ static void onTrainingCharDecoded(char decoded, const char *pattern) {
     examTotalCount++;
     if (correct) examCorrectCount++;
     if (examTotalCount >= TRAIN_EXAM_LENGTH) {
+      uint8_t scorePercent = (uint8_t)((examCorrectCount * 100UL) / examTotalCount);
+      bool passed = scorePercent >= TRAIN_EXAM_PASS_PCT;
+      if (examHook != nullptr) examHook(examCorrectCount, examTotalCount, scorePercent, passed);
       examResultReady = true;
       phase = DRILL_EXAM_DONE;
       sessionActive = false;

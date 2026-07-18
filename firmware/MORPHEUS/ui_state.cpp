@@ -20,6 +20,7 @@
  * Copyright (C) 2026 Coder Chunk
  * ============================================================================
  */
+#include "config.h"
 #include "ui_state.h"
 #include "ui_config.h"
 #include "ui_mockdata.h"
@@ -73,7 +74,19 @@ static unsigned long menuAnimLastMs = 0;
 static uint8_t menuAnimLastCarouselIndex = 0;
 static UiScreen menuAnimLastScreen = UI_SCREEN_SPLASH;
 
+static const uint8_t COPY_OVER = 4;   // CopyPhase: IDLE,FALLING,HIT,MISS,OVER
+static const uint8_t MEM_OVER  = 4;   // MemGamePhase: IDLE,PLAYBACK,INPUT,ROUND_OK,OVER
+static const uint8_t SPD_OVER  = 3;   // SpeedGamePhase: IDLE,LISTEN,FEEDBACK,OVER
+
 static bool audioResourceBusy();
+static void handleGameCopy(const UiEvent &ev);
+static void handleGameMemory(const UiEvent &ev);
+static void handleGameSpeed(const UiEvent &ev);
+
+static UiScreen pauseReturnScreen = UI_SCREEN_HOME;
+static uint8_t  gamePauseFocusIdx = 0;
+
+static void handleGamePause(const UiEvent &ev);
 
 uint16_t ui_state_getMenuAnimFrame() { return menuAnimFrame; }
 
@@ -91,6 +104,7 @@ static int getParamValue(uint8_t paramId) {
     case PARAM_WPM:      return ui_backend_getWpm();
     case PARAM_TONE:     return (int)ui_backend_getToneHz();
     case PARAM_CONTRAST: return (int)ui_renderer_getContrast();
+    case PARAM_VOLUME:   return (int)ui_backend_getVolume();
     default: return 0;
   }
 }
@@ -99,6 +113,7 @@ static void setParamValue(uint8_t paramId, int value) {
     case PARAM_WPM:      ui_backend_setWpm(value); break;
     case PARAM_TONE:     ui_backend_setToneHz((uint16_t)value); break;
     case PARAM_CONTRAST: ui_renderer_setContrast((uint8_t)value); break;
+    case PARAM_VOLUME:   ui_backend_setVolume((uint8_t)value); break;
     default: break;
   }
 }
@@ -107,6 +122,7 @@ static void getParamRange(uint8_t paramId, int &lo, int &hi) {
     case PARAM_WPM:      lo = UI_WPM_MIN;      hi = UI_WPM_MAX;      break;
     case PARAM_TONE:     lo = UI_TONE_MIN_HZ;  hi = UI_TONE_MAX_HZ;  break;
     case PARAM_CONTRAST: lo = UI_CONTRAST_MIN; hi = UI_CONTRAST_MAX; break;
+    case PARAM_VOLUME:   lo = VOLUME_MIN; hi = VOLUME_MAX; break;
     default: lo = 0; hi = 0; break;
   }
 }
@@ -114,6 +130,7 @@ static int getParamStep(uint8_t paramId) {
   switch (paramId) {
     case PARAM_TONE:     return 10;
     case PARAM_CONTRAST: return 5;
+    case PARAM_VOLUME:   return VOLUME_STEP;
     default: return 1;
   }
 }
@@ -122,6 +139,7 @@ static const char *getParamLabel(uint8_t paramId) {
     case PARAM_WPM:      return "WPM";
     case PARAM_TONE:     return "TONE";
     case PARAM_CONTRAST: return "CONTRAST";
+    case PARAM_VOLUME:   return "VOLUME";
     default: return "";
   }
 }
@@ -131,6 +149,7 @@ static bool getToggleValue(uint8_t paramId) {
     case PARAM_PADDLE_REV:  return ui_backend_getPaddleReversed();
     case PARAM_MODE:        return ui_backend_getModeIsPaddle();
     case PARAM_DECODER_EN:  return ui_backend_getDecoderEnabled();
+    case PARAM_SIDETONE_EN: return ui_backend_getSidetoneEnabled();
     default: return false;
   }
 }
@@ -139,6 +158,7 @@ static void setToggleValue(uint8_t paramId, bool v) {
     case PARAM_PADDLE_REV:  ui_backend_setPaddleReversed(v); break;
     case PARAM_MODE:        ui_backend_setModeIsPaddle(v); break;
     case PARAM_DECODER_EN:  ui_backend_setDecoderEnabled(v); break;
+    case PARAM_SIDETONE_EN: ui_backend_setSidetoneEnabled(v); break;
     default: break;
   }
 }
@@ -147,6 +167,7 @@ static const char *getToggleLabel(uint8_t paramId) {
     case PARAM_PADDLE_REV: return "PADDLE REV";
     case PARAM_MODE:       return "KEYER MODE";
     case PARAM_DECODER_EN: return "DECODER";
+    case PARAM_SIDETONE_EN: return "SIDETONE";
     default: return "";
   }
 }
@@ -191,6 +212,17 @@ bool ui_state_isTriggerPlaying(uint8_t paramId) {
   return ui_backend_isMemoryPlaying() && ((uint8_t)(ui_backend_getPlayingMemorySlot() + 1) == paramId);
 }
 
+static void buildProfileInfoLines(uint8_t uiProfileId) {
+  snprintf(infoLine1, sizeof(infoLine1), "%d WPM  %s",
+           ui_backend_profileGetWpm(uiProfileId), ui_backend_profileGetModeStr(uiProfileId));
+  snprintf(infoLine2, sizeof(infoLine2), "Tone %u Hz  Vol %u%%",
+           (unsigned)ui_backend_profileGetToneHz(uiProfileId),
+           (unsigned)ui_backend_profileGetVolume(uiProfileId));
+  snprintf(infoLine3, sizeof(infoLine3), "Rev:%s  Tone:%s",
+           ui_backend_profileGetPaddleReversed(uiProfileId) ? "ON" : "OFF",
+           ui_backend_profileGetSidetoneEnabled(uiProfileId) ? "ON" : "OFF");
+}
+
 static void buildInfoContent(uint8_t infoId) {
   infoLine1[0] = infoLine2[0] = infoLine3[0] = '\0';
   switch (infoId) {
@@ -227,11 +259,72 @@ static void buildInfoContent(uint8_t infoId) {
       snprintf(infoLine2, sizeof(infoLine2), "Push/Confirm=select");
       snprintf(infoLine3, sizeof(infoLine3), "Back hold=Home");
       break;
+    case INFO_PROFILE_DEFAULT:  buildProfileInfoLines(UI_PROFILE_DEFAULT);  break;
+    case INFO_PROFILE_PORTABLE: buildProfileInfoLines(UI_PROFILE_PORTABLE); break;
+    case INFO_PROFILE_CONTEST:  buildProfileInfoLines(UI_PROFILE_CONTEST);  break;
+    case INFO_PROFILE_PRACTICE: buildProfileInfoLines(UI_PROFILE_PRACTICE); break;
+    case INFO_GAMES_GUIDE:
+      snprintf(infoLine1, sizeof(infoLine1), "Confirm=Play/Retry");
+      snprintf(infoLine2, sizeof(infoLine2), "Hold Back=Pause menu");
+      snprintf(infoLine3, sizeof(infoLine3), "Back=Quit to menu");
+      break;
     default:
       snprintf(infoLine1, sizeof(infoLine1), "Feature not yet");
       snprintf(infoLine2, sizeof(infoLine2), "available in this");
       snprintf(infoLine3, sizeof(infoLine3), "firmware version");
       break;
+  }
+}
+
+static void buildGameInfoContent(uint8_t infoId, const char *rowLabel) {
+  setInfoTitleFrom(rowLabel);
+  infoLine1[0] = infoLine2[0] = infoLine3[0] = '\0';
+
+  switch (infoId) {
+    case INFO_GAME_COPY_CONTROLS:
+      snprintf(infoLine1, sizeof(infoLine1), "Key = answer");
+      snprintf(infoLine2, sizeof(infoLine2), "Confirm = retry");
+      snprintf(infoLine3, sizeof(infoLine3), "Back = pause menu");
+      break;
+    case INFO_GAME_COPY_HELP:
+      snprintf(infoLine1, sizeof(infoLine1), "Key the letter you");
+      snprintf(infoLine2, sizeof(infoLine2), "hear before the orb");
+      snprintf(infoLine3, sizeof(infoLine3), "reaches the line");
+      break;
+    case INFO_GAME_COPY_SCORE: {
+      snprintf(infoLine1, sizeof(infoLine1), "Best: %u", (unsigned)ui_backend_gameCopyHighScore());
+      if (ui_backend_isGameSessionActive()) {
+        snprintf(infoLine2, sizeof(infoLine2), "Current: %u", (unsigned)ui_backend_gameCopyScore());
+      }
+      break;
+    }
+    case INFO_GAME_MEMORY_CONTROLS:
+      snprintf(infoLine1, sizeof(infoLine1), "Key = repeat pattern");
+      snprintf(infoLine2, sizeof(infoLine2), "Confirm = retry");
+      snprintf(infoLine3, sizeof(infoLine3), "Back = pause menu");
+      break;
+    case INFO_GAME_MEMORY_HELP:
+      snprintf(infoLine1, sizeof(infoLine1), "Repeat the growing");
+      snprintf(infoLine2, sizeof(infoLine2), "sequence you hear,");
+      snprintf(infoLine3, sizeof(infoLine3), "one letter at a time");
+      break;
+    case INFO_GAME_MEMORY_SCORE:
+      snprintf(infoLine1, sizeof(infoLine1), "Best chain: %u", (unsigned)ui_backend_gameMemoryHighScore());
+      break;
+    case INFO_GAME_SPEED_CONTROLS:
+      snprintf(infoLine1, sizeof(infoLine1), "Key = answer");
+      snprintf(infoLine2, sizeof(infoLine2), "Confirm = retry");
+      snprintf(infoLine3, sizeof(infoLine3), "Back = pause menu");
+      break;
+    case INFO_GAME_SPEED_HELP:
+      snprintf(infoLine1, sizeof(infoLine1), "Key each letter before");
+      snprintf(infoLine2, sizeof(infoLine2), "the beat runs out.");
+      snprintf(infoLine3, sizeof(infoLine3), "Speed ramps up!");
+      break;
+    case INFO_GAME_SPEED_SCORE:
+      snprintf(infoLine1, sizeof(infoLine1), "Best combo: %u", (unsigned)ui_backend_gameSpeedHighScore());
+      break;
+    default: break;
   }
 }
 
@@ -273,9 +366,13 @@ bool ui_state_getBleOverlay(BleOverlayKind &kind, uint32_t &passkey) {
 // CONFIRM DIALOG ENGINE
 // ============================================================================
 static uint8_t dialogActionId = ACTION_NONE;
+static uint8_t pendingProfileId = UI_PROFILE_NONE;
 static bool    dialogFocusYes = false;
 static char    dialogTitle[24] = "";
 static char    dialogMessage[24] = "";
+
+static unsigned long volumeScreenEnterMs = 0;
+static uint8_t       volumeEntrySnapshot = 0;
 
 static bool           actionToastActive = false;
 static char           actionToastText[20] = "";
@@ -306,6 +403,7 @@ static void buildDialogContent(uint8_t actionId, const char *rowLabel) {
     case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Clear BLE bond?"); break;
     case ACTION_FACTORY_RESET: snprintf(dialogMessage, sizeof(dialogMessage), "Reset all settings?"); break;
     case ACTION_RESTART:       snprintf(dialogMessage, sizeof(dialogMessage), "Restart device now?"); break;
+    case ACTION_PROFILE_SAVE:  snprintf(dialogMessage, sizeof(dialogMessage), "Overwrite this profile?"); break;
     default:                   snprintf(dialogMessage, sizeof(dialogMessage), "Confirm action?"); break;
   }
 }
@@ -336,6 +434,10 @@ static void executeDialogAction() {
       showActionToast("RESTARTING...");
       pendingRestart = true;
       pendingRestartAtMs = lastEventNow + RESTART_DELAY_MS;
+      break;
+    case ACTION_PROFILE_SAVE:
+      ui_backend_profileSave(pendingProfileId);
+      showActionToast("PROFILE SAVED");
       break;
     default: break;
   }
@@ -413,13 +515,137 @@ static uint8_t diagLivePage = 0;
 static char    diagLiveLines[4][24];
 static uint8_t diagLivePageCount = 1;
 
+// Statistics screens reuse this exact DIAG_LIVE engine rather than
+// duplicating a second paginated-live-text renderer. This flag is the
+// only thing distinguishing which content switch (below) applies.
+enum ContentDomain : uint8_t { DOMAIN_DIAG, DOMAIN_STATS };
+static ContentDomain currentContentDomain = DOMAIN_DIAG;
+
 static void formatUptime(unsigned long ms, char *out, size_t outSize) {
   unsigned long totalSec = ms / 1000;
   unsigned long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;
   snprintf(out, outSize, "Up: %luh %lum %lus", h, m, s);
 }
 
+static void formatAccuracyLine(char *out, size_t outSize, const char *label,
+                                uint32_t correct, uint32_t total) {
+  uint8_t pct = (total == 0) ? 0 : (uint8_t)((correct * 100UL) / total);
+  snprintf(out, outSize, "%s %lu/%lu %u%%", label,
+           (unsigned long)correct, (unsigned long)total, (unsigned)pct);
+}
+
+static void refreshStatsContent(unsigned long now) {
+  (void)now;
+  uint8_t statsId = currentInfoId;
+  diagLiveLines[0][0] = diagLiveLines[1][0] = diagLiveLines[2][0] = diagLiveLines[3][0] = '\0';
+
+  switch (statsId) {
+    case STATS_SESSION: {
+      diagLivePageCount = 1;
+      setInfoTitleFrom("SESSION");
+      snprintf(diagLiveLines[0], 24, "Chars:%lu Words:%lu",
+               (unsigned long)ui_backend_statsSessionChars(),
+               (unsigned long)ui_backend_statsSessionWords());
+      snprintf(diagLiveLines[1], 24, "Elements: %lu",
+               (unsigned long)ui_backend_statsSessionElements());
+      formatAccuracyLine(diagLiveLines[2], 24, "Train",
+                          ui_backend_statsSessionTrainCorrect(),
+                          ui_backend_statsSessionTrainAttempts());
+      char upt[24];
+      formatUptime(ui_backend_statsSessionUptimeMs(), upt, sizeof(upt));
+      snprintf(diagLiveLines[3], 24, "%s", upt);
+      break;
+    }
+    case STATS_LIFETIME: {
+      diagLivePageCount = 2;
+      if (diagLivePage == 0) {
+        setInfoTitleFrom("LIFETIME 1/2");
+        snprintf(diagLiveLines[0], 24, "Chars: %lu", (unsigned long)ui_backend_statsLifetimeChars());
+        snprintf(diagLiveLines[1], 24, "Words: %lu", (unsigned long)ui_backend_statsLifetimeWords());
+        snprintf(diagLiveLines[2], 24, "Elements: %lu", (unsigned long)ui_backend_statsLifetimeElements());
+      } else {
+        setInfoTitleFrom("LIFETIME 2/2");
+        uint32_t sec = ui_backend_statsLifetimeUptimeSec();
+        snprintf(diagLiveLines[0], 24, "Time: %luh %lum",
+                 (unsigned long)(sec / 3600), (unsigned long)((sec % 3600) / 60));
+        formatAccuracyLine(diagLiveLines[1], 24, "Train",
+                            ui_backend_statsLifetimeTrainCorrect(),
+                            ui_backend_statsLifetimeTrainAttempts());
+        snprintf(diagLiveLines[2], 24, "Exams: %lu/%lu passed",
+                 (unsigned long)ui_backend_statsExamsPassed(),
+                 (unsigned long)ui_backend_statsExamsTaken());
+      }
+      break;
+    }
+    case STATS_PROGRESS: {
+      diagLivePageCount = 1;
+      setInfoTitleFrom("PROGRESS");
+      char charset[24];
+      ui_state_getTrainKochCharset(charset, sizeof(charset));
+      snprintf(diagLiveLines[0], 24, "Koch Lvl %u", (unsigned)ui_backend_trainGetKochLevel());
+      snprintf(diagLiveLines[1], 24, "%s", charset);
+      snprintf(diagLiveLines[2], 24, "Exams: %lu taken %lu pass",
+               (unsigned long)ui_backend_statsExamsTaken(),
+               (unsigned long)ui_backend_statsExamsPassed());
+      snprintf(diagLiveLines[3], 24, "Best score: %u%%", (unsigned)ui_backend_statsBestExamScore());
+      break;
+    }
+    case STATS_ACCURACY: {
+      diagLivePageCount = 3;
+      setInfoTitleFrom("ACCURACY");
+      if (diagLivePage == 0) {
+        formatAccuracyLine(diagLiveLines[0], 24, "All",
+                            ui_backend_statsLifetimeTrainCorrect(), ui_backend_statsLifetimeTrainAttempts());
+        formatAccuracyLine(diagLiveLines[1], 24, "Koch",
+                            ui_backend_statsModeCorrect(0), ui_backend_statsModeAttempts(0));
+        formatAccuracyLine(diagLiveLines[2], 24, "Chars",
+                            ui_backend_statsModeCorrect(1), ui_backend_statsModeAttempts(1));
+      } else if (diagLivePage == 1) {
+        formatAccuracyLine(diagLiveLines[0], 24, "Words",
+                            ui_backend_statsModeCorrect(2), ui_backend_statsModeAttempts(2));
+        formatAccuracyLine(diagLiveLines[1], 24, "Calls",
+                            ui_backend_statsModeCorrect(3), ui_backend_statsModeAttempts(3));
+        formatAccuracyLine(diagLiveLines[2], 24, "Adapt",
+                            ui_backend_statsModeCorrect(4), ui_backend_statsModeAttempts(4));
+      } else {
+        formatAccuracyLine(diagLiveLines[0], 24, "Exam",
+                            ui_backend_statsModeCorrect(5), ui_backend_statsModeAttempts(5));
+      }
+      break;
+    }
+    case STATS_SPEED: {
+      uint8_t histCount = ui_backend_statsHistoryCount();
+      uint8_t historyPages = (histCount == 0) ? 0 : (uint8_t)((histCount + 2) / 3);
+      diagLivePageCount = (uint8_t)(1 + historyPages);
+      setInfoTitleFrom("SPEED HISTORY");
+      if (diagLivePage == 0) {
+        snprintf(diagLiveLines[0], 24, "Current: %d WPM", ui_backend_getWpm());
+        snprintf(diagLiveLines[1], 24, "Peak adaptive: %d WPM", ui_backend_statsPeakAdaptiveWpm());
+        if (histCount == 0) snprintf(diagLiveLines[2], 24, "No history yet");
+        else snprintf(diagLiveLines[2], 24, "%u session(s) recorded", (unsigned)histCount);
+      } else {
+        uint8_t pageIdx = (uint8_t)(diagLivePage - 1);
+        for (uint8_t row = 0; row < 3; row++) {
+          uint8_t entryIdx = (uint8_t)(pageIdx * 3 + row);
+          if (entryIdx >= histCount) continue;
+          uint16_t wpmVal = ui_backend_statsHistoryEntry(entryIdx);
+          snprintf(diagLiveLines[row], 24, "Session -%u: %u WPM",
+                   (unsigned)(entryIdx + 1), (unsigned)wpmVal);
+        }
+      }
+      break;
+    }
+    default:
+      diagLivePageCount = 1;
+      setInfoTitleFrom("STATISTICS");
+      snprintf(diagLiveLines[0], 24, "No data available");
+      break;
+  }
+}
+
 static void refreshDiagLiveContent(unsigned long now) {
+  if (currentContentDomain == DOMAIN_STATS) { refreshStatsContent(now); return; }
+
   uint8_t diagId = currentInfoId;
   diagLiveLines[0][0] = diagLiveLines[1][0] = diagLiveLines[2][0] = diagLiveLines[3][0] = '\0';
 
@@ -548,6 +774,30 @@ static void pushTrainFarnsworth(const char *label) {
   markDirty();
 }
 
+static void pushGameStart(uint8_t uiGameId) {
+  if (ui_backend_isGamePausedFor(uiGameId)) {
+    switch (uiGameId) {
+      case UI_GAME_COPY:   pauseReturnScreen = UI_SCREEN_GAME_COPY;   break;
+      case UI_GAME_MEMORY: pauseReturnScreen = UI_SCREEN_GAME_MEMORY; break;
+      case UI_GAME_SPEED:  pauseReturnScreen = UI_SCREEN_GAME_SPEED;  break;
+      default: return;
+    }
+    currentScreen = UI_SCREEN_GAME_PAUSE;
+    markDirty();
+    return;
+  }
+
+  if (audioResourceBusy()) { showActionToast("AUDIO BUSY"); return; }
+  ui_backend_gameStart(uiGameId);
+  switch (uiGameId) {
+    case UI_GAME_COPY:   currentScreen = UI_SCREEN_GAME_COPY;   break;
+    case UI_GAME_MEMORY: currentScreen = UI_SCREEN_GAME_MEMORY; break;
+    case UI_GAME_SPEED:  currentScreen = UI_SCREEN_GAME_SPEED;  break;
+    default: break;
+  }
+  markDirty();
+}
+
 // ============================================================================
 // CW KEYER SUBMENU: TUNE
 // ============================================================================
@@ -562,7 +812,8 @@ static unsigned long tuneStartMs = 0;
 // action is about to start.
 static bool audioResourceBusy() {
   return diagAudioPlaying || tuneActive || ui_backend_isMemoryPlaying() ||
-         ui_backend_isTrainingSessionActive() || ui_backend_isFarnsworthPlaying();
+         ui_backend_isTrainingSessionActive() || ui_backend_isFarnsworthPlaying() ||
+         ui_backend_isGameSessionActive();
 }
 
 bool ui_state_getTuneActive() { return tuneActive; }
@@ -633,6 +884,7 @@ static void pushInfo(uint8_t infoId, const char *rowLabel) {
 }
 
 static void pushDiagScreen(uint8_t diagId, const char *rowLabel) {
+  currentContentDomain = DOMAIN_DIAG;
   switch (diagId) {
     case DIAG_INPUT:
       diagInputDetentTotal = 0; diagInputSelectCount = 0; diagInputBackCount = 0;
@@ -664,6 +916,17 @@ static void pushDiagScreen(uint8_t diagId, const char *rowLabel) {
       currentScreen = UI_SCREEN_DIAG_LIVE;
       break;
   }
+  markDirty();
+}
+
+static void pushStatsScreen(uint8_t statsId, const char *rowLabel) {
+  if (statsId == STATS_NONE) return;
+  currentContentDomain = DOMAIN_STATS;
+  currentInfoId = statsId;
+  setInfoTitleFrom(rowLabel);
+  diagLivePage = 0;
+  refreshDiagLiveContent(lastEventNow);
+  currentScreen = UI_SCREEN_DIAG_LIVE;
   markDirty();
 }
 
@@ -715,6 +978,11 @@ static void handleList(const UiEvent &ev) {
         pushList(n.children, n.childCount, n.label);
       } else if (n.type == NODE_VALUE && n.paramId != PARAM_NONE) {
         pushEditValue(n.paramId);
+      } else if (n.type == NODE_VOLUME) {
+        volumeScreenEnterMs = lastEventNow;
+        volumeEntrySnapshot = ui_backend_getVolume();
+        currentScreen = UI_SCREEN_VOLUME;
+        markDirty();
       } else if (n.type == NODE_TOGGLE && n.paramId != PARAM_NONE) {
         pushEditToggle(n.paramId);
       } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
@@ -731,6 +999,22 @@ static void handleList(const UiEvent &ev) {
         pushTrainDrill(n.paramId, n.label);
       } else if (n.type == NODE_TRAIN_FARNSWORTH) {
         pushTrainFarnsworth(n.label);
+      } else if (n.type == NODE_STATS && n.paramId != STATS_NONE) {
+        pushStatsScreen(n.paramId, n.label);
+      } else if (n.type == NODE_GAME_START && n.paramId != UI_GAME_NONE) {
+        pushGameStart(n.paramId);
+      } else if (n.type == NODE_GAME_INFO && n.paramId != INFO_NONE) {
+        currentInfoId = n.paramId;
+        buildGameInfoContent(n.paramId, n.label);
+        currentScreen = UI_SCREEN_INFO;
+        markDirty();
+      } else if (n.type == NODE_PROFILE_LOAD && n.paramId != UI_PROFILE_NONE) {
+        ui_backend_profileLoad(n.paramId);
+        showActionToast("PROFILE LOADED");
+        markDirty();
+      } else if (n.type == NODE_PROFILE_SAVE && n.paramId != UI_PROFILE_NONE) {
+        pendingProfileId = n.paramId;
+        pushDialog(ACTION_PROFILE_SAVE, n.label);
       } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
         // Immediate, non-destructive: play now, stay on this list, toast.
         uint8_t slot = (uint8_t)(n.paramId - 1);
@@ -843,7 +1127,8 @@ static void handleDiagDisplay(const UiEvent &ev) {
       break;
     case UI_EV_BACK:
       diagDisplayContrastAdjust = false;
-      popList();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
       break;
     default: break;
   }
@@ -883,7 +1168,8 @@ static void handleDiagAudio(const UiEvent &ev) {
       break;
     case UI_EV_BACK:
       if (diagAudioPlaying) { ui_backend_diagToneStop(); diagAudioPlaying = false; }
-      popList();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
       break;
     default: break;
   }
@@ -899,7 +1185,7 @@ static void handleDiagGpio(const UiEvent &ev) {
       markDirty();
       break;
     }
-    case UI_EV_BACK: popList(); break;
+    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
     default: break;
   }
 }
@@ -915,14 +1201,14 @@ static void handleDiagLive(const UiEvent &ev) {
         markDirty();
       }
       break;
-    case UI_EV_BACK: popList(); break;
+    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
     default: break;
   }
 }
 
 // --- Live Monitor: correct handler (replaces the placeholder stub above) -----
 static void handleLiveMonitorReal(const UiEvent &ev) {
-  if (ev.type == UI_EV_BACK) popList();
+  if (ev.type == UI_EV_BACK) { currentScreen = UI_SCREEN_LIST; markDirty(); }
 }
 
 // --- Tune ---------------------------------------------------------------------
@@ -942,16 +1228,51 @@ static void handleTune(const UiEvent &ev) {
       break;
     case UI_EV_BACK:
       if (tuneActive) { ui_backend_diagToneStop(); tuneActive = false; }
-      popList();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
       break;
     default: break;   // rotate is a no-op on this screen
   }
 }
 
+static void handleVolume(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int v = (int)ui_backend_getVolume() + ev.detents * VOLUME_STEP;
+      if (v < VOLUME_MIN) v = VOLUME_MIN;
+      if (v > VOLUME_MAX) v = VOLUME_MAX;
+      ui_backend_setVolume((uint8_t)v);   // live preview, same as WPM/Tone
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+      // Commit: keep whatever value is currently live (already applied).
+      ui_backend_diagToneStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      // Cancel: restore the value from before this screen was entered.
+      ui_backend_setVolume(volumeEntrySnapshot);
+      ui_backend_diagToneStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+uint8_t ui_state_getVolumeValue() { return ui_backend_getVolume(); }
+
+bool ui_state_getVolumePreviewOn() {
+  unsigned long elapsed = (lastEventNow - volumeScreenEnterMs) % UI_VOLUME_PREVIEW_PERIOD_MS;
+  return elapsed < UI_VOLUME_PREVIEW_ON_MS;
+}
+
 static void handleTrainDrill(const UiEvent &ev) {
   switch (ev.type) {
     case UI_EV_SELECT: ui_backend_trainConfirmPressed(); markDirty(); break;
-    case UI_EV_BACK:   ui_backend_trainStopSession(); popList(); break;
+    case UI_EV_BACK:   ui_backend_trainStopSession(); currentScreen = UI_SCREEN_LIST; markDirty(); break;
     default: break;   // rotate unused during a drill
   }
 }
@@ -980,7 +1301,8 @@ static void handleTrainFarnsworth(const UiEvent &ev) {
       break;
     case UI_EV_BACK:
       if (ui_backend_isFarnsworthPlaying()) ui_backend_farnsworthTogglePlay();
-      popList();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
       break;
     default: break;
   }
@@ -991,6 +1313,89 @@ static void handleTrainExamResult(const UiEvent &ev) {
     ui_backend_trainClearExamResult();
     currentScreen = (stackTop >= 0) ? UI_SCREEN_LIST : UI_SCREEN_MENU;
     markDirty();
+  }
+}
+
+static void handleGameCopy(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_SELECT:
+      if (ui_backend_gameCopyPhase() == COPY_OVER) ui_backend_gameConfirmPressed();
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      ui_backend_gameStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+static void handleGameMemory(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_SELECT:
+      if (ui_backend_gameMemoryPhase() == MEM_OVER) ui_backend_gameConfirmPressed();
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      ui_backend_gameStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+static void handleGameSpeed(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_SELECT:
+      if (ui_backend_gameSpeedPhase() == SPD_OVER) ui_backend_gameConfirmPressed();
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      ui_backend_gameStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+static void handleGamePause(const UiEvent &ev) {
+  static uint8_t gamePauseFocusIdx = 0;
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int idx = (int)gamePauseFocusIdx + ev.detents;
+      if (idx < 0) idx = 0;
+      if (idx > 2) idx = 2;
+      gamePauseFocusIdx = (uint8_t)idx;
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+      if (gamePauseFocusIdx == 0) {
+        ui_backend_gameTogglePause();
+        currentScreen = pauseReturnScreen;
+      } else if (gamePauseFocusIdx == 1) {
+        ui_backend_gameRestart();
+        currentScreen = pauseReturnScreen;
+      } else {
+        ui_backend_gameStop();
+        currentScreen = UI_SCREEN_LIST;
+      }
+      gamePauseFocusIdx = 0;
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      // Short Back from the pause menu resumes - mirrors "Back cancels,
+      // doesn't commit" everywhere else in the UI (the pause menu itself
+      // is the thing being "backed out of").
+      ui_backend_gameTogglePause();
+      currentScreen = pauseReturnScreen;
+      gamePauseFocusIdx = 0;
+      markDirty();
+      break;
+    default: break;
   }
 }
 
@@ -1020,9 +1425,21 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
       ui_backend_diagToneStop();
       tuneActive = false;
     }
+    if (currentScreen == UI_SCREEN_VOLUME) {
+      ui_backend_setVolume(volumeEntrySnapshot);
+      ui_backend_diagToneStop();
+    }
     if (currentScreen == UI_SCREEN_TRAIN_DRILL) ui_backend_trainStopSession();
     if (currentScreen == UI_SCREEN_TRAIN_FARNSWORTH && ui_backend_isFarnsworthPlaying()) {
       ui_backend_farnsworthTogglePlay();
+    }
+    if ((currentScreen == UI_SCREEN_GAME_COPY || currentScreen == UI_SCREEN_GAME_MEMORY ||
+         currentScreen == UI_SCREEN_GAME_SPEED)) {
+      pauseReturnScreen = currentScreen;
+      ui_backend_gameTogglePause();
+      currentScreen = UI_SCREEN_GAME_PAUSE;
+      markDirty();
+      return;   // do not fall through to goHome() below - pausing, not quitting
     }
     ui_backend_stopMemory();   // long-Back is a "return to safe state" panic gesture
     if (currentScreen != UI_SCREEN_HOME) goHome();
@@ -1047,12 +1464,18 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_TRAIN_DRILL:       handleTrainDrill(ev);       break;
     case UI_SCREEN_TRAIN_FARNSWORTH:  handleTrainFarnsworth(ev);  break;
     case UI_SCREEN_TRAIN_EXAM_RESULT: handleTrainExamResult(ev);  break;
+    case UI_SCREEN_GAME_COPY:         handleGameCopy(ev);         break;
+    case UI_SCREEN_GAME_MEMORY:       handleGameMemory(ev);       break;
+    case UI_SCREEN_GAME_SPEED:        handleGameSpeed(ev);        break;
+    case UI_SCREEN_GAME_PAUSE:        handleGamePause(ev);        break;
+    case UI_SCREEN_VOLUME:            handleVolume(ev);           break;
     default: break;
   }
 }
 
 void ui_state_service(unsigned long now) {
   lastEventNow = now;   // keep fresh for getters like ui_state_getTuneRemainingMs
+  static unsigned long gameAnimLastMs = 0;
 
   // Main menu icon animation - restarts at frame 0 on entering the
   // carousel or on rotating to a new item; otherwise advances on its own
@@ -1121,6 +1544,20 @@ void ui_state_service(unsigned long now) {
     }
   }
 
+  if (currentScreen == UI_SCREEN_VOLUME) {
+    static bool lastPreviewOn = false;
+    bool previewOn = ui_state_getVolumePreviewOn();
+    if (previewOn != lastPreviewOn) {
+      lastPreviewOn = previewOn;
+      if (previewOn) {
+        if (!audioResourceBusy()) ui_backend_diagToneStart(ui_backend_getToneHz());
+      } else {
+        ui_backend_diagToneStop();
+      }
+      markDirty();
+    }
+  }
+
   if (currentScreen == UI_SCREEN_DIAG_DISPLAY && diagDisplayPage == DIAG_DISPLAY_ICON_PAGE) {
     if (now - diagIconCycleLastMs >= UI_DIAG_ICON_CYCLE_MS) {
       diagIconCycleLastMs = now;
@@ -1148,6 +1585,12 @@ void ui_state_service(unsigned long now) {
       lastFarnsworthPlayingSeen = nowPlaying;
       markDirty();
     }
+  }
+  if ((currentScreen == UI_SCREEN_GAME_COPY || currentScreen == UI_SCREEN_GAME_MEMORY ||
+       currentScreen == UI_SCREEN_GAME_SPEED || currentScreen == UI_SCREEN_GAME_PAUSE) &&
+      (now - gameAnimLastMs >= UI_GAME_ANIM_MS)) {
+    gameAnimLastMs = now;
+    markDirty();
   }
 }
 
@@ -1208,3 +1651,27 @@ uint8_t ui_state_getExamTargetLength() { return ui_backend_trainGetExamTargetLen
 
 int  ui_state_getFarnsworthWpm()     { return ui_backend_farnsworthGetWpm(); }
 bool ui_state_getFarnsworthPlaying() { return ui_backend_isFarnsworthPlaying(); }
+
+uint8_t  ui_state_gameCopyPhase()           { return ui_backend_gameCopyPhase(); }
+char     ui_state_gameCopyFallingChar()     { return ui_backend_gameCopyFallingChar(); }
+uint8_t  ui_state_gameCopyFallProgressPct() { return ui_backend_gameCopyFallProgressPct(); }
+uint16_t ui_state_gameCopyScore()           { return ui_backend_gameCopyScore(); }
+uint8_t  ui_state_gameCopyLives()           { return ui_backend_gameCopyLives(); }
+uint16_t ui_state_gameCopyHighScore()       { return ui_backend_gameCopyHighScore(); }
+
+uint8_t ui_state_gameMemoryPhase()          { return ui_backend_gameMemoryPhase(); }
+uint8_t ui_state_gameMemoryChainLength()    { return ui_backend_gameMemoryChainLength(); }
+uint8_t ui_state_gameMemoryInputProgress()  { return ui_backend_gameMemoryInputProgress(); }
+uint8_t ui_state_gameMemoryHighScore()      { return ui_backend_gameMemoryHighScore(); }
+
+uint8_t       ui_state_gameSpeedPhase()           { return ui_backend_gameSpeedPhase(); }
+uint16_t      ui_state_gameSpeedCombo()           { return ui_backend_gameSpeedCombo(); }
+uint8_t       ui_state_gameSpeedLives()           { return ui_backend_gameSpeedLives(); }
+unsigned long ui_state_gameSpeedBeatRemainingMs() { return ui_backend_gameSpeedBeatRemainingMs(); }
+unsigned long ui_state_gameSpeedBeatTotalMs()     { return ui_backend_gameSpeedBeatTotalMs(); }
+bool          ui_state_gameSpeedWasLastCorrect()  { return ui_backend_gameSpeedWasLastCorrect(); }
+char          ui_state_gameSpeedLastChar()        { return ui_backend_gameSpeedLastChar(); }
+uint16_t      ui_state_gameSpeedHighScore()       { return ui_backend_gameSpeedHighScore(); }
+bool          ui_state_isGamePaused()             { return ui_backend_isGamePaused(); }
+uint8_t       ui_state_getPauseReturnScreen()     { return (uint8_t)pauseReturnScreen; }
+uint8_t       ui_state_getGamePauseFocus()        { return gamePauseFocusIdx; }

@@ -12,6 +12,7 @@
  * Copyright (C) 2026 Coder Chunk
  * ============================================================================
  */
+#include "config.h"
 #include "ui_screens.h"
 #include "ui_config.h"
 #include "ui_layout.h"
@@ -23,6 +24,7 @@
 #include "ui_splash_logo.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h> 
 
 // Mirrors core_trainer.h's DrillPhase ordering (DRILL_IDLE=0 ..
 // DRILL_EXAM_DONE=4) - kept as plain uint8_t since this file doesn't
@@ -30,6 +32,25 @@
 static const uint8_t DRILL_PHASE_PLAYING   = 1;
 static const uint8_t DRILL_PHASE_LISTENING = 2;
 static const uint8_t DRILL_PHASE_FEEDBACK  = 3;
+
+// Local mirrors of core_games.h's phase enums - same rule/reasoning as
+// DRILL_PHASE_* above. Keep in sync with core_games.h's enum ordering.
+static const uint8_t COPY_IDLE    = 0;
+static const uint8_t COPY_FALLING = 1;
+static const uint8_t COPY_HIT     = 2;
+static const uint8_t COPY_MISS    = 3;
+static const uint8_t COPY_OVER    = 4;
+
+static const uint8_t MEM_IDLE     = 0;
+static const uint8_t MEM_PLAYBACK = 1;
+static const uint8_t MEM_INPUT    = 2;
+static const uint8_t MEM_ROUND_OK = 3;
+static const uint8_t MEM_OVER     = 4;
+
+static const uint8_t SPD_IDLE     = 0;
+static const uint8_t SPD_LISTEN   = 1;
+static const uint8_t SPD_FEEDBACK = 2;
+static const uint8_t SPD_OVER     = 3;
 
 static void drawBarRule(U8G2 &u8g2) {
   u8g2.drawHLine(UI_CONTENT_X0, UI_HEADER_RULE_Y, UI_CONTENT_WIDTH);
@@ -43,11 +64,40 @@ static void drawCenteredBarTitle(U8G2 &u8g2, const char *text) {
   drawBarRule(u8g2);
 }
 
-// A small filled dot in the content area's top-right corner, signaling
-// "this screen is currently live" (tone playing, Tune on, a value being
-// actively adjusted) without needing instructional text underneath it.
+static void drawLivesDots(U8G2 &u8g2, uint8_t lives, uint8_t maxLives) {
+  int x = UI_CONTENT_X1 - 6;
+  for (uint8_t i = 0; i < maxLives; i++) {
+    if (i < lives) u8g2.drawDisc(x, UI_HEADER_RULE_Y + 6, 2);
+    else            u8g2.drawCircle(x, UI_HEADER_RULE_Y + 6, 2);
+    x -= 8;
+  }
+}
+
+static void drawDashedHLine(U8G2 &u8g2, int x0, int y, int width) {
+  for (int x = x0; x < x0 + width; x += 6) u8g2.drawHLine(x, y, 3);
+}
+
 static void drawActiveDot(U8G2 &u8g2) {
   u8g2.drawDisc(UI_CONTENT_X1 - 6, UI_HEADER_RULE_Y + 6, 3);
+}
+
+// First-entry help overlay - dismissed by any input (handled in
+// ui_state.cpp's handleGame* functions). Semi-opaque-looking via a
+// filled box + inverted text, consistent with this project's existing
+// toast/overlay visual language (BLE overlay, action toast).
+static void drawGameHelpOverlay(U8G2 &u8g2, const char *line1, const char *line2) {
+  u8g2.drawBox(UI_CONTENT_X0, UI_CONTENT_Y0, UI_CONTENT_WIDTH, UI_CONTENT_HEIGHT);
+  u8g2.setDrawColor(0);
+  u8g2.setFont(UI_FONT_BOLD);
+  int w1 = u8g2.getStrWidth(line1);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w1) / 2, UI_HEADER_RULE_Y + 22, line1);
+  u8g2.setFont(UI_FONT_SMALL);
+  int w2 = u8g2.getStrWidth(line2);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w2) / 2, UI_HEADER_RULE_Y + 36, line2);
+  const char *hint = "Any input to start";
+  int hw = u8g2.getStrWidth(hint);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 4, hint);
+  u8g2.setDrawColor(1);
 }
 
 // Vertical position scrollbar for multi-page screens
@@ -213,7 +263,10 @@ void ui_screens_drawList(U8G2 &u8g2) {
     const char *tag = nullptr;
 
     if (n.type == NODE_SUBMENU || n.type == NODE_DIAG ||
-        n.type == NODE_MONITOR || n.type == NODE_TUNE) {
+        n.type == NODE_MONITOR || n.type == NODE_TUNE ||
+        n.type == NODE_TRAIN_DRILL || n.type == NODE_TRAIN_FARNSWORTH ||
+        n.type == NODE_STATS || n.type == NODE_GAME_START || n.type == NODE_GAME_INFO ||
+        n.type == NODE_VOLUME || n.type == NODE_PROFILE_LOAD || n.type == NODE_PROFILE_SAVE) {
       tag = ">";
     } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
       tag = ">";
@@ -746,4 +799,225 @@ void ui_screens_drawTrainExamResult(U8G2 &u8g2) {
            (unsigned)ui_state_getExamCorrectCount(), (unsigned)ui_state_getExamTargetLength());
   int lw = u8g2.getStrWidth(line);
   u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - lw) / 2, UI_CONTENT_Y1 - 2, line);
+}
+
+void ui_screens_drawGameCopy(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "COPY CHALLENGE");
+
+  uint8_t phase = ui_state_gameCopyPhase();
+  char line[24];
+
+  u8g2.setFont(UI_FONT_SMALL);
+  snprintf(line, sizeof(line), "SCORE %u", (unsigned)ui_state_gameCopyScore());
+  u8g2.drawStr(UI_CONTENT_X0, UI_HEADER_BASELINE, line);
+  drawLivesDots(u8g2, ui_state_gameCopyLives(), GAME_COPY_START_LIVES);
+
+  const int laneTop = UI_HEADER_RULE_Y + 6;
+  const int laneBottom = UI_CONTENT_Y1 - 14;
+  const int laneHeight = laneBottom - laneTop;
+
+  if (phase == COPY_FALLING) {
+    uint8_t pct = ui_state_gameCopyFallProgressPct();
+    int y = laneTop + (int)((laneHeight * pct) / 100);
+    u8g2.drawDisc(UI_CONTENT_X0 + (int)UI_CONTENT_WIDTH / 2, y, 4);
+    u8g2.drawCircle(UI_CONTENT_X0 + (int)UI_CONTENT_WIDTH / 2, y, 7);
+    drawDashedHLine(u8g2, UI_CONTENT_X0, laneBottom, (int)UI_CONTENT_WIDTH);
+  } else if (phase == COPY_HIT || phase == COPY_MISS) {
+    int cx = UI_CONTENT_X0 + (int)UI_CONTENT_WIDTH / 2;
+    int cy = laneTop + laneHeight / 2;
+    if (phase == COPY_HIT) {
+      for (int a = 0; a < 8; a++) {
+        float rad = a * 0.785f;
+        int dx = (int)(10 * cos(rad));
+        int dy = (int)(10 * sin(rad));
+        u8g2.drawLine(cx, cy, cx + dx, cy + dy);
+      }
+    } else {
+      u8g2.drawLine(cx - 8, cy - 8, cx + 8, cy + 8);
+      u8g2.drawLine(cx - 8, cy + 8, cx + 8, cy - 8);
+    }
+    u8g2.setFont(UI_FONT_HERO);
+    char rev[2] = { ui_state_gameCopyFallingChar(), '\0' };
+    int rw = u8g2.getStrWidth(rev);
+    u8g2.drawStr(cx - rw / 2, cy + 26, rev);
+  } else if (phase == COPY_OVER) {
+    u8g2.setFont(UI_FONT_BOLD);
+    const char *msg = "GAME OVER";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 22, msg);
+    u8g2.setFont(UI_FONT_SMALL);
+    snprintf(line, sizeof(line), "Score %u  Best %u",
+             (unsigned)ui_state_gameCopyScore(), (unsigned)ui_state_gameCopyHighScore());
+    int w2 = u8g2.getStrWidth(line);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w2) / 2, UI_HEADER_RULE_Y + 38, line);
+    const char *hint = "Confirm=Retry";
+    int hw = u8g2.getStrWidth(hint);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 2, hint);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Memory Challenge - Simon-style tile strip, never shows chain as text.
+// Long chains show a trailing window of the most recent tiles.
+// ----------------------------------------------------------------------------
+void ui_screens_drawGameMemory(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "MEMORY CHALLENGE");
+
+  uint8_t phase = ui_state_gameMemoryPhase();
+  char line[24];
+
+  if (phase == MEM_PLAYBACK) {
+    u8g2.setFont(UI_FONT_BOLD);
+    const char *msg = "LISTEN...";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 20, msg);
+    drawActiveDot(u8g2);
+  } else if (phase == MEM_INPUT || phase == MEM_ROUND_OK) {
+    const uint8_t maxTiles = 9;
+    uint8_t chainLen = ui_state_gameMemoryChainLength();
+    uint8_t windowStart = (chainLen > maxTiles) ? (uint8_t)(chainLen - maxTiles) : 0;
+    uint8_t visibleCount = (uint8_t)(chainLen - windowStart);
+    uint8_t inputPos = ui_state_gameMemoryInputProgress();
+
+    const int tileW = 10, tileGap = 3;
+    int totalW = visibleCount * tileW + (visibleCount - 1) * tileGap;
+    int startX = UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - totalW) / 2;
+    int tileY = UI_HEADER_RULE_Y + 16;
+
+    for (uint8_t i = 0; i < visibleCount; i++) {
+      uint8_t chainIdx = (uint8_t)(windowStart + i);
+      int x = startX + i * (tileW + tileGap);
+      if (chainIdx < inputPos) u8g2.drawBox(x, tileY, tileW, tileW);
+      else if (chainIdx == inputPos && phase == MEM_INPUT) u8g2.drawFrame(x, tileY, tileW, tileW);
+      else u8g2.drawFrame(x, tileY, tileW, tileW);
+    }
+  }
+
+  if (phase == MEM_OVER) {
+    u8g2.setFont(UI_FONT_BOLD);
+    const char *msg = "GAME OVER";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 22, msg);
+    u8g2.setFont(UI_FONT_SMALL);
+    snprintf(line, sizeof(line), "Chain %u  Best %u",
+             (unsigned)ui_state_gameMemoryChainLength() - 1, (unsigned)ui_state_gameMemoryHighScore());
+    int w2 = u8g2.getStrWidth(line);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w2) / 2, UI_HEADER_RULE_Y + 38, line);
+    const char *hint = "Confirm=Retry";
+    int hw = u8g2.getStrWidth(hint);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 2, hint);
+  } else {
+    u8g2.setFont(UI_FONT_SMALL);
+    snprintf(line, sizeof(line), "Chain: %u", (unsigned)ui_state_gameMemoryChainLength());
+    int w = u8g2.getStrWidth(line);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_CONTENT_Y1 - 2, line);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Speed Challenge - Overdrive: combo counter + depleting tempo bar.
+// ----------------------------------------------------------------------------
+void ui_screens_drawGameSpeed(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "SPEED CHALLENGE");
+
+  uint8_t phase = ui_state_gameSpeedPhase();
+  char line[24];
+  drawLivesDots(u8g2, ui_state_gameSpeedLives(), GAME_SPEED_START_LIVES);
+
+  char combo[8];
+  snprintf(combo, sizeof(combo), "%u", (unsigned)ui_state_gameSpeedCombo());
+  u8g2.setFont(UI_FONT_HERO);
+  int cw = u8g2.getStrWidth(combo);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - cw) / 2, UI_HEADER_RULE_Y + 30, combo);
+
+  if (phase == SPD_LISTEN) {
+    unsigned long remain = ui_state_gameSpeedBeatRemainingMs();
+    unsigned long total = ui_state_gameSpeedBeatTotalMs();
+    int barW = (int)UI_CONTENT_WIDTH - 16;
+    int barX = UI_CONTENT_X0 + 8;
+    int barY = UI_CONTENT_Y1 - 12;
+    u8g2.drawFrame(barX, barY, barW, 6);
+    int fillW = (total > 0) ? (int)((barW - 2) * remain / total) : 0;
+    if (fillW > 0) u8g2.drawBox(barX + 1, barY + 1, fillW, 4);
+  } else if (phase == SPD_FEEDBACK) {
+    u8g2.setFont(UI_FONT_BOLD);
+    const char *verdict = ui_state_gameSpeedWasLastCorrect() ? "HIT" : "MISS";
+    int vw = u8g2.getStrWidth(verdict);
+    char rev[2] = { ui_state_gameSpeedLastChar(), '\0' };
+    int rw = u8g2.getStrWidth(rev);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - vw) / 2, UI_CONTENT_Y1 - 12, verdict);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - rw) / 2, UI_CONTENT_Y1 - 2, rev);
+  } else if (phase == SPD_OVER) {
+    u8g2.setFont(UI_FONT_BOLD);
+    const char *msg = "GAME OVER";
+    int w = u8g2.getStrWidth(msg);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_CONTENT_Y1 - 22, msg);
+    u8g2.setFont(UI_FONT_SMALL);
+    snprintf(line, sizeof(line), "Best combo %u", (unsigned)ui_state_gameSpeedHighScore());
+    int w2 = u8g2.getStrWidth(line);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w2) / 2, UI_CONTENT_Y1 - 12, line);
+    const char *hint = "Confirm=Retry";
+    int hw = u8g2.getStrWidth(hint);
+    u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 2, hint);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Game Pause menu - Resume / Restart / Quit, filled-vs-outline focus
+// grammar shared with every other selection surface in the UI.
+// ----------------------------------------------------------------------------
+void ui_screens_drawGamePause(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "PAUSED");
+
+  static const char *labels[3] = { "Resume", "Restart", "Quit" };
+  const int rowH = 16, rowGap = 4;
+  const int rowW = (int)UI_CONTENT_WIDTH - 16;
+  const int rowX = UI_CONTENT_X0 + 8;
+  int y = UI_HEADER_RULE_Y + 8;
+
+  // focusIdx lives inside handleGamePause() (ui_state.cpp) as a static -
+  // mirrored here via the rotate-driven redraw already triggered by
+  // markDirty() on every rotate event, so this screen just needs to ask
+  // "what's focused" - reuse the same list-selection convention: since
+  // there's no dedicated getter, infer focus from encoder feedback is
+  // avoided by exposing it directly.
+  uint8_t focus = ui_state_getGamePauseFocus();
+
+  u8g2.setFont(UI_FONT_BOLD);
+  for (uint8_t i = 0; i < 3; i++) {
+    bool selected = (i == focus);
+    if (selected) { u8g2.drawBox(rowX, y, rowW, rowH); u8g2.setDrawColor(0); }
+    else            u8g2.drawFrame(rowX, y, rowW, rowH);
+    int w = u8g2.getStrWidth(labels[i]);
+    u8g2.drawStr(rowX + (rowW - w) / 2, y + 13, labels[i]);
+    if (selected) u8g2.setDrawColor(1);
+    y += rowH + rowGap;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Volume - large percentage + a horizontal bar, with a periodic
+// reference beep (driven by ui_state's preview-on phase) so loudness is
+// judged by ear, not inferred from a number alone.
+// ----------------------------------------------------------------------------
+void ui_screens_drawVolume(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "VOLUME");
+
+  uint8_t value = ui_state_getVolumeValue();
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%u%%", (unsigned)value);
+  u8g2.setFont(UI_FONT_HERO);
+  int w = u8g2.getStrWidth(buf);
+  const int valueBaseline = UI_HEADER_RULE_Y + 26;
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, valueBaseline, buf);
+
+  const int barW = (int)UI_CONTENT_WIDTH - 24;
+  const int barH = 10;
+  const int barX = UI_CONTENT_X0 + 12;
+  const int barY = valueBaseline + 10;
+  u8g2.drawFrame(barX, barY, barW, barH);
+  int fillW = (int)(((int32_t)(barW - 2) * value) / 100);
+  if (fillW > 0) u8g2.drawBox(barX + 1, barY + 1, fillW, barH - 2);
+
+  if (ui_state_getVolumePreviewOn()) drawActiveDot(u8g2);
 }

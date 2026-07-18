@@ -18,6 +18,9 @@
 #include "core_decoder.h"
 #include "core_memory.h"
 #include "core_trainer.h"
+#include "core_games.h"
+#include "core_stats.h"
+#include "core_profiles.h"
 #include "display.h"
 #include "transport.h"
 #include "services.h"
@@ -32,6 +35,7 @@ void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresho
 #if FEATURE_SERIAL
   services_logKeyUp(type, durMs, thresholdMs, now);
 #endif
+  core_stats_notifyElementKeyed();
   core_decoder_addElement(type, now);
 }
 
@@ -39,12 +43,14 @@ void events_onCharacterComplete(char decodedChar, const char *pattern) {
 #if FEATURE_SERIAL
   services_logCharacterComplete(decodedChar, pattern);
 #endif
+  core_stats_notifyCharKeyed();
 }
 
 void events_onWordComplete(const char *word, unsigned long now) {
 #if FEATURE_SERIAL
   services_logWordComplete(word, now);
 #endif
+  core_stats_notifyWordKeyed();
 #if FEATURE_OLED
   display_appendWord(word);
 #endif
@@ -90,8 +96,12 @@ void setup() {
   core_decoder_init();
   core_memory_init();
   core_trainer_init();
+  core_games_init();
+  core_stats_init();
+  core_profiles_init();
 
   services_loadSettings();
+  core_stats_recordSessionStart();
 
 #if FEATURE_OLED
   display_init();
@@ -123,6 +133,8 @@ void loop() {
   core_decoder_service(now);
   core_memory_service(now);
   core_trainer_service(now);
+  core_games_service(now);
+  core_stats_service(now);
   services_serviceSettings(now);
 
 #if FEATURE_BLE

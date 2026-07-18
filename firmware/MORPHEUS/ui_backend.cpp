@@ -15,6 +15,9 @@
 #include "core_decoder.h"
 #include "core_memory.h"
 #include "core_trainer.h"
+#include "core_games.h"
+#include "core_stats.h"
+#include "core_profiles.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -205,7 +208,7 @@ void ui_backend_setModeIsPaddle(bool paddle) {
 
 void ui_backend_bondReset()             { transport_resetBond(); }
 void ui_backend_factoryResetSettings()  { services_factoryResetSettings(); }
-void ui_backend_restartDevice()         { ESP.restart(); }
+void ui_backend_restartDevice()         { core_stats_forceFlush(); ESP.restart(); }
 
 // ----------------------------------------------------------------------------
 // CW Keyer submenu additions
@@ -271,3 +274,108 @@ void ui_backend_farnsworthSetWpm(int wpm)     { core_trainer_farnsworthSetEffect
 int  ui_backend_farnsworthGetWpm()            { return core_trainer_farnsworthGetEffectiveWpm(); }
 bool ui_backend_farnsworthTogglePlay()        { return core_trainer_farnsworthTogglePlay(); }
 bool ui_backend_isFarnsworthPlaying()         { return core_trainer_farnsworthIsPlaying(); }
+
+// Statistics
+uint32_t ui_backend_statsSessionChars()          { return core_stats_session_getCharsKeyed(); }
+uint32_t ui_backend_statsSessionWords()          { return core_stats_session_getWordsKeyed(); }
+uint32_t ui_backend_statsSessionElements()       { return core_stats_session_getElementsKeyed(); }
+uint32_t ui_backend_statsSessionTrainAttempts()  { return core_stats_session_getTrainingAttempts(); }
+uint32_t ui_backend_statsSessionTrainCorrect()   { return core_stats_session_getTrainingCorrect(); }
+unsigned long ui_backend_statsSessionUptimeMs()  { return core_stats_session_getUptimeMs(); }
+
+uint32_t ui_backend_statsLifetimeChars()         { return core_stats_lifetime_getCharsKeyed(); }
+uint32_t ui_backend_statsLifetimeWords()         { return core_stats_lifetime_getWordsKeyed(); }
+uint32_t ui_backend_statsLifetimeElements()      { return core_stats_lifetime_getElementsKeyed(); }
+uint32_t ui_backend_statsLifetimeUptimeSec()     { return core_stats_lifetime_getUptimeSec(); }
+uint32_t ui_backend_statsLifetimeTrainAttempts() { return core_stats_lifetime_getTrainingAttempts(); }
+uint32_t ui_backend_statsLifetimeTrainCorrect()  { return core_stats_lifetime_getTrainingCorrect(); }
+uint32_t ui_backend_statsModeAttempts(uint8_t mode) { return core_stats_lifetime_getModeAttempts((TrainMode)mode); }
+uint32_t ui_backend_statsModeCorrect(uint8_t mode)  { return core_stats_lifetime_getModeCorrect((TrainMode)mode); }
+uint32_t ui_backend_statsExamsTaken()            { return core_stats_lifetime_getExamsTaken(); }
+uint32_t ui_backend_statsExamsPassed()           { return core_stats_lifetime_getExamsPassed(); }
+uint8_t  ui_backend_statsBestExamScore()         { return core_stats_lifetime_getBestExamScore(); }
+int      ui_backend_statsPeakAdaptiveWpm()       { return core_stats_lifetime_getPeakAdaptiveWpm(); }
+
+uint8_t  ui_backend_statsHistoryCount()            { return core_stats_history_getCount(); }
+uint16_t ui_backend_statsHistoryEntry(uint8_t idx) { return core_stats_history_getEntry(idx); }
+
+// Games
+bool ui_backend_isGameSessionActive() { return core_games_isSessionActive(); }
+
+void ui_backend_gameStart(uint8_t uiGameId) {
+  GameId g;
+  switch (uiGameId) {
+    case 1: g = GAME_COPY;   break;
+    case 2: g = GAME_MEMORY; break;
+    case 3: g = GAME_SPEED;  break;
+    default: return;
+  }
+  core_games_start(g);
+}
+void ui_backend_gameStop()            { core_games_stop(); }
+void ui_backend_gameConfirmPressed()  { core_games_confirmPressed(); }
+
+uint8_t  ui_backend_gameCopyPhase()             { return (uint8_t)core_games_copy_getPhase(); }
+char     ui_backend_gameCopyFallingChar()       { return core_games_copy_getFallingChar(); }
+uint8_t  ui_backend_gameCopyFallProgressPct()   { return core_games_copy_getFallProgressPct(millis()); }
+uint16_t ui_backend_gameCopyScore()             { return core_games_copy_getScore(); }
+uint8_t  ui_backend_gameCopyLives()             { return core_games_copy_getLives(); }
+uint16_t ui_backend_gameCopyHighScore()         { return core_games_copy_getHighScore(); }
+
+uint8_t  ui_backend_gameMemoryPhase()           { return (uint8_t)core_games_memory_getPhase(); }
+uint8_t  ui_backend_gameMemoryChainLength()     { return core_games_memory_getChainLength(); }
+uint8_t  ui_backend_gameMemoryInputProgress()   { return core_games_memory_getInputProgress(); }
+uint8_t  ui_backend_gameMemoryHighScore()       { return core_games_memory_getHighScore(); }
+
+uint8_t       ui_backend_gameSpeedPhase()           { return (uint8_t)core_games_speed_getPhase(); }
+uint16_t      ui_backend_gameSpeedCombo()           { return core_games_speed_getCombo(); }
+uint8_t       ui_backend_gameSpeedLives()           { return core_games_speed_getLives(); }
+unsigned long ui_backend_gameSpeedBeatRemainingMs() { return core_games_speed_getBeatRemainingMs(millis()); }
+unsigned long ui_backend_gameSpeedBeatTotalMs()     { return core_games_speed_getBeatTotalMs(); }
+bool          ui_backend_gameSpeedWasLastCorrect()  { return core_games_speed_wasLastCorrect(); }
+char          ui_backend_gameSpeedLastChar()        { return core_games_speed_getLastChar(); }
+uint16_t      ui_backend_gameSpeedHighScore()       { return core_games_speed_getHighScore(); }
+bool          ui_backend_isGamePaused()         { return core_games_isPaused(); }
+void          ui_backend_gameTogglePause()      { core_games_togglePause(); }
+void          ui_backend_gameRestart()          { core_games_restart(); }
+
+bool ui_backend_isGamePausedFor(uint8_t uiGameId) {
+  if (!core_games_isSessionActive() || !core_games_isPaused()) return false;
+  GameId active = core_games_getActiveGame();
+  switch (uiGameId) {
+    case 1: return active == GAME_COPY;
+    case 2: return active == GAME_MEMORY;
+    case 3: return active == GAME_SPEED;
+    default: return false;
+  }
+}
+
+uint8_t ui_backend_getVolume()              { return core_keyer_getVolume(); }
+void    ui_backend_setVolume(uint8_t v)     { core_keyer_setVolume(v); }
+bool    ui_backend_getSidetoneEnabled()     { return core_keyer_getSidetoneEnabled(); }
+void    ui_backend_setSidetoneEnabled(bool e) { core_keyer_setSidetoneEnabled(e); }
+
+// uiProfileId values match ui_menu.h's UiProfileId ordering
+// (UI_PROFILE_DEFAULT=1 .. UI_PROFILE_PRACTICE=4) - same documented
+// positional-mapping convention as ui_backend_trainStartSession().
+static ProfileId toCoreProfileId(uint8_t uiProfileId) {
+  switch (uiProfileId) {
+    case 1: return PROFILE_DEFAULT;
+    case 2: return PROFILE_PORTABLE;
+    case 3: return PROFILE_CONTEST;
+    case 4: return PROFILE_PRACTICE;
+    default: return PROFILE_DEFAULT;
+  }
+}
+
+void ui_backend_profileLoad(uint8_t uiProfileId) { core_profiles_load(toCoreProfileId(uiProfileId)); }
+void ui_backend_profileSave(uint8_t uiProfileId) { core_profiles_save(toCoreProfileId(uiProfileId)); }
+
+int      ui_backend_profileGetWpm(uint8_t uiProfileId)            { return core_profiles_getWpm(toCoreProfileId(uiProfileId)); }
+uint16_t ui_backend_profileGetToneHz(uint8_t uiProfileId)         { return core_profiles_getToneHz(toCoreProfileId(uiProfileId)); }
+bool     ui_backend_profileGetPaddleReversed(uint8_t uiProfileId) { return core_profiles_getPaddleReversed(toCoreProfileId(uiProfileId)); }
+const char *ui_backend_profileGetModeStr(uint8_t uiProfileId) {
+  return (core_profiles_getMode(toCoreProfileId(uiProfileId)) == MODE_STRAIGHT) ? "STR" : "PAD";
+}
+uint8_t  ui_backend_profileGetVolume(uint8_t uiProfileId)          { return core_profiles_getVolume(toCoreProfileId(uiProfileId)); }
+bool     ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId) { return core_profiles_getSidetoneEnabled(toCoreProfileId(uiProfileId)); }

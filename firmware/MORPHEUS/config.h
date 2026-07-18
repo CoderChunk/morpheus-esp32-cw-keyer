@@ -56,6 +56,13 @@ static const bool          DEFAULT_PADDLE_REVERSED   = false;
 static const uint16_t      SETTINGS_VERSION          = 4;   // bumped: +kochLevel
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
+// ----------------------------------------------------------------------------
+// Statistics module - own NVS versioning, separate from
+// SETTINGS_VERSION/operator settings (different persistence lifecycle).
+// ----------------------------------------------------------------------------
+static const uint16_t      STATS_VERSION          	 = 1;
+static const unsigned long STATS_SAVE_DEBOUNCE_MS 	 = 60000;   // 1 min - protects flash wear
+static const uint8_t       STATS_WPM_HISTORY_CAP  	 = 6;
 
 static const int DEFAULT_WPM = 18;
 
@@ -83,5 +90,16 @@ static const uint8_t       TRAIN_ADAPTIVE_STREAK    = 3;
 static const int           TRAIN_ADAPTIVE_STEP_UP   = 1;
 static const int           TRAIN_ADAPTIVE_STEP_DOWN = 2;
 static const int           DEFAULT_FARNSWORTH_WPM   = 10;
+
+// ----------------------------------------------------------------------------
+// Games module tunables - own NVS versioning, high scores survive
+// Factory Reset by design (same precedent as lifetime stats).
+// ----------------------------------------------------------------------------
+static const uint16_t      GAMES_VERSION           = 1;
+static const uint8_t       GAME_COPY_START_LIVES   = 3;
+static const uint8_t       GAME_SPEED_START_LIVES  = 3;
+static const unsigned long GAME_FEEDBACK_MS        = 500;
+static const unsigned long GAME_ROUND_OK_MS        = 700;
+static const uint8_t       GAME_MEMORY_MAX_CHAIN   = 20;
 
 #endif // MORPHEUS_CONFIG_H

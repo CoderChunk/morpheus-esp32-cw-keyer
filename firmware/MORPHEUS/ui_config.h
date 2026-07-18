@@ -81,4 +81,7 @@ static const unsigned long UI_TUNE_TIMEOUT_MS = 30000;
 // MSB-first convention.
 static const unsigned long UI_ICON_ANIM_FRAME_MS = 42;
 
+static const unsigned long UI_GAME_ANIM_MS = 40;   // animation tick cadence
+static const unsigned long UI_GAME_HELP_MS = 4000; // first-entry help overlay duration
+
 #endif // UI_CONFIG_H

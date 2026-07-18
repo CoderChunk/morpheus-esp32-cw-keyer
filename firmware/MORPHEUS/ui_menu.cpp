@@ -19,17 +19,20 @@
  */
 #include "ui_menu.h"
 
-#define N_SUB(lbl, tbl)  { lbl, NODE_SUBMENU, tbl, (uint8_t)(sizeof(tbl)/sizeof(UiMenuNode)), 0 }
-#define N_ROW(lbl, typ)  { lbl, typ, nullptr, 0, 0 }
-#define N_VAL(lbl, pid)  { lbl, NODE_VALUE, nullptr, 0, pid }
-#define N_TGL(lbl, pid)  { lbl, NODE_TOGGLE, nullptr, 0, pid }
-#define N_INF(lbl, iid)  { lbl, NODE_INFO, nullptr, 0, iid }
-#define N_DIAG(lbl, did) { lbl, NODE_DIAG, nullptr, 0, did }
-#define N_ACT(lbl, aid)  { lbl, NODE_ACTION, nullptr, 0, aid }
-#define N_MON(lbl)       { lbl, NODE_MONITOR, nullptr, 0, 0 }
-#define N_TUNE(lbl)      { lbl, NODE_TUNE, nullptr, 0, 0 }
-#define N_TRIG(lbl, s1)  { lbl, NODE_TRIGGER, nullptr, 0, s1 }   // s1 = 1-based slot
-#define N_TRAIN(lbl, did){ lbl, NODE_TRAIN_DRILL, nullptr, 0, did }
+#define N_SUB(lbl, tbl)   { lbl, NODE_SUBMENU, tbl, (uint8_t)(sizeof(tbl)/sizeof(UiMenuNode)), 0 }
+#define N_ROW(lbl, typ)   { lbl, typ, nullptr, 0, 0 }
+#define N_VAL(lbl, pid)   { lbl, NODE_VALUE, nullptr, 0, pid }
+#define N_TGL(lbl, pid)   { lbl, NODE_TOGGLE, nullptr, 0, pid }
+#define N_INF(lbl, iid)   { lbl, NODE_INFO, nullptr, 0, iid }
+#define N_DIAG(lbl, did)  { lbl, NODE_DIAG, nullptr, 0, did }
+#define N_ACT(lbl, aid)   { lbl, NODE_ACTION, nullptr, 0, aid }
+#define N_MON(lbl)        { lbl, NODE_MONITOR, nullptr, 0, 0 }
+#define N_TUNE(lbl)       { lbl, NODE_TUNE, nullptr, 0, 0 }
+#define N_TRIG(lbl, s1)   { lbl, NODE_TRIGGER, nullptr, 0, s1 }   // s1 = 1-based slot
+#define N_TRAIN(lbl, did) { lbl, NODE_TRAIN_DRILL, nullptr, 0, did }
+#define N_STATS(lbl, sid) { lbl, NODE_STATS, nullptr, 0, sid }
+#define N_GAME_START(lbl, gid) { lbl, NODE_GAME_START, nullptr, 0, gid }
+#define N_GAME_INFO(lbl, iid)  { lbl, NODE_GAME_INFO, nullptr, 0, iid }
 
 // --- Memory Msgs: 5 fixed canned messages, must match core_memory.cpp ---------
 static const UiMenuNode MENU_MEM[] = {
@@ -59,11 +62,11 @@ static const UiMenuNode MENU_TRAINING[] = {
 };
 
 static const UiMenuNode MENU_STATS[] = {
-  N_ROW("SESSION",      NODE_INFO),
-  N_ROW("LIFETIME",     NODE_INFO),
-  N_ROW("PROGRESS",     NODE_STUB),
-  N_ROW("ACCURACY",     NODE_STUB),
-  N_ROW("SPEED HIST",   NODE_STUB),
+  N_STATS("SESSION",    STATS_SESSION),
+  N_STATS("LIFETIME",   STATS_LIFETIME),
+  N_STATS("PROGRESS",   STATS_PROGRESS),
+  N_STATS("ACCURACY",   STATS_ACCURACY),
+  N_STATS("SPEED HIST", STATS_SPEED),
 };
 
 static const UiMenuNode MENU_BLUETOOTH[] = {
@@ -133,10 +136,29 @@ static const UiMenuNode MENU_TOOLS[] = {
   N_ROW("COMING SOON",  NODE_STUB),
 };
 
+static const UiMenuNode MENU_GAME_COPY[] = {
+  N_GAME_START("START",      UI_GAME_COPY),
+  N_GAME_INFO ("CONTROLS",   INFO_GAME_COPY_CONTROLS),
+  N_GAME_INFO ("HELP",       INFO_GAME_COPY_HELP),
+  N_GAME_INFO ("HIGH SCORE", INFO_GAME_COPY_SCORE),
+};
+static const UiMenuNode MENU_GAME_MEMORY[] = {
+  N_GAME_START("START",      UI_GAME_MEMORY),
+  N_GAME_INFO ("CONTROLS",   INFO_GAME_MEMORY_CONTROLS),
+  N_GAME_INFO ("HELP",       INFO_GAME_MEMORY_HELP),
+  N_GAME_INFO ("HIGH SCORE", INFO_GAME_MEMORY_SCORE),
+};
+static const UiMenuNode MENU_GAME_SPEED[] = {
+  N_GAME_START("START",      UI_GAME_SPEED),
+  N_GAME_INFO ("CONTROLS",   INFO_GAME_SPEED_CONTROLS),
+  N_GAME_INFO ("HELP",       INFO_GAME_SPEED_HELP),
+  N_GAME_INFO ("HIGH SCORE", INFO_GAME_SPEED_SCORE),
+};
+
 static const UiMenuNode MENU_GAMES[] = {
-  N_ROW("COPY CHALLNG", NODE_STUB),
-  N_ROW("MEMORY CHLNG", NODE_STUB),
-  N_ROW("SPEED CHLNG",  NODE_STUB),
+  N_SUB("COPY CHALLNG",  MENU_GAME_COPY),
+  N_SUB("MEMORY CHLNG",  MENU_GAME_MEMORY),
+  N_SUB("SPEED CHLNG",   MENU_GAME_SPEED),
 };
 
 static const UiMenuNode MENU_HELP[] = {
@@ -144,6 +166,7 @@ static const UiMenuNode MENU_HELP[] = {
   N_INF("CONTROLS",     INFO_CONTROLS),
   N_INF("MORSE GUIDE",  INFO_MORSE_GUIDE),
   N_INF("BUTTON GUIDE", INFO_BUTTON_GUIDE),
+  N_INF("GAMES GUIDE",  INFO_GAMES_GUIDE),
   N_INF("ABOUT",        INFO_ABOUT),
 };
 

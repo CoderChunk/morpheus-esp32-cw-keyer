@@ -93,23 +93,27 @@ void ui_renderer_service(unsigned long now) {
 
   switch (screen) {
     case UI_SCREEN_SPLASH:            ui_screens_drawSplash(u8g2, ui_state_getSplashElapsedMs()); break;
-    case UI_SCREEN_HOME:              ui_screens_drawHome(u8g2);             break;
-    case UI_SCREEN_MENU:              ui_screens_drawMenu(u8g2);             break;
-    case UI_SCREEN_LIST:              ui_screens_drawList(u8g2);             break;
-    case UI_SCREEN_EDIT_VALUE:        ui_screens_drawEditValue(u8g2);        break;
-    case UI_SCREEN_EDIT_TOGGLE:       ui_screens_drawEditToggle(u8g2);       break;
-    case UI_SCREEN_INFO:              ui_screens_drawInfo(u8g2);             break;
-    case UI_SCREEN_DIALOG_CONFIRM:    ui_screens_drawDialogConfirm(u8g2);    break;
-    case UI_SCREEN_DIAG_INPUT:        ui_screens_drawDiagInput(u8g2);        break;
-    case UI_SCREEN_DIAG_DISPLAY:      ui_screens_drawDiagDisplay(u8g2);      break;
-    case UI_SCREEN_DIAG_AUDIO:        ui_screens_drawDiagAudio(u8g2);        break;
-    case UI_SCREEN_DIAG_GPIO:         ui_screens_drawDiagGpio(u8g2);         break;
-    case UI_SCREEN_DIAG_LIVE:         ui_screens_drawDiagLive(u8g2);         break;
-    case UI_SCREEN_LIVE_MONITOR:      ui_screens_drawLiveMonitor(u8g2);      break;
-    case UI_SCREEN_TUNE:              ui_screens_drawTune(u8g2);             break;
-    case UI_SCREEN_TRAIN_DRILL:       ui_screens_drawTrainDrill(u8g2);       break;
-    case UI_SCREEN_TRAIN_FARNSWORTH:  ui_screens_drawTrainFarnsworth(u8g2);  break;
-    case UI_SCREEN_TRAIN_EXAM_RESULT: ui_screens_drawTrainExamResult(u8g2);  break;
+    case UI_SCREEN_HOME:              ui_screens_drawHome(u8g2);            break;
+    case UI_SCREEN_MENU:              ui_screens_drawMenu(u8g2);            break;
+    case UI_SCREEN_LIST:              ui_screens_drawList(u8g2);            break;
+    case UI_SCREEN_EDIT_VALUE:        ui_screens_drawEditValue(u8g2);       break;
+    case UI_SCREEN_EDIT_TOGGLE:       ui_screens_drawEditToggle(u8g2);      break;
+    case UI_SCREEN_INFO:              ui_screens_drawInfo(u8g2);            break;
+    case UI_SCREEN_DIALOG_CONFIRM:    ui_screens_drawDialogConfirm(u8g2);   break;
+    case UI_SCREEN_DIAG_INPUT:        ui_screens_drawDiagInput(u8g2);       break;
+    case UI_SCREEN_DIAG_DISPLAY:      ui_screens_drawDiagDisplay(u8g2);     break;
+    case UI_SCREEN_DIAG_AUDIO:        ui_screens_drawDiagAudio(u8g2);       break;
+    case UI_SCREEN_DIAG_GPIO:         ui_screens_drawDiagGpio(u8g2);        break;
+    case UI_SCREEN_DIAG_LIVE:         ui_screens_drawDiagLive(u8g2);        break;
+    case UI_SCREEN_LIVE_MONITOR:      ui_screens_drawLiveMonitor(u8g2);     break;
+    case UI_SCREEN_TUNE:              ui_screens_drawTune(u8g2);            break;
+    case UI_SCREEN_TRAIN_DRILL:       ui_screens_drawTrainDrill(u8g2);      break;
+    case UI_SCREEN_TRAIN_FARNSWORTH:  ui_screens_drawTrainFarnsworth(u8g2); break;
+    case UI_SCREEN_TRAIN_EXAM_RESULT: ui_screens_drawTrainExamResult(u8g2); break;
+    case UI_SCREEN_GAME_COPY:         ui_screens_drawGameCopy(u8g2);        break;
+    case UI_SCREEN_GAME_MEMORY:       ui_screens_drawGameMemory(u8g2);      break;
+    case UI_SCREEN_GAME_SPEED:        ui_screens_drawGameSpeed(u8g2);       break;
+    case UI_SCREEN_GAME_PAUSE:        ui_screens_drawGamePause(u8g2);       break;
     default: break;
   }
 

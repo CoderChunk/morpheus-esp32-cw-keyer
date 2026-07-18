@@ -30,7 +30,8 @@ enum UiScreen {
   UI_SCREEN_LIVE_MONITOR, UI_SCREEN_TUNE,
   UI_SCREEN_TRAIN_DRILL, UI_SCREEN_TRAIN_FARNSWORTH, UI_SCREEN_TRAIN_EXAM_RESULT,
   UI_SCREEN_GAME_COPY, UI_SCREEN_GAME_MEMORY, UI_SCREEN_GAME_SPEED, 
-  UI_SCREEN_GAME_PAUSE
+  UI_SCREEN_GAME_PAUSE,
+  UI_SCREEN_VOLUME
 };
 
 void ui_state_init(unsigned long now);
@@ -114,6 +115,8 @@ const char *ui_state_getLiveMonitorLine(uint8_t i);   // 4 lines, always current
 bool          ui_state_getTuneActive();
 uint16_t      ui_state_getTuneFreq();
 unsigned long ui_state_getTuneRemainingMs();
+uint8_t       ui_state_getVolumeValue();
+bool          ui_state_getVolumePreviewOn();
 
 uint8_t     ui_state_getTrainPhase();
 const char *ui_state_getTrainTarget();

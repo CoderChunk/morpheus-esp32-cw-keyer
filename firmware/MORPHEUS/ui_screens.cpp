@@ -265,7 +265,8 @@ void ui_screens_drawList(U8G2 &u8g2) {
     if (n.type == NODE_SUBMENU || n.type == NODE_DIAG ||
         n.type == NODE_MONITOR || n.type == NODE_TUNE ||
         n.type == NODE_TRAIN_DRILL || n.type == NODE_TRAIN_FARNSWORTH ||
-        n.type == NODE_STATS || n.type == NODE_GAME_START || n.type == NODE_GAME_INFO) {
+        n.type == NODE_STATS || n.type == NODE_GAME_START || n.type == NODE_GAME_INFO ||
+        n.type == NODE_VOLUME || n.type == NODE_PROFILE_LOAD || n.type == NODE_PROFILE_SAVE) {
       tag = ">";
     } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
       tag = ">";
@@ -992,4 +993,31 @@ void ui_screens_drawGamePause(U8G2 &u8g2) {
     if (selected) u8g2.setDrawColor(1);
     y += rowH + rowGap;
   }
+}
+
+// ----------------------------------------------------------------------------
+// Volume - large percentage + a horizontal bar, with a periodic
+// reference beep (driven by ui_state's preview-on phase) so loudness is
+// judged by ear, not inferred from a number alone.
+// ----------------------------------------------------------------------------
+void ui_screens_drawVolume(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "VOLUME");
+
+  uint8_t value = ui_state_getVolumeValue();
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%u%%", (unsigned)value);
+  u8g2.setFont(UI_FONT_HERO);
+  int w = u8g2.getStrWidth(buf);
+  const int valueBaseline = UI_HEADER_RULE_Y + 26;
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, valueBaseline, buf);
+
+  const int barW = (int)UI_CONTENT_WIDTH - 24;
+  const int barH = 10;
+  const int barX = UI_CONTENT_X0 + 12;
+  const int barY = valueBaseline + 10;
+  u8g2.drawFrame(barX, barY, barW, barH);
+  int fillW = (int)(((int32_t)(barW - 2) * value) / 100);
+  if (fillW > 0) u8g2.drawBox(barX + 1, barY + 1, fillW, barH - 2);
+
+  if (ui_state_getVolumePreviewOn()) drawActiveDot(u8g2);
 }

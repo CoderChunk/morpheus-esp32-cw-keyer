@@ -34,9 +34,11 @@
   #define USE_LEDC_V3_API 0
 #endif
 
+static uint8_t currentVolume = DEFAULT_VOLUME_PERCENT;
+static const uint8_t  BUZZER_LEDC_RES_BITS = 10;
+static const uint16_t BUZZER_MAX_DUTY = (uint16_t)((1u << BUZZER_LEDC_RES_BITS) - 1);
 #if !USE_LEDC_V3_API
 static const int BUZZER_LEDC_CHANNEL = 0;
-static const int BUZZER_LEDC_RES_BITS = 10;
 #endif
 
 static void buzzerInit() {
@@ -52,6 +54,21 @@ static void buzzerInit() {
 #endif
 }
 
+// Volume - duty-cycle scaling. 100% maps to the tone's natural 50% duty
+// (full loudness, unchanged from before this feature existed); lower
+// percentages reduce driven power. Approximate, not calibrated - see
+// file header / project notes on why (no DAC/amp on this hardware).
+static void applyVolumeDuty() {
+#if FEATURE_SIDETONE
+  uint16_t duty = (uint16_t)(((uint32_t)(BUZZER_MAX_DUTY / 2) * currentVolume) / 100);
+  #if USE_LEDC_V3_API
+    ledcWrite(PIN_BUZZER, duty);
+  #else
+    ledcWrite(BUZZER_LEDC_CHANNEL, duty);
+  #endif
+#endif
+}
+
 static void buzzerOn(uint32_t freqHz) {
 #if FEATURE_SIDETONE
   #if USE_LEDC_V3_API
@@ -59,6 +76,7 @@ static void buzzerOn(uint32_t freqHz) {
   #else
     ledcWriteTone(BUZZER_LEDC_CHANNEL, freqHz);
   #endif
+  applyVolumeDuty();
 #else
   (void)freqHz;
 #endif
@@ -136,6 +154,7 @@ static unsigned long ditLengthMs = 1200UL / (unsigned long)DEFAULT_WPM;
 
 static uint32_t currentSidetoneFreq = TONE_FREQ_HZ;
 static bool     paddleReversed      = DEFAULT_PADDLE_REVERSED;
+static bool     sidetoneEnabled     = DEFAULT_SIDETONE_ENABLED;
 
 static bool lastTipActive  = false;
 static bool lastRingActive = false;
@@ -143,7 +162,7 @@ static bool diagToneActive = false;
 
 static void elementStart(unsigned long nowMs) {
   if (diagToneActive) diagToneActive = false;
-  buzzerOn(currentSidetoneFreq);
+  if (sidetoneEnabled) buzzerOn(currentSidetoneFreq);
   txActive = true;
   events_onKeyDown(nowMs);
 }
@@ -182,6 +201,20 @@ void core_keyer_setSidetoneFreq(uint32_t hz) {
 
 bool core_keyer_getPaddleReversed() { return paddleReversed; }
 void core_keyer_setPaddleReversed(bool reversed) { paddleReversed = reversed; }
+
+uint8_t core_keyer_getVolume() { return currentVolume; }
+
+void core_keyer_setVolume(uint8_t percent) {
+  if (percent > VOLUME_MAX) percent = VOLUME_MAX;
+  currentVolume = percent;
+  // Live-apply if a tone is currently sounding (Tune, a held drill/game
+  // tone, or real keying) - same "hear it change immediately" convention
+  // already used for Tone frequency adjustment.
+  if (txActive || diagToneActive) applyVolumeDuty();
+}
+
+bool core_keyer_getSidetoneEnabled() { return sidetoneEnabled; }
+void core_keyer_setSidetoneEnabled(bool enabled) { sidetoneEnabled = enabled; }
 
 static void resetKeyerState() {
   buzzerOff();

@@ -20,6 +20,7 @@
  * Copyright (C) 2026 Coder Chunk
  * ============================================================================
  */
+#include "config.h"
 #include "ui_state.h"
 #include "ui_config.h"
 #include "ui_mockdata.h"
@@ -103,6 +104,7 @@ static int getParamValue(uint8_t paramId) {
     case PARAM_WPM:      return ui_backend_getWpm();
     case PARAM_TONE:     return (int)ui_backend_getToneHz();
     case PARAM_CONTRAST: return (int)ui_renderer_getContrast();
+    case PARAM_VOLUME:   return (int)ui_backend_getVolume();
     default: return 0;
   }
 }
@@ -111,6 +113,7 @@ static void setParamValue(uint8_t paramId, int value) {
     case PARAM_WPM:      ui_backend_setWpm(value); break;
     case PARAM_TONE:     ui_backend_setToneHz((uint16_t)value); break;
     case PARAM_CONTRAST: ui_renderer_setContrast((uint8_t)value); break;
+    case PARAM_VOLUME:   ui_backend_setVolume((uint8_t)value); break;
     default: break;
   }
 }
@@ -119,6 +122,7 @@ static void getParamRange(uint8_t paramId, int &lo, int &hi) {
     case PARAM_WPM:      lo = UI_WPM_MIN;      hi = UI_WPM_MAX;      break;
     case PARAM_TONE:     lo = UI_TONE_MIN_HZ;  hi = UI_TONE_MAX_HZ;  break;
     case PARAM_CONTRAST: lo = UI_CONTRAST_MIN; hi = UI_CONTRAST_MAX; break;
+    case PARAM_VOLUME:   lo = VOLUME_MIN; hi = VOLUME_MAX; break;
     default: lo = 0; hi = 0; break;
   }
 }
@@ -126,6 +130,7 @@ static int getParamStep(uint8_t paramId) {
   switch (paramId) {
     case PARAM_TONE:     return 10;
     case PARAM_CONTRAST: return 5;
+    case PARAM_VOLUME:   return VOLUME_STEP;
     default: return 1;
   }
 }
@@ -134,6 +139,7 @@ static const char *getParamLabel(uint8_t paramId) {
     case PARAM_WPM:      return "WPM";
     case PARAM_TONE:     return "TONE";
     case PARAM_CONTRAST: return "CONTRAST";
+    case PARAM_VOLUME:   return "VOLUME";
     default: return "";
   }
 }
@@ -143,6 +149,7 @@ static bool getToggleValue(uint8_t paramId) {
     case PARAM_PADDLE_REV:  return ui_backend_getPaddleReversed();
     case PARAM_MODE:        return ui_backend_getModeIsPaddle();
     case PARAM_DECODER_EN:  return ui_backend_getDecoderEnabled();
+    case PARAM_SIDETONE_EN: return ui_backend_getSidetoneEnabled();
     default: return false;
   }
 }
@@ -151,6 +158,7 @@ static void setToggleValue(uint8_t paramId, bool v) {
     case PARAM_PADDLE_REV:  ui_backend_setPaddleReversed(v); break;
     case PARAM_MODE:        ui_backend_setModeIsPaddle(v); break;
     case PARAM_DECODER_EN:  ui_backend_setDecoderEnabled(v); break;
+    case PARAM_SIDETONE_EN: ui_backend_setSidetoneEnabled(v); break;
     default: break;
   }
 }
@@ -159,6 +167,7 @@ static const char *getToggleLabel(uint8_t paramId) {
     case PARAM_PADDLE_REV: return "PADDLE REV";
     case PARAM_MODE:       return "KEYER MODE";
     case PARAM_DECODER_EN: return "DECODER";
+    case PARAM_SIDETONE_EN: return "SIDETONE";
     default: return "";
   }
 }
@@ -203,6 +212,17 @@ bool ui_state_isTriggerPlaying(uint8_t paramId) {
   return ui_backend_isMemoryPlaying() && ((uint8_t)(ui_backend_getPlayingMemorySlot() + 1) == paramId);
 }
 
+static void buildProfileInfoLines(uint8_t uiProfileId) {
+  snprintf(infoLine1, sizeof(infoLine1), "%d WPM  %s",
+           ui_backend_profileGetWpm(uiProfileId), ui_backend_profileGetModeStr(uiProfileId));
+  snprintf(infoLine2, sizeof(infoLine2), "Tone %u Hz  Vol %u%%",
+           (unsigned)ui_backend_profileGetToneHz(uiProfileId),
+           (unsigned)ui_backend_profileGetVolume(uiProfileId));
+  snprintf(infoLine3, sizeof(infoLine3), "Rev:%s  Tone:%s",
+           ui_backend_profileGetPaddleReversed(uiProfileId) ? "ON" : "OFF",
+           ui_backend_profileGetSidetoneEnabled(uiProfileId) ? "ON" : "OFF");
+}
+
 static void buildInfoContent(uint8_t infoId) {
   infoLine1[0] = infoLine2[0] = infoLine3[0] = '\0';
   switch (infoId) {
@@ -239,6 +259,10 @@ static void buildInfoContent(uint8_t infoId) {
       snprintf(infoLine2, sizeof(infoLine2), "Push/Confirm=select");
       snprintf(infoLine3, sizeof(infoLine3), "Back hold=Home");
       break;
+    case INFO_PROFILE_DEFAULT:  buildProfileInfoLines(UI_PROFILE_DEFAULT);  break;
+    case INFO_PROFILE_PORTABLE: buildProfileInfoLines(UI_PROFILE_PORTABLE); break;
+    case INFO_PROFILE_CONTEST:  buildProfileInfoLines(UI_PROFILE_CONTEST);  break;
+    case INFO_PROFILE_PRACTICE: buildProfileInfoLines(UI_PROFILE_PRACTICE); break;
     case INFO_GAMES_GUIDE:
       snprintf(infoLine1, sizeof(infoLine1), "Confirm=Play/Retry");
       snprintf(infoLine2, sizeof(infoLine2), "Hold Back=Pause menu");
@@ -342,9 +366,13 @@ bool ui_state_getBleOverlay(BleOverlayKind &kind, uint32_t &passkey) {
 // CONFIRM DIALOG ENGINE
 // ============================================================================
 static uint8_t dialogActionId = ACTION_NONE;
+static uint8_t pendingProfileId = UI_PROFILE_NONE;
 static bool    dialogFocusYes = false;
 static char    dialogTitle[24] = "";
 static char    dialogMessage[24] = "";
+
+static unsigned long volumeScreenEnterMs = 0;
+static uint8_t       volumeEntrySnapshot = 0;
 
 static bool           actionToastActive = false;
 static char           actionToastText[20] = "";
@@ -375,6 +403,7 @@ static void buildDialogContent(uint8_t actionId, const char *rowLabel) {
     case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Clear BLE bond?"); break;
     case ACTION_FACTORY_RESET: snprintf(dialogMessage, sizeof(dialogMessage), "Reset all settings?"); break;
     case ACTION_RESTART:       snprintf(dialogMessage, sizeof(dialogMessage), "Restart device now?"); break;
+    case ACTION_PROFILE_SAVE:  snprintf(dialogMessage, sizeof(dialogMessage), "Overwrite this profile?"); break;
     default:                   snprintf(dialogMessage, sizeof(dialogMessage), "Confirm action?"); break;
   }
 }
@@ -405,6 +434,10 @@ static void executeDialogAction() {
       showActionToast("RESTARTING...");
       pendingRestart = true;
       pendingRestartAtMs = lastEventNow + RESTART_DELAY_MS;
+      break;
+    case ACTION_PROFILE_SAVE:
+      ui_backend_profileSave(pendingProfileId);
+      showActionToast("PROFILE SAVED");
       break;
     default: break;
   }
@@ -945,6 +978,11 @@ static void handleList(const UiEvent &ev) {
         pushList(n.children, n.childCount, n.label);
       } else if (n.type == NODE_VALUE && n.paramId != PARAM_NONE) {
         pushEditValue(n.paramId);
+      } else if (n.type == NODE_VOLUME) {
+        volumeScreenEnterMs = lastEventNow;
+        volumeEntrySnapshot = ui_backend_getVolume();
+        currentScreen = UI_SCREEN_VOLUME;
+        markDirty();
       } else if (n.type == NODE_TOGGLE && n.paramId != PARAM_NONE) {
         pushEditToggle(n.paramId);
       } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
@@ -970,6 +1008,13 @@ static void handleList(const UiEvent &ev) {
         buildGameInfoContent(n.paramId, n.label);
         currentScreen = UI_SCREEN_INFO;
         markDirty();
+      } else if (n.type == NODE_PROFILE_LOAD && n.paramId != UI_PROFILE_NONE) {
+        ui_backend_profileLoad(n.paramId);
+        showActionToast("PROFILE LOADED");
+        markDirty();
+      } else if (n.type == NODE_PROFILE_SAVE && n.paramId != UI_PROFILE_NONE) {
+        pendingProfileId = n.paramId;
+        pushDialog(ACTION_PROFILE_SAVE, n.label);
       } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
         // Immediate, non-destructive: play now, stay on this list, toast.
         uint8_t slot = (uint8_t)(n.paramId - 1);
@@ -1190,6 +1235,40 @@ static void handleTune(const UiEvent &ev) {
   }
 }
 
+static void handleVolume(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int v = (int)ui_backend_getVolume() + ev.detents * VOLUME_STEP;
+      if (v < VOLUME_MIN) v = VOLUME_MIN;
+      if (v > VOLUME_MAX) v = VOLUME_MAX;
+      ui_backend_setVolume((uint8_t)v);   // live preview, same as WPM/Tone
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+      // Commit: keep whatever value is currently live (already applied).
+      ui_backend_diagToneStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      // Cancel: restore the value from before this screen was entered.
+      ui_backend_setVolume(volumeEntrySnapshot);
+      ui_backend_diagToneStop();
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+uint8_t ui_state_getVolumeValue() { return ui_backend_getVolume(); }
+
+bool ui_state_getVolumePreviewOn() {
+  unsigned long elapsed = (lastEventNow - volumeScreenEnterMs) % UI_VOLUME_PREVIEW_PERIOD_MS;
+  return elapsed < UI_VOLUME_PREVIEW_ON_MS;
+}
+
 static void handleTrainDrill(const UiEvent &ev) {
   switch (ev.type) {
     case UI_EV_SELECT: ui_backend_trainConfirmPressed(); markDirty(); break;
@@ -1346,6 +1425,10 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
       ui_backend_diagToneStop();
       tuneActive = false;
     }
+    if (currentScreen == UI_SCREEN_VOLUME) {
+      ui_backend_setVolume(volumeEntrySnapshot);
+      ui_backend_diagToneStop();
+    }
     if (currentScreen == UI_SCREEN_TRAIN_DRILL) ui_backend_trainStopSession();
     if (currentScreen == UI_SCREEN_TRAIN_FARNSWORTH && ui_backend_isFarnsworthPlaying()) {
       ui_backend_farnsworthTogglePlay();
@@ -1385,6 +1468,7 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_GAME_MEMORY:       handleGameMemory(ev);       break;
     case UI_SCREEN_GAME_SPEED:        handleGameSpeed(ev);        break;
     case UI_SCREEN_GAME_PAUSE:        handleGamePause(ev);        break;
+    case UI_SCREEN_VOLUME:            handleVolume(ev);           break;
     default: break;
   }
 }
@@ -1456,6 +1540,20 @@ void ui_state_service(unsigned long now) {
       ui_backend_diagToneStop();
       tuneActive = false;
       showActionToast("TUNE TIMEOUT");
+      markDirty();
+    }
+  }
+
+  if (currentScreen == UI_SCREEN_VOLUME) {
+    static bool lastPreviewOn = false;
+    bool previewOn = ui_state_getVolumePreviewOn();
+    if (previewOn != lastPreviewOn) {
+      lastPreviewOn = previewOn;
+      if (previewOn) {
+        if (!audioResourceBusy()) ui_backend_diagToneStart(ui_backend_getToneHz());
+      } else {
+        ui_backend_diagToneStop();
+      }
       markDirty();
     }
   }

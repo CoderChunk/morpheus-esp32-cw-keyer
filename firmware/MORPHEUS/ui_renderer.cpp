@@ -114,6 +114,7 @@ void ui_renderer_service(unsigned long now) {
     case UI_SCREEN_GAME_MEMORY:       ui_screens_drawGameMemory(u8g2);      break;
     case UI_SCREEN_GAME_SPEED:        ui_screens_drawGameSpeed(u8g2);       break;
     case UI_SCREEN_GAME_PAUSE:        ui_screens_drawGamePause(u8g2);       break;
+    case UI_SCREEN_VOLUME:            ui_screens_drawVolume(u8g2);          break;
     default: break;
   }
 

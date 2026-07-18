@@ -53,7 +53,7 @@ static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 4;   // bumped: +kochLevel
+static const uint16_t      SETTINGS_VERSION          = 5;   // bumped: +volumePercent, +sidetoneEnabled
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 // ----------------------------------------------------------------------------
@@ -101,5 +101,25 @@ static const uint8_t       GAME_SPEED_START_LIVES  = 3;
 static const unsigned long GAME_FEEDBACK_MS        = 500;
 static const unsigned long GAME_ROUND_OK_MS        = 700;
 static const uint8_t       GAME_MEMORY_MAX_CHAIN   = 20;
+
+// ----------------------------------------------------------------------------
+// Audio - volume (PWM duty-cycle scaling; no DAC/amp on this hardware,
+// so this is an approximation of loudness, not a calibrated curve - see
+// project notes) and runtime sidetone on/off (keying sidetone only -
+// Diagnostics/Tune/Training/Games are unaffected by this toggle).
+// ----------------------------------------------------------------------------
+static const uint8_t DEFAULT_VOLUME_PERCENT  = 80;
+static const uint8_t VOLUME_MIN              = 0;
+static const uint8_t VOLUME_MAX              = 100;
+static const uint8_t VOLUME_STEP             = 5;
+static const bool    DEFAULT_SIDETONE_ENABLED = true;
+
+// ----------------------------------------------------------------------------
+// Profiles module - 4 fixed preset slots, own NVS namespace. Deliberately
+// NOT touched by Settings > Factory Reset - a saved profile is a
+// recovery path after resetting live settings, not something a reset
+// should destroy (same precedent as Statistics/Games high scores).
+// ----------------------------------------------------------------------------
+static const uint16_t PROFILES_VERSION = 1;
 
 #endif // MORPHEUS_CONFIG_H

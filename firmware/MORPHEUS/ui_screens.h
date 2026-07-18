@@ -42,4 +42,9 @@ void ui_screens_drawTrainDrill(U8G2 &u8g2);
 void ui_screens_drawTrainFarnsworth(U8G2 &u8g2);
 void ui_screens_drawTrainExamResult(U8G2 &u8g2);
 
+void ui_screens_drawGameCopy(U8G2 &u8g2);
+void ui_screens_drawGameMemory(U8G2 &u8g2);
+void ui_screens_drawGameSpeed(U8G2 &u8g2);
+void ui_screens_drawGamePause(U8G2 &u8g2);
+
 #endif

@@ -116,4 +116,57 @@ int  ui_backend_farnsworthGetWpm();
 bool ui_backend_farnsworthTogglePlay();
 bool ui_backend_isFarnsworthPlaying();
 
+uint32_t ui_backend_statsSessionChars();
+uint32_t ui_backend_statsSessionWords();
+uint32_t ui_backend_statsSessionElements();
+uint32_t ui_backend_statsSessionTrainAttempts();
+uint32_t ui_backend_statsSessionTrainCorrect();
+unsigned long ui_backend_statsSessionUptimeMs();
+
+uint32_t ui_backend_statsLifetimeChars();
+uint32_t ui_backend_statsLifetimeWords();
+uint32_t ui_backend_statsLifetimeElements();
+uint32_t ui_backend_statsLifetimeUptimeSec();
+uint32_t ui_backend_statsLifetimeTrainAttempts();
+uint32_t ui_backend_statsLifetimeTrainCorrect();
+uint32_t ui_backend_statsModeAttempts(uint8_t mode);
+uint32_t ui_backend_statsModeCorrect(uint8_t mode);
+uint32_t ui_backend_statsExamsTaken();
+uint32_t ui_backend_statsExamsPassed();
+uint8_t  ui_backend_statsBestExamScore();
+int      ui_backend_statsPeakAdaptiveWpm();
+
+uint8_t  ui_backend_statsHistoryCount();
+uint16_t ui_backend_statsHistoryEntry(uint8_t indexFromNewest);
+
+bool    ui_backend_isGameSessionActive();
+void    ui_backend_gameStart(uint8_t uiGameId);
+void    ui_backend_gameStop();
+void    ui_backend_gameConfirmPressed();
+
+uint8_t  ui_backend_gameCopyPhase();
+char     ui_backend_gameCopyFallingChar();
+uint8_t  ui_backend_gameCopyFallProgressPct();
+uint16_t ui_backend_gameCopyScore();
+uint8_t  ui_backend_gameCopyLives();
+uint16_t ui_backend_gameCopyHighScore();
+
+uint8_t  ui_backend_gameMemoryPhase();
+uint8_t  ui_backend_gameMemoryChainLength();
+uint8_t  ui_backend_gameMemoryInputProgress();
+uint8_t  ui_backend_gameMemoryHighScore();
+
+uint8_t       ui_backend_gameSpeedPhase();
+uint16_t      ui_backend_gameSpeedCombo();
+uint8_t       ui_backend_gameSpeedLives();
+unsigned long ui_backend_gameSpeedBeatRemainingMs();
+unsigned long ui_backend_gameSpeedBeatTotalMs();
+bool          ui_backend_gameSpeedWasLastCorrect();
+char          ui_backend_gameSpeedLastChar();
+uint16_t      ui_backend_gameSpeedHighScore();
+bool 		  ui_backend_isGamePaused();
+void 		  ui_backend_gameTogglePause();
+void 		  ui_backend_gameRestart();
+bool 		  ui_backend_isGamePausedFor(uint8_t uiGameId);   // true if that specific game is the active+paused one
+
 #endif // UI_BACKEND_H

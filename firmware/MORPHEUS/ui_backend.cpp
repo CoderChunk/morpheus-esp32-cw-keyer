@@ -17,6 +17,7 @@
 #include "core_trainer.h"
 #include "core_games.h"
 #include "core_stats.h"
+#include "core_profiles.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -348,3 +349,33 @@ bool ui_backend_isGamePausedFor(uint8_t uiGameId) {
     default: return false;
   }
 }
+
+uint8_t ui_backend_getVolume()              { return core_keyer_getVolume(); }
+void    ui_backend_setVolume(uint8_t v)     { core_keyer_setVolume(v); }
+bool    ui_backend_getSidetoneEnabled()     { return core_keyer_getSidetoneEnabled(); }
+void    ui_backend_setSidetoneEnabled(bool e) { core_keyer_setSidetoneEnabled(e); }
+
+// uiProfileId values match ui_menu.h's UiProfileId ordering
+// (UI_PROFILE_DEFAULT=1 .. UI_PROFILE_PRACTICE=4) - same documented
+// positional-mapping convention as ui_backend_trainStartSession().
+static ProfileId toCoreProfileId(uint8_t uiProfileId) {
+  switch (uiProfileId) {
+    case 1: return PROFILE_DEFAULT;
+    case 2: return PROFILE_PORTABLE;
+    case 3: return PROFILE_CONTEST;
+    case 4: return PROFILE_PRACTICE;
+    default: return PROFILE_DEFAULT;
+  }
+}
+
+void ui_backend_profileLoad(uint8_t uiProfileId) { core_profiles_load(toCoreProfileId(uiProfileId)); }
+void ui_backend_profileSave(uint8_t uiProfileId) { core_profiles_save(toCoreProfileId(uiProfileId)); }
+
+int      ui_backend_profileGetWpm(uint8_t uiProfileId)            { return core_profiles_getWpm(toCoreProfileId(uiProfileId)); }
+uint16_t ui_backend_profileGetToneHz(uint8_t uiProfileId)         { return core_profiles_getToneHz(toCoreProfileId(uiProfileId)); }
+bool     ui_backend_profileGetPaddleReversed(uint8_t uiProfileId) { return core_profiles_getPaddleReversed(toCoreProfileId(uiProfileId)); }
+const char *ui_backend_profileGetModeStr(uint8_t uiProfileId) {
+  return (core_profiles_getMode(toCoreProfileId(uiProfileId)) == MODE_STRAIGHT) ? "STR" : "PAD";
+}
+uint8_t  ui_backend_profileGetVolume(uint8_t uiProfileId)          { return core_profiles_getVolume(toCoreProfileId(uiProfileId)); }
+bool     ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId) { return core_profiles_getSidetoneEnabled(toCoreProfileId(uiProfileId)); }

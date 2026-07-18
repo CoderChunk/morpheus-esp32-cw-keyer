@@ -73,6 +73,8 @@ static const unsigned long UI_DIAG_ICON_CYCLE_MS = 1200;
 // no new refresh constant needed there.
 // ----------------------------------------------------------------------------
 static const unsigned long UI_TUNE_TIMEOUT_MS = 30000;
+static const unsigned long UI_VOLUME_PREVIEW_PERIOD_MS = 1000;
+static const unsigned long UI_VOLUME_PREVIEW_ON_MS     = 150;   // audible beep duration within each period
 
 // Adopted from the reference animation source (FRAME_DELAY=42, ~24fps),
 // tuned for this specific frame set - the XBM/bit-order fallback from

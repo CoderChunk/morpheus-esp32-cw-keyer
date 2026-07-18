@@ -33,6 +33,8 @@
 #define N_STATS(lbl, sid) { lbl, NODE_STATS, nullptr, 0, sid }
 #define N_GAME_START(lbl, gid) { lbl, NODE_GAME_START, nullptr, 0, gid }
 #define N_GAME_INFO(lbl, iid)  { lbl, NODE_GAME_INFO, nullptr, 0, iid }
+#define N_PLOAD(lbl, pid) { lbl, NODE_PROFILE_LOAD, nullptr, 0, pid }
+#define N_PSAVE(lbl, pid) { lbl, NODE_PROFILE_SAVE, nullptr, 0, pid }
 
 // --- Memory Msgs: 5 fixed canned messages, must match core_memory.cpp ---------
 static const UiMenuNode MENU_MEM[] = {
@@ -82,12 +84,31 @@ static const UiMenuNode MENU_CONNECTIVITY[] = {
   N_INF("DEVICE INFO",  INFO_DEVICE_INFO),
 };
 
+static const UiMenuNode MENU_PROFILE_DEFAULT[] = {
+  N_PLOAD("LOAD", UI_PROFILE_DEFAULT),
+  N_PSAVE("SAVE", UI_PROFILE_DEFAULT),
+  N_INF  ("INFO", INFO_PROFILE_DEFAULT),
+};
+static const UiMenuNode MENU_PROFILE_PORTABLE[] = {
+  N_PLOAD("LOAD", UI_PROFILE_PORTABLE),
+  N_PSAVE("SAVE", UI_PROFILE_PORTABLE),
+  N_INF  ("INFO", INFO_PROFILE_PORTABLE),
+};
+static const UiMenuNode MENU_PROFILE_CONTEST[] = {
+  N_PLOAD("LOAD", UI_PROFILE_CONTEST),
+  N_PSAVE("SAVE", UI_PROFILE_CONTEST),
+  N_INF  ("INFO", INFO_PROFILE_CONTEST),
+};
+static const UiMenuNode MENU_PROFILE_PRACTICE[] = {
+  N_PLOAD("LOAD", UI_PROFILE_PRACTICE),
+  N_PSAVE("SAVE", UI_PROFILE_PRACTICE),
+  N_INF  ("INFO", INFO_PROFILE_PRACTICE),
+};
 static const UiMenuNode MENU_PROFILES[] = {
-  N_ROW("DEFAULT",      NODE_STUB),
-  N_ROW("PORTABLE",     NODE_STUB),
-  N_ROW("CONTEST",      NODE_STUB),
-  N_ROW("PRACTICE",     NODE_STUB),
-  N_ROW("SAVE CURRENT", NODE_ACTION),
+  N_SUB("DEFAULT",  MENU_PROFILE_DEFAULT),
+  N_SUB("PORTABLE", MENU_PROFILE_PORTABLE),
+  N_SUB("CONTEST",  MENU_PROFILE_CONTEST),
+  N_SUB("PRACTICE", MENU_PROFILE_PRACTICE),
 };
 
 static const UiMenuNode MENU_SET_KEYER[] = {
@@ -98,8 +119,8 @@ static const UiMenuNode MENU_SET_KEYER[] = {
 };
 static const UiMenuNode MENU_SET_AUDIO[] = {
   N_VAL("TONE",         PARAM_TONE),
-  N_ROW("SIDETONE",     NODE_TOGGLE),
-  N_ROW("VOLUME",       NODE_STUB),
+  N_TGL("SIDETONE",     PARAM_SIDETONE_EN),
+  { "VOLUME", NODE_VOLUME, nullptr, 0, PARAM_VOLUME },
 };
 static const UiMenuNode MENU_SET_DISPLAY[] = {
   N_VAL("CONTRAST",     PARAM_CONTRAST),

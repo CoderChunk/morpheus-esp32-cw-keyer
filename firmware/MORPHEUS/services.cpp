@@ -30,6 +30,8 @@ struct OperatorSettings {
   OperatingMode mode;
   bool          decoderEnabled;
   uint8_t       kochLevel;
+  uint8_t       volumePercent;
+  bool          sidetoneEnabled;
 };
 
 static Preferences settingsPrefs;
@@ -51,6 +53,8 @@ static OperatorSettings currentSettingsSnapshot() {
   s.mode = core_keyer_getMode();
   s.decoderEnabled = core_decoder_isEnabled();
   s.kochLevel = core_trainer_getKochLevel();
+  s.volumePercent = core_keyer_getVolume();
+  s.sidetoneEnabled = core_keyer_getSidetoneEnabled();
   return s;
 }
 
@@ -65,6 +69,8 @@ void services_loadSettings() {
   defaults.mode           = MODE_STRAIGHT;
   defaults.decoderEnabled = true;
   defaults.kochLevel      = DEFAULT_KOCH_LEVEL;
+  defaults.volumePercent  = DEFAULT_VOLUME_PERCENT;
+  defaults.sidetoneEnabled = DEFAULT_SIDETONE_ENABLED;
 
   OperatorSettings loaded = defaults;
   size_t got = settingsPrefs.getBytes(SETTINGS_NVS_KEY, &loaded, sizeof(loaded));
@@ -80,6 +86,8 @@ void services_loadSettings() {
   core_keyer_setMode(loaded.mode);
   core_decoder_setEnabled(loaded.decoderEnabled);
   core_trainer_setKochLevel(loaded.kochLevel);
+  core_keyer_setVolume(loaded.volumePercent);
+  core_keyer_setSidetoneEnabled(loaded.sidetoneEnabled);
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();
@@ -103,7 +111,9 @@ void services_serviceSettings(unsigned long now) {
                  (current.paddleReverse != lastSavedSettings.paddleReverse) ||
                  (current.mode != lastSavedSettings.mode) ||
                  (current.decoderEnabled != lastSavedSettings.decoderEnabled) ||
-                 (current.kochLevel != lastSavedSettings.kochLevel);
+                 (current.kochLevel != lastSavedSettings.kochLevel) ||
+                 (current.volumePercent != lastSavedSettings.volumePercent) ||
+                 (current.sidetoneEnabled != lastSavedSettings.sidetoneEnabled);
   if (!changed) return;
 
   settingsPrefs.putBytes(SETTINGS_NVS_KEY, &current, sizeof(current));
@@ -125,6 +135,8 @@ void services_factoryResetSettings() {
   core_keyer_setMode(MODE_STRAIGHT);
   core_decoder_setEnabled(true);
   core_trainer_resetKochProgress();
+  core_keyer_setVolume(DEFAULT_VOLUME_PERCENT);
+  core_keyer_setSidetoneEnabled(DEFAULT_SIDETONE_ENABLED);
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();

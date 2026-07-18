@@ -169,4 +169,19 @@ void 		  ui_backend_gameTogglePause();
 void 		  ui_backend_gameRestart();
 bool 		  ui_backend_isGamePausedFor(uint8_t uiGameId);   // true if that specific game is the active+paused one
 
+uint8_t ui_backend_getVolume();
+void    ui_backend_setVolume(uint8_t percent);
+bool    ui_backend_getSidetoneEnabled();
+void    ui_backend_setSidetoneEnabled(bool enabled);
+
+void ui_backend_profileLoad(uint8_t uiProfileId);
+void ui_backend_profileSave(uint8_t uiProfileId);
+
+int         ui_backend_profileGetWpm(uint8_t uiProfileId);
+uint16_t    ui_backend_profileGetToneHz(uint8_t uiProfileId);
+bool        ui_backend_profileGetPaddleReversed(uint8_t uiProfileId);
+const char *ui_backend_profileGetModeStr(uint8_t uiProfileId);
+uint8_t     ui_backend_profileGetVolume(uint8_t uiProfileId);
+bool        ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId);
+
 #endif // UI_BACKEND_H

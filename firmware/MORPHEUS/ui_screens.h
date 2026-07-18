@@ -37,6 +37,7 @@ void ui_screens_drawDiagLive(U8G2 &u8g2);
 
 void ui_screens_drawLiveMonitor(U8G2 &u8g2);
 void ui_screens_drawTune(U8G2 &u8g2);
+void ui_screens_drawVolume(U8G2 &u8g2);
 
 void ui_screens_drawTrainDrill(U8G2 &u8g2);
 void ui_screens_drawTrainFarnsworth(U8G2 &u8g2);

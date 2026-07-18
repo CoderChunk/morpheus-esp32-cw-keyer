@@ -37,4 +37,9 @@ bool core_keyer_isDiagToneActive();
 void events_onKeyDown(unsigned long now);
 void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now);
 
+uint8_t core_keyer_getVolume();
+void    core_keyer_setVolume(uint8_t percent);
+bool    core_keyer_getSidetoneEnabled();
+void    core_keyer_setSidetoneEnabled(bool enabled);
+
 #endif // MORPHEUS_CORE_KEYER_H

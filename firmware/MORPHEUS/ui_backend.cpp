@@ -19,6 +19,7 @@
 #include "core_games.h"
 #include "core_stats.h"
 #include "core_profiles.h"
+#include "core_clock.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -390,3 +391,33 @@ const char *ui_backend_profileGetModeStr(uint8_t uiProfileId) {
 uint8_t  ui_backend_profileGetVolume(uint8_t uiProfileId)          { return core_profiles_getVolume(toCoreProfileId(uiProfileId)); }
 bool     ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId) { return core_profiles_getSidetoneEnabled(toCoreProfileId(uiProfileId)); }
 uint8_t  ui_backend_profileGetContrast(uint8_t uiProfileId)        { return core_profiles_getContrast(toCoreProfileId(uiProfileId)); }
+
+bool ui_backend_getIambicModeIsB() { return core_keyer_getIambicMode() == IAMBIC_MODE_B; }
+void ui_backend_setIambicModeIsB(bool isB) { core_keyer_setIambicMode(isB ? IAMBIC_MODE_B : IAMBIC_MODE_A); }
+uint8_t ui_backend_getWeightPercent() { return core_keyer_getWeightPercent(); }
+void    ui_backend_setWeightPercent(uint8_t p) { core_keyer_setWeightPercent(p); }
+
+bool    ui_backend_getDisplayInvert()      { return services_getDisplayInvert(); }
+void    ui_backend_setDisplayInvert(bool v){ services_setDisplayInvert(v); ui_renderer_setInverted(v); }
+uint8_t ui_backend_getDisplayTimeoutIndex() { return services_getDisplayTimeoutIndex(); }
+void    ui_backend_setDisplayTimeoutIndex(uint8_t i) { services_setDisplayTimeoutIndex(i); }
+
+unsigned long ui_backend_getDisplayTimeoutActualMs() {
+  uint8_t idx = services_getDisplayTimeoutIndex();
+  if (idx >= DISPLAY_TIMEOUT_OPTION_COUNT) idx = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+  uint16_t sec = DISPLAY_TIMEOUT_SECONDS[idx];
+  return (sec == 0) ? 0 : (unsigned long)sec * 1000UL;
+}
+
+void ui_backend_getCallsign(char *out, size_t outSize) { services_getCallsign(out, outSize); }
+void ui_backend_setCallsign(const char *value)         { services_setCallsign(value); }
+bool ui_backend_getCallsignEnabled()                   { return services_getCallsignEnabled(); }
+void ui_backend_setCallsignEnabled(bool enabled)       { services_setCallsignEnabled(enabled); }
+
+bool ui_backend_clockIsSet() { return core_clock_isSet(); }
+void ui_backend_clockSet(uint16_t y, uint8_t mo, uint8_t d, uint8_t h, uint8_t mi) { core_clock_set(y, mo, d, h, mi); }
+void ui_backend_clockGetComponents(uint16_t &y, uint8_t &mo, uint8_t &d, uint8_t &h, uint8_t &mi) {
+  core_clock_getComponents(y, mo, d, h, mi);
+}
+void ui_backend_clockGetDateStr(char *out, size_t outSize) { core_clock_getDateStr(out, outSize); }
+void ui_backend_clockGetTimeStr(char *out, size_t outSize) { core_clock_getTimeStr(out, outSize); }

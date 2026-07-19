@@ -25,6 +25,8 @@
 
 static U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 static uint8_t currentContrast = UI_CONTRAST_DEFAULT;
+static bool isSleeping = false;
+static bool isInverted = false;
 
 static void drawSafeAreaBorder(U8G2 &u8g2) {
   if (!UI_DRAW_BORDER) return;
@@ -81,8 +83,26 @@ void ui_renderer_setContrast(uint8_t value) {
   u8g2.setContrast(currentContrast);
 }
 
+void ui_renderer_setSleeping(bool sleeping) {
+  if (sleeping == isSleeping) return;
+  isSleeping = sleeping;
+  u8g2.setPowerSave(sleeping ? 1 : 0);
+}
+bool ui_renderer_isSleeping() { return isSleeping; }
+
+// Raw controller command (0xA6=normal, 0xA7=inverted) - the standard
+// SH1106/SSD1306-family technique; U8g2 has no higher-level wrapper for
+// this. Unverified on this specific hardware - if it has no visible
+// effect, this is the first thing to check.
+void ui_renderer_setInverted(bool inverted) {
+  isInverted = inverted;
+  u8g2.sendF("c", inverted ? 0xA7 : 0xA6);
+}
+bool ui_renderer_getInverted() { return isInverted; }
+
 void ui_renderer_service(unsigned long now) {
   (void)now;
+  if (isSleeping) { ui_state_consumeDirty(); return; }
   if (!ui_state_consumeDirty()) return;
 
   u8g2.clearBuffer();
@@ -115,6 +135,9 @@ void ui_renderer_service(unsigned long now) {
     case UI_SCREEN_GAME_SPEED:        ui_screens_drawGameSpeed(u8g2);       break;
     case UI_SCREEN_GAME_PAUSE:        ui_screens_drawGamePause(u8g2);       break;
     case UI_SCREEN_VOLUME:            ui_screens_drawVolume(u8g2);          break;
+    case UI_SCREEN_CALLSIGN_EDIT:     ui_screens_drawCallsignEdit(u8g2);    break;
+    case UI_SCREEN_DISPLAY_TIMEOUT:   ui_screens_drawDisplayTimeout(u8g2);  break;
+    case UI_SCREEN_CLOCK_EDIT:        ui_screens_drawClockEdit(u8g2);       break;
     default: break;
   }
 

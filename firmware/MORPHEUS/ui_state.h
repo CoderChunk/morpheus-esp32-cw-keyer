@@ -29,9 +29,9 @@ enum UiScreen {
   UI_SCREEN_DIAG_GPIO, UI_SCREEN_DIAG_LIVE,
   UI_SCREEN_LIVE_MONITOR, UI_SCREEN_TUNE,
   UI_SCREEN_TRAIN_DRILL, UI_SCREEN_TRAIN_FARNSWORTH, UI_SCREEN_TRAIN_EXAM_RESULT,
-  UI_SCREEN_GAME_COPY, UI_SCREEN_GAME_MEMORY, UI_SCREEN_GAME_SPEED, 
-  UI_SCREEN_GAME_PAUSE,
-  UI_SCREEN_VOLUME
+  UI_SCREEN_GAME_COPY, UI_SCREEN_GAME_MEMORY, UI_SCREEN_GAME_SPEED, UI_SCREEN_GAME_PAUSE,
+  UI_SCREEN_VOLUME, UI_SCREEN_CALLSIGN_EDIT, UI_SCREEN_DISPLAY_TIMEOUT,
+  UI_SCREEN_CLOCK_EDIT
 };
 
 void ui_state_init(unsigned long now);
@@ -137,6 +137,12 @@ uint8_t ui_state_getExamTargetLength();
 int  ui_state_getFarnsworthWpm();
 bool ui_state_getFarnsworthPlaying();
 
+const char *ui_state_getCallsignEditBuffer();   // fixed-length, NOT null-terminated - use slot count, never strlen
+uint8_t     ui_state_getCallsignEditCursor();
+uint8_t     ui_state_getCallsignEditSlotCount();
+
+const char *ui_state_getDisplayTimeoutLabel();
+
 // ----------------------------------------------------------------------------
 // Games
 // ----------------------------------------------------------------------------
@@ -164,5 +170,8 @@ bool          ui_state_isGamePaused();
 uint8_t       ui_state_getPauseReturnScreen();
 bool          ui_state_gameShowHelp();
 uint8_t       ui_state_getGamePauseFocus();
+
+int     ui_state_getClockEditFieldValue(uint8_t fieldIndex);   // 0=Year,1=Month,2=Day,3=Hour,4=Minute
+uint8_t ui_state_getClockEditFieldIndex();
 
 #endif

@@ -103,14 +103,19 @@ static void drawGameHelpOverlay(U8G2 &u8g2, const char *line1, const char *line2
 // Vertical position scrollbar for multi-page screens
 static void drawPageScrollbar(U8G2 &u8g2, uint8_t page, uint8_t pageCount) {
   if (pageCount <= 1) return;
-  const uint8_t trackY = (uint8_t)(UI_HEADER_RULE_Y + 2);
-  const uint8_t trackBottom = (uint8_t)(UI_CONTENT_Y1 - 2);
-  const uint8_t trackH = (uint8_t)(trackBottom - trackY);
-  uint8_t thumbH = (uint8_t)(trackH / pageCount);
-  if (thumbH < 6) thumbH = 6;
-  uint8_t maxTop = (uint8_t)((trackH > thumbH) ? (trackH - thumbH) : 0);
-  uint8_t thumbY = (uint8_t)(trackY + ((uint32_t)maxTop * page) / (pageCount - 1));
-  u8g2.drawBox(UI_LIST_SCROLLBAR_X, thumbY, 2, thumbH);
+  const int trackX = UI_CONTENT_X1 - 2;
+  const int trackY = UI_HEADER_RULE_Y + 2;
+  const int trackBottom = UI_CONTENT_Y1 - 2;
+  const int trackH = trackBottom - trackY;
+
+  u8g2.drawVLine(trackX, trackY, trackH);
+
+  int segH = trackH / pageCount;
+  if (segH < 3) segH = 3;
+  int maxOffset = trackH - segH;
+  int segY = trackY + (maxOffset * page) / (pageCount - 1);
+  u8g2.drawVLine(trackX, segY, segH);
+  u8g2.drawVLine(trackX - 1, segY, segH);
 }
 
 static float phaseProgress(unsigned long elapsed, unsigned long start, unsigned long end) {
@@ -145,7 +150,8 @@ void ui_screens_drawSplash(U8G2 &u8g2, unsigned long elapsed) {
   }
   if (elapsed >= UI_BOOT_VERSION_MS) {
     u8g2.setFont(UI_FONT_SMALL);
-    const char *ver = "v1.2.2";
+    char ver[16];
+    snprintf(ver, sizeof(ver), "v%s", FIRMWARE_VERSION);
     int w = u8g2.getStrWidth(ver);
     u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, 7, ver);
   }
@@ -266,8 +272,11 @@ void ui_screens_drawList(U8G2 &u8g2) {
         n.type == NODE_MONITOR || n.type == NODE_TUNE ||
         n.type == NODE_TRAIN_DRILL || n.type == NODE_TRAIN_FARNSWORTH ||
         n.type == NODE_STATS || n.type == NODE_GAME_START || n.type == NODE_GAME_INFO ||
-        n.type == NODE_VOLUME || n.type == NODE_PROFILE_LOAD || n.type == NODE_PROFILE_SAVE) {
+        n.type == NODE_VOLUME || n.type == NODE_PROFILE_LOAD || n.type == NODE_PROFILE_SAVE ||
+        n.type == NODE_CALLSIGN_EDIT || n.type == NODE_CLOCK_EDIT) {
       tag = ">";
+    } else if (n.type == NODE_TIMEOUT) {
+      tag = ui_state_getDisplayTimeoutLabel();
     } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
       tag = ">";
     } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
@@ -621,19 +630,12 @@ void ui_screens_drawDiagLive(U8G2 &u8g2) {
   drawCenteredBarTitle(u8g2, ui_state_getInfoTitle());
   u8g2.setFont(UI_FONT_SMALL);
   int y = UI_HEADER_RULE_Y + 11;
-  bool paginated = ui_state_getDiagLivePageCount() > 1;
-  uint8_t maxLines = paginated ? 3 : 4;
-  for (uint8_t i = 0; i < maxLines; i++) {
+  for (uint8_t i = 0; i < 4; i++) {
     const char *line = ui_state_getDiagLiveLine(i);
     if (line[0] == '\0') continue;
     u8g2.drawStr(UI_CONTENT_X0, y, line);
     y += 12;
   }
-  // if (paginated) {
-  //   const char *hint = "ROTATE=PAGE";
-  //   int hw = u8g2.getStrWidth(hint);
-  //   u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - hw) / 2, UI_CONTENT_Y1 - 2, hint);
-  // }
   drawPageScrollbar(u8g2, ui_state_getDiagLivePage(), ui_state_getDiagLivePageCount());
 }
 
@@ -1020,4 +1022,68 @@ void ui_screens_drawVolume(U8G2 &u8g2) {
   if (fillW > 0) u8g2.drawBox(barX + 1, barY + 1, fillW, barH - 2);
 
   if (ui_state_getVolumePreviewOn()) drawActiveDot(u8g2);
+}
+
+void ui_screens_drawCallsignEdit(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "CALLSIGN");
+
+  const char *buf = ui_state_getCallsignEditBuffer();
+  uint8_t cursor = ui_state_getCallsignEditCursor();
+  uint8_t slots = ui_state_getCallsignEditSlotCount();
+
+  u8g2.setFont(UI_FONT_BOLD);
+  const int charW = 9;
+  int totalW = slots * charW;
+  int startX = UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - totalW) / 2;
+  if (startX < UI_CONTENT_X0) startX = UI_CONTENT_X0;
+  int y = UI_HEADER_RULE_Y + 24;
+
+  for (uint8_t i = 0; i < slots; i++) {
+    int x = startX + i * charW;
+    char ch[2] = { buf[i], '\0' };
+    if (i == cursor) {
+      u8g2.drawBox(x, y - 12, charW - 1, 16);
+      u8g2.setDrawColor(0);
+      u8g2.drawStr(x + 1, y, ch);
+      u8g2.setDrawColor(1);
+    } else {
+      u8g2.drawStr(x + 1, y, ch);
+    }
+  }
+}
+
+void ui_screens_drawDisplayTimeout(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "TIMEOUT");
+  const char *label = ui_state_getDisplayTimeoutLabel();
+  u8g2.setFont(UI_FONT_HERO);
+  int w = u8g2.getStrWidth(label);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 30, label);
+}
+
+void ui_screens_drawClockEdit(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "SET DATE/TIME");
+
+  static const char *fieldLabels[5] = { "Year", "Month", "Day", "Hour", "Minute" };
+  uint8_t focusField = ui_state_getClockEditFieldIndex();
+
+  char line[16];
+  snprintf(line, sizeof(line), "%s", fieldLabels[focusField]);
+  u8g2.setFont(UI_FONT_SMALL);
+  int lw = u8g2.getStrWidth(line);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - lw) / 2, UI_HEADER_RULE_Y + 12, line);
+
+  char valBuf[8];
+  snprintf(valBuf, sizeof(valBuf), "%d", ui_state_getClockEditFieldValue(focusField));
+  u8g2.setFont(UI_FONT_HERO);
+  int vw = u8g2.getStrWidth(valBuf);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - vw) / 2, UI_HEADER_RULE_Y + 40, valBuf);
+
+  char preview[24];
+  snprintf(preview, sizeof(preview), "%04d-%02d-%02d  %02d:%02d",
+           ui_state_getClockEditFieldValue(0), ui_state_getClockEditFieldValue(1),
+           ui_state_getClockEditFieldValue(2), ui_state_getClockEditFieldValue(3),
+           ui_state_getClockEditFieldValue(4));
+  u8g2.setFont(UI_FONT_SMALL);
+  int pw = u8g2.getStrWidth(preview);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - pw) / 2, UI_CONTENT_Y1 - 2, preview);
 }

@@ -29,4 +29,10 @@ void ui_renderer_service(unsigned long now);
 uint8_t ui_renderer_getContrast();
 void    ui_renderer_setContrast(uint8_t value);
 
+void ui_renderer_setSleeping(bool sleeping);
+bool ui_renderer_isSleeping();
+
+void ui_renderer_setInverted(bool inverted);
+bool ui_renderer_getInverted();
+
 #endif // UI_RENDERER_H

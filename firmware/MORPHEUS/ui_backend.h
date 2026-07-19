@@ -185,4 +185,26 @@ uint8_t     ui_backend_profileGetVolume(uint8_t uiProfileId);
 bool        ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId);
 uint8_t 	ui_backend_profileGetContrast(uint8_t uiProfileId);
 
+bool ui_backend_getIambicModeIsB();
+void ui_backend_setIambicModeIsB(bool isB);
+uint8_t ui_backend_getWeightPercent();
+void    ui_backend_setWeightPercent(uint8_t percent);
+
+bool    ui_backend_getDisplayInvert();
+void    ui_backend_setDisplayInvert(bool inverted);
+uint8_t ui_backend_getDisplayTimeoutIndex();
+void    ui_backend_setDisplayTimeoutIndex(uint8_t index);
+unsigned long ui_backend_getDisplayTimeoutActualMs();
+
+void ui_backend_getCallsign(char *out, size_t outSize);
+void ui_backend_setCallsign(const char *value);
+bool ui_backend_getCallsignEnabled();
+void ui_backend_setCallsignEnabled(bool enabled);
+
+bool ui_backend_clockIsSet();
+void ui_backend_clockSet(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute);
+void ui_backend_clockGetComponents(uint16_t &year, uint8_t &month, uint8_t &day, uint8_t &hour, uint8_t &minute);
+void ui_backend_clockGetDateStr(char *out, size_t outSize);
+void ui_backend_clockGetTimeStr(char *out, size_t outSize);
+
 #endif // UI_BACKEND_H

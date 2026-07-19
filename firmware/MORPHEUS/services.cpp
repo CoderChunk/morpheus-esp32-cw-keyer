@@ -13,6 +13,7 @@
  */
 
 #include "services.h"
+#include "core_keyer.h"
 #include "core_decoder.h"
 #include "core_trainer.h"
 #include "config.h"
@@ -32,6 +33,12 @@ struct OperatorSettings {
   uint8_t       kochLevel;
   uint8_t       volumePercent;
   bool          sidetoneEnabled;
+  IambicMode    iambicMode;
+  uint8_t       weightPercent;
+  bool          displayInvert;
+  uint8_t       displayTimeoutIndex;
+  char          callsign[CALLSIGN_MAX_LEN];
+  bool          callsignEnabled;
 };
 
 static Preferences settingsPrefs;
@@ -39,6 +46,15 @@ static OperatorSettings lastSavedSettings;
 static unsigned long lastSettingsSaveMs = 0;
 static bool settingsLoaded = false;
 static bool settingsWasDefaulted = false;
+
+// No core module owns display-invert/timeout or callsign - services.cpp
+// holds their live values directly, in addition to its usual
+// persistence role. UI code reads these via ui_backend, never writes
+// them directly - services.cpp is still the single source of truth.
+static bool    liveDisplayInvert       = DEFAULT_DISPLAY_INVERT;
+static uint8_t liveDisplayTimeoutIndex = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+static char    liveCallsign[CALLSIGN_MAX_LEN] = "";
+static bool    liveCallsignEnabled     = DEFAULT_CALLSIGN_ENABLED;
 
 static OperatorSettings currentSettingsSnapshot() {
   OperatorSettings s;
@@ -55,6 +71,13 @@ static OperatorSettings currentSettingsSnapshot() {
   s.kochLevel = core_trainer_getKochLevel();
   s.volumePercent = core_keyer_getVolume();
   s.sidetoneEnabled = core_keyer_getSidetoneEnabled();
+  s.iambicMode = core_keyer_getIambicMode();
+  s.weightPercent = core_keyer_getWeightPercent();
+  s.displayInvert = liveDisplayInvert;
+  s.displayTimeoutIndex = liveDisplayTimeoutIndex;
+  strncpy(s.callsign, liveCallsign, CALLSIGN_MAX_LEN - 1);
+  s.callsign[CALLSIGN_MAX_LEN - 1] = '\0';
+  s.callsignEnabled = liveCallsignEnabled;
   return s;
 }
 
@@ -71,6 +94,12 @@ void services_loadSettings() {
   defaults.kochLevel      = DEFAULT_KOCH_LEVEL;
   defaults.volumePercent  = DEFAULT_VOLUME_PERCENT;
   defaults.sidetoneEnabled = DEFAULT_SIDETONE_ENABLED;
+  defaults.iambicMode = IAMBIC_MODE_B;
+  defaults.weightPercent = DEFAULT_WEIGHT_PERCENT;
+  defaults.displayInvert = DEFAULT_DISPLAY_INVERT;
+  defaults.displayTimeoutIndex = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+  defaults.callsign[0] = '\0';
+  defaults.callsignEnabled = DEFAULT_CALLSIGN_ENABLED;
 
   OperatorSettings loaded = defaults;
   size_t got = settingsPrefs.getBytes(SETTINGS_NVS_KEY, &loaded, sizeof(loaded));
@@ -88,6 +117,13 @@ void services_loadSettings() {
   core_trainer_setKochLevel(loaded.kochLevel);
   core_keyer_setVolume(loaded.volumePercent);
   core_keyer_setSidetoneEnabled(loaded.sidetoneEnabled);
+  core_keyer_setIambicMode(loaded.iambicMode);
+  core_keyer_setWeightPercent(loaded.weightPercent);
+  liveDisplayInvert = loaded.displayInvert;
+  liveDisplayTimeoutIndex = loaded.displayTimeoutIndex;
+  strncpy(liveCallsign, loaded.callsign, CALLSIGN_MAX_LEN - 1);
+  liveCallsign[CALLSIGN_MAX_LEN - 1] = '\0';
+  liveCallsignEnabled = loaded.callsignEnabled;
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();
@@ -113,7 +149,13 @@ void services_serviceSettings(unsigned long now) {
                  (current.decoderEnabled != lastSavedSettings.decoderEnabled) ||
                  (current.kochLevel != lastSavedSettings.kochLevel) ||
                  (current.volumePercent != lastSavedSettings.volumePercent) ||
-                 (current.sidetoneEnabled != lastSavedSettings.sidetoneEnabled);
+                 (current.sidetoneEnabled != lastSavedSettings.sidetoneEnabled) ||
+                 (current.iambicMode != lastSavedSettings.iambicMode) ||
+                 (current.weightPercent != lastSavedSettings.weightPercent) ||
+                 (current.displayInvert != lastSavedSettings.displayInvert) ||
+                 (current.displayTimeoutIndex != lastSavedSettings.displayTimeoutIndex) ||
+                 (current.callsignEnabled != lastSavedSettings.callsignEnabled) ||
+                 (strcmp(current.callsign, lastSavedSettings.callsign) != 0);
   if (!changed) return;
 
   settingsPrefs.putBytes(SETTINGS_NVS_KEY, &current, sizeof(current));
@@ -137,6 +179,12 @@ void services_factoryResetSettings() {
   core_trainer_resetKochProgress();
   core_keyer_setVolume(DEFAULT_VOLUME_PERCENT);
   core_keyer_setSidetoneEnabled(DEFAULT_SIDETONE_ENABLED);
+  core_keyer_setIambicMode(IAMBIC_MODE_B);
+  core_keyer_setWeightPercent(DEFAULT_WEIGHT_PERCENT);
+  liveDisplayInvert = DEFAULT_DISPLAY_INVERT;
+  liveDisplayTimeoutIndex = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+  liveCallsign[0] = '\0';
+  liveCallsignEnabled = DEFAULT_CALLSIGN_ENABLED;
 
   lastSavedSettings  = currentSettingsSnapshot();
   lastSettingsSaveMs = millis();
@@ -258,3 +306,19 @@ void services_serviceDiagnostics(unsigned long now) { (void)now; }
 
 unsigned long services_getUptimeMs() { return millis(); }
 uint32_t services_getFreeHeapBytes() { return (uint32_t)ESP.getFreeHeap(); }
+
+bool    services_getDisplayInvert()        { return liveDisplayInvert; }
+void    services_setDisplayInvert(bool v)  { liveDisplayInvert = v; }
+uint8_t services_getDisplayTimeoutIndex()  { return liveDisplayTimeoutIndex; }
+void    services_setDisplayTimeoutIndex(uint8_t i) { liveDisplayTimeoutIndex = i; }
+
+void services_getCallsign(char *out, size_t outSize) {
+  strncpy(out, liveCallsign, outSize - 1);
+  out[outSize - 1] = '\0';
+}
+void services_setCallsign(const char *value) {
+  strncpy(liveCallsign, value, CALLSIGN_MAX_LEN - 1);
+  liveCallsign[CALLSIGN_MAX_LEN - 1] = '\0';
+}
+bool services_getCallsignEnabled()       { return liveCallsignEnabled; }
+void services_setCallsignEnabled(bool v) { liveCallsignEnabled = v; }

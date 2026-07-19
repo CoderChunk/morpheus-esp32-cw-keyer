@@ -183,5 +183,6 @@ bool        ui_backend_profileGetPaddleReversed(uint8_t uiProfileId);
 const char *ui_backend_profileGetModeStr(uint8_t uiProfileId);
 uint8_t     ui_backend_profileGetVolume(uint8_t uiProfileId);
 bool        ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId);
+uint8_t 	ui_backend_profileGetContrast(uint8_t uiProfileId);
 
 #endif // UI_BACKEND_H

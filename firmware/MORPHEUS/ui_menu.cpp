@@ -126,8 +126,8 @@ static const UiMenuNode MENU_PROFILES[] = {
 static const UiMenuNode MENU_SET_KEYER[] = {
   N_VAL("WPM",          PARAM_WPM),
   N_TGL("PADDLE REV",   PARAM_PADDLE_REV),
-  N_ROW("IAMBIC MODE",  NODE_STUB),
-  N_ROW("WEIGHTING",    NODE_STUB),
+  N_TGL("IAMBIC MODE",  PARAM_IAMBIC_MODE),
+  N_VAL("WEIGHTING",    PARAM_WEIGHT),
 };
 static const UiMenuNode MENU_SET_AUDIO[] = {
   N_VAL("TONE",         PARAM_TONE),
@@ -135,12 +135,17 @@ static const UiMenuNode MENU_SET_AUDIO[] = {
   { "VOLUME", NODE_VOLUME, nullptr, 0, PARAM_VOLUME },
 };
 static const UiMenuNode MENU_SET_DISPLAY[] = {
-  N_VAL("CONTRAST",     PARAM_CONTRAST),
-  N_ROW("INVERT",       NODE_TOGGLE),
-  N_ROW("TIMEOUT",      NODE_STUB),
+  N_VAL("CONTRAST", PARAM_CONTRAST),
+  N_TGL("INVERT",   PARAM_DISPLAY_INVERT),
+  { "TIMEOUT", NODE_TIMEOUT, nullptr, 0, 0 },
+};
+static const UiMenuNode MENU_CALLSIGN[] = {
+  { "EDIT", NODE_CALLSIGN_EDIT, nullptr, 0, 0 },
+  N_TGL("ENABLED", PARAM_CALLSIGN_EN),
 };
 static const UiMenuNode MENU_SET_SYSTEM[] = {
-  N_ROW("CALLSIGN",      NODE_TOGGLE),
+  N_SUB("CALLSIGN",     MENU_CALLSIGN),
+  { "DATE & TIME", NODE_CLOCK_EDIT, nullptr, 0, 0 },
   N_INF("ABOUT",         INFO_ABOUT),
   N_ACT("RESTART",       ACTION_RESTART),
   N_ACT("FACTORY RESET", ACTION_FACTORY_RESET),

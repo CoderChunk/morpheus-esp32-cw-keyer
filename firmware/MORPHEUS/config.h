@@ -39,6 +39,8 @@
 
 #define OLED_I2C_ADDR     0x3C
 
+static const char 		   FIRMWARE_VERSION[] 		 = "2.1.0";
+
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
 static const unsigned long DEBOUNCE_MS               = 5;
@@ -53,7 +55,7 @@ static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 5;   // bumped: +volumePercent, +sidetoneEnabled
+static const uint16_t      SETTINGS_VERSION          = 6;   // bumped: +callsign, +iambicMode, +weightPercent, +displayTimeout, +displayInvert
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 // ----------------------------------------------------------------------------
@@ -121,5 +123,24 @@ static const bool    DEFAULT_SIDETONE_ENABLED = true;
 // should destroy (same precedent as Statistics/Games high scores).
 // ----------------------------------------------------------------------------
 static const uint16_t PROFILES_VERSION = 2;   // bumped: +contrast, +OUTDOOR, +SILENT
+
+// ----------------------------------------------------------------------------
+// Callsign, Iambic Mode, Weighting, Display Invert/Timeout
+// ----------------------------------------------------------------------------
+static const uint8_t CALLSIGN_MAX_LEN         = 12;   // matches UiStatusData.callsign[12]
+static const bool    DEFAULT_CALLSIGN_ENABLED = false;
+
+static const uint8_t DEFAULT_WEIGHT_PERCENT   = 50;   // 50 = standard 1:1, unchanged behavior
+static const uint8_t WEIGHT_MIN               = 30;
+static const uint8_t WEIGHT_MAX               = 70;
+static const uint8_t WEIGHT_STEP              = 5;
+
+// Timeout is a fixed picklist, not a free-ranging value - stored as an
+// index into DISPLAY_TIMEOUT_SECONDS[], last entry (0) means "Never".
+static const uint16_t DISPLAY_TIMEOUT_SECONDS[] 	= { 15, 30, 60, 120, 300, 600, 900, 1800, 0 };
+static const uint8_t  DISPLAY_TIMEOUT_OPTION_COUNT 	= 9;
+static const uint8_t  DEFAULT_DISPLAY_TIMEOUT_INDEX = 8;   // "Never"
+
+static const bool DEFAULT_DISPLAY_INVERT = false;
 
 #endif // MORPHEUS_CONFIG_H

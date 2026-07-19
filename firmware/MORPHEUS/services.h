@@ -54,4 +54,14 @@ const char   *services_getSettingsNamespace();
 void     services_tickLoopCounter(unsigned long now);
 uint32_t services_getLoopRateHz();
 
+bool    services_getDisplayInvert();
+void    services_setDisplayInvert(bool inverted);
+uint8_t services_getDisplayTimeoutIndex();
+void    services_setDisplayTimeoutIndex(uint8_t index);
+
+void        services_getCallsign(char *out, size_t outSize);
+void        services_setCallsign(const char *value);
+bool        services_getCallsignEnabled();
+void        services_setCallsignEnabled(bool enabled);
+
 #endif // MORPHEUS_SERVICES_H

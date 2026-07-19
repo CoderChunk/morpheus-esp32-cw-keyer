@@ -48,4 +48,10 @@ void ui_screens_drawGameMemory(U8G2 &u8g2);
 void ui_screens_drawGameSpeed(U8G2 &u8g2);
 void ui_screens_drawGamePause(U8G2 &u8g2);
 
+void ui_screens_drawCallsignEdit(U8G2 &u8g2);
+
+void ui_screens_drawDisplayTimeout(U8G2 &u8g2);
+
+void ui_screens_drawClockEdit(U8G2 &u8g2);
+
 #endif

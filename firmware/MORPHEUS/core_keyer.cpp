@@ -143,6 +143,7 @@ static ElementType   currentElement    = ELEM_NONE;
 static KeyerPhase    keyerPhase        = PHASE_IDLE;
 static unsigned long phaseStartMs      = 0;
 static unsigned long currentElementMs  = 0;
+static unsigned long currentGapMs      = 0;
 static bool ditMemory = false;
 static bool dahMemory = false;
 
@@ -155,6 +156,8 @@ static unsigned long ditLengthMs = 1200UL / (unsigned long)DEFAULT_WPM;
 static uint32_t currentSidetoneFreq = TONE_FREQ_HZ;
 static bool     paddleReversed      = DEFAULT_PADDLE_REVERSED;
 static bool     sidetoneEnabled     = DEFAULT_SIDETONE_ENABLED;
+static IambicMode iambicMode        = IAMBIC_MODE_B;   // default preserves prior hardcoded behavior
+static uint8_t    weightPercent     = DEFAULT_WEIGHT_PERCENT;
 
 static bool lastTipActive  = false;
 static bool lastRingActive = false;
@@ -201,6 +204,16 @@ void core_keyer_setSidetoneFreq(uint32_t hz) {
 
 bool core_keyer_getPaddleReversed() { return paddleReversed; }
 void core_keyer_setPaddleReversed(bool reversed) { paddleReversed = reversed; }
+
+IambicMode core_keyer_getIambicMode() { return iambicMode; }
+void core_keyer_setIambicMode(IambicMode mode) { iambicMode = mode; }
+
+uint8_t core_keyer_getWeightPercent() { return weightPercent; }
+void core_keyer_setWeightPercent(uint8_t percent) {
+  if (percent < WEIGHT_MIN) percent = WEIGHT_MIN;
+  if (percent > WEIGHT_MAX) percent = WEIGHT_MAX;
+  weightPercent = percent;
+}
 
 uint8_t core_keyer_getVolume() { return currentVolume; }
 
@@ -252,7 +265,23 @@ static void runStraightKey(bool keyDown, unsigned long now) {
 
 static void startElement(ElementType e, unsigned long now) {
   currentElement = e;
-  currentElementMs = (e == ELEM_DIT) ? ditLengthMs : (ditLengthMs * 3UL);
+  unsigned long baseElementMs = (e == ELEM_DIT) ? ditLengthMs : (ditLengthMs * 3UL);
+
+  // weightPercent=50 -> no change from baseElementMs/ditLengthMs. Total
+  // cycle (element + gap) stays constant at baseElementMs + ditLengthMs
+  // regardless of weight, so WPM/decode timing are unaffected - only the
+  // audible on/off ratio within that fixed cycle shifts.
+  long weightedElementMs = ((long)baseElementMs * (long)weightPercent) / 50L;
+  if (weightedElementMs < 1) weightedElementMs = 1;
+  long delta = weightedElementMs - (long)baseElementMs;
+  long gapMs = (long)ditLengthMs - delta;
+  long minGapMs = (long)ditLengthMs / 4;
+  if (minGapMs < 1) minGapMs = 1;
+  if (gapMs < minGapMs) gapMs = minGapMs;
+
+  currentElementMs = (unsigned long)weightedElementMs;
+  currentGapMs = (unsigned long)gapMs;
+
   keyerPhase = PHASE_SENDING;
   phaseStartMs = now;
   elementStart(now);
@@ -266,8 +295,10 @@ static void runIambicPaddle(bool ditPressed, bool dahPressed, unsigned long now)
       break;
 
     case PHASE_SENDING:
-      if (currentElement == ELEM_DIT && dahPressed) dahMemory = true;
-      if (currentElement == ELEM_DAH && ditPressed) ditMemory = true;
+      if (iambicMode == IAMBIC_MODE_B) {
+        if (currentElement == ELEM_DIT && dahPressed) dahMemory = true;
+        if (currentElement == ELEM_DAH && ditPressed) ditMemory = true;
+      }
 
       if (now - phaseStartMs >= currentElementMs) {
         unsigned long durMs = now - phaseStartMs;
@@ -284,7 +315,7 @@ static void runIambicPaddle(bool ditPressed, bool dahPressed, unsigned long now)
       if (currentElement == ELEM_DIT && dahPressed) dahMemory = true;
       if (currentElement == ELEM_DAH && ditPressed) ditMemory = true;
 
-      if (now - phaseStartMs >= ditLengthMs) {
+      if (now - phaseStartMs >= currentGapMs) {
         if (dahMemory) { dahMemory = false; startElement(ELEM_DAH, now); }
         else if (ditMemory) { ditMemory = false; startElement(ELEM_DIT, now); }
         else if (ditPressed && dahPressed) startElement(currentElement == ELEM_DIT ? ELEM_DAH : ELEM_DIT, now);

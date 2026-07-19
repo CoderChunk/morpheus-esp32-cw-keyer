@@ -21,6 +21,7 @@
 #include "core_games.h"
 #include "core_stats.h"
 #include "core_profiles.h"
+#include "core_clock.h"
 #include "display.h"
 #include "transport.h"
 #include "services.h"
@@ -99,6 +100,7 @@ void setup() {
   core_games_init();
   core_stats_init();
   core_profiles_init();
+  core_clock_init();
 
   services_loadSettings();
   core_stats_recordSessionStart();

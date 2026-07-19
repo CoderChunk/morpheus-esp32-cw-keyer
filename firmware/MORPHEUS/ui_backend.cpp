@@ -10,6 +10,7 @@
 
 #include "ui_backend.h"
 #include "ui_config.h"
+#include "ui_renderer.h"
 #include "config.h"
 #include "core_keyer.h"
 #include "core_decoder.h"
@@ -368,8 +369,17 @@ static ProfileId toCoreProfileId(uint8_t uiProfileId) {
   }
 }
 
-void ui_backend_profileLoad(uint8_t uiProfileId) { core_profiles_load(toCoreProfileId(uiProfileId)); }
-void ui_backend_profileSave(uint8_t uiProfileId) { core_profiles_save(toCoreProfileId(uiProfileId)); }
+void ui_backend_profileLoad(uint8_t uiProfileId) {
+  ProfileId id = toCoreProfileId(uiProfileId);
+  core_profiles_load(id);
+  ui_renderer_setContrast(core_profiles_getContrast(id));
+}
+
+void ui_backend_profileSave(uint8_t uiProfileId) {
+  ProfileId id = toCoreProfileId(uiProfileId);
+  core_profiles_setContrastForSave(id, ui_renderer_getContrast());
+  core_profiles_save(id);
+}
 
 int      ui_backend_profileGetWpm(uint8_t uiProfileId)            { return core_profiles_getWpm(toCoreProfileId(uiProfileId)); }
 uint16_t ui_backend_profileGetToneHz(uint8_t uiProfileId)         { return core_profiles_getToneHz(toCoreProfileId(uiProfileId)); }
@@ -379,3 +389,4 @@ const char *ui_backend_profileGetModeStr(uint8_t uiProfileId) {
 }
 uint8_t  ui_backend_profileGetVolume(uint8_t uiProfileId)          { return core_profiles_getVolume(toCoreProfileId(uiProfileId)); }
 bool     ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId) { return core_profiles_getSidetoneEnabled(toCoreProfileId(uiProfileId)); }
+uint8_t  ui_backend_profileGetContrast(uint8_t uiProfileId)        { return core_profiles_getContrast(toCoreProfileId(uiProfileId)); }

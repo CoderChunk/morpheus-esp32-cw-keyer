@@ -120,6 +120,6 @@ static const bool    DEFAULT_SIDETONE_ENABLED = true;
 // recovery path after resetting live settings, not something a reset
 // should destroy (same precedent as Statistics/Games high scores).
 // ----------------------------------------------------------------------------
-static const uint16_t PROFILES_VERSION = 1;
+static const uint16_t PROFILES_VERSION = 2;   // bumped: +contrast, +OUTDOOR, +SILENT
 
 #endif // MORPHEUS_CONFIG_H

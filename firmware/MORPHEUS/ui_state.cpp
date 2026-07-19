@@ -215,9 +215,9 @@ bool ui_state_isTriggerPlaying(uint8_t paramId) {
 static void buildProfileInfoLines(uint8_t uiProfileId) {
   snprintf(infoLine1, sizeof(infoLine1), "%d WPM  %s",
            ui_backend_profileGetWpm(uiProfileId), ui_backend_profileGetModeStr(uiProfileId));
-  snprintf(infoLine2, sizeof(infoLine2), "Tone %u Hz  Vol %u%%",
-           (unsigned)ui_backend_profileGetToneHz(uiProfileId),
-           (unsigned)ui_backend_profileGetVolume(uiProfileId));
+  snprintf(infoLine2, sizeof(infoLine2), "Vol %u%%  Contrast %u",
+           (unsigned)ui_backend_profileGetVolume(uiProfileId),
+           (unsigned)ui_backend_profileGetContrast(uiProfileId));
   snprintf(infoLine3, sizeof(infoLine3), "Rev:%s  Tone:%s",
            ui_backend_profileGetPaddleReversed(uiProfileId) ? "ON" : "OFF",
            ui_backend_profileGetSidetoneEnabled(uiProfileId) ? "ON" : "OFF");
@@ -263,6 +263,8 @@ static void buildInfoContent(uint8_t infoId) {
     case INFO_PROFILE_PORTABLE: buildProfileInfoLines(UI_PROFILE_PORTABLE); break;
     case INFO_PROFILE_CONTEST:  buildProfileInfoLines(UI_PROFILE_CONTEST);  break;
     case INFO_PROFILE_PRACTICE: buildProfileInfoLines(UI_PROFILE_PRACTICE); break;
+    case INFO_PROFILE_OUTDOOR:  buildProfileInfoLines(UI_PROFILE_OUTDOOR);  break;
+    case INFO_PROFILE_SILENT:   buildProfileInfoLines(UI_PROFILE_SILENT);   break;
     case INFO_GAMES_GUIDE:
       snprintf(infoLine1, sizeof(infoLine1), "Confirm=Play/Retry");
       snprintf(infoLine2, sizeof(infoLine2), "Hold Back=Pause menu");

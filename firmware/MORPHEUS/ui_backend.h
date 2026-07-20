@@ -207,4 +207,16 @@ void ui_backend_clockGetComponents(uint16_t &year, uint8_t &month, uint8_t &day,
 void ui_backend_clockGetDateStr(char *out, size_t outSize);
 void ui_backend_clockGetTimeStr(char *out, size_t outSize);
 
+uint8_t ui_backend_getDateFormat();
+void    ui_backend_setDateFormat(uint8_t index);
+uint8_t ui_backend_getTimeFormat();
+void    ui_backend_setTimeFormat(uint8_t index);
+
+bool ui_backend_getBleEnabled();
+void ui_backend_setBleEnabled(bool enabled);
+bool ui_backend_getBleLedEnabled();
+void ui_backend_setBleLedEnabled(bool enabled);
+void ui_backend_startBlePairing();
+bool ui_backend_isBlePairingActive();
+
 #endif // UI_BACKEND_H

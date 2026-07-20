@@ -40,17 +40,10 @@ void services_loadSettings();
 void services_serviceSettings(unsigned long now);
 void services_factoryResetSettings();
 
-// ----------------------------------------------------------------------------
-// Diagnostics-only additions - NVS status
-// ----------------------------------------------------------------------------
-bool          services_wasSettingsDefaulted();   // true if this boot fell back to defaults
+bool          services_wasSettingsDefaulted();
 unsigned long services_getLastSettingsSaveMs();
 const char   *services_getSettingsNamespace();
 
-// ----------------------------------------------------------------------------
-// Diagnostics-only additions - permanent loop-rate counter. Call
-// services_tickLoopCounter(now) once per loop() iteration, unconditionally.
-// ----------------------------------------------------------------------------
 void     services_tickLoopCounter(unsigned long now);
 uint32_t services_getLoopRateHz();
 
@@ -59,9 +52,23 @@ void    services_setDisplayInvert(bool inverted);
 uint8_t services_getDisplayTimeoutIndex();
 void    services_setDisplayTimeoutIndex(uint8_t index);
 
-void        services_getCallsign(char *out, size_t outSize);
-void        services_setCallsign(const char *value);
-bool        services_getCallsignEnabled();
-void        services_setCallsignEnabled(bool enabled);
+void services_getCallsign(char *out, size_t outSize);
+void services_setCallsign(const char *value);
+bool services_getCallsignEnabled();
+void services_setCallsignEnabled(bool enabled);
+
+uint8_t services_getDateFormat();
+void    services_setDateFormat(uint8_t index);
+uint8_t services_getTimeFormat();
+void    services_setTimeFormat(uint8_t index);
+
+// BLE preferences - the actual on/off state and connection logic live in
+// transport.cpp; services.cpp only persists the user's chosen preference
+// and restores it via transport_setBleEnabled()/core_led_setBleLedEnabled()
+// at boot, same pattern as every other setting in this file.
+bool services_getBleEnabled();
+void services_setBleEnabled(bool enabled);
+bool services_getBleLedEnabled();
+void services_setBleLedEnabled(bool enabled);
 
 #endif // MORPHEUS_SERVICES_H

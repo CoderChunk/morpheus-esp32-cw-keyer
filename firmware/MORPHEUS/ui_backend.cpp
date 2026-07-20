@@ -20,6 +20,7 @@
 #include "core_stats.h"
 #include "core_profiles.h"
 #include "core_clock.h"
+#include "core_led.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -421,3 +422,14 @@ void ui_backend_clockGetComponents(uint16_t &y, uint8_t &mo, uint8_t &d, uint8_t
 }
 void ui_backend_clockGetDateStr(char *out, size_t outSize) { core_clock_getDateStr(out, outSize); }
 void ui_backend_clockGetTimeStr(char *out, size_t outSize) { core_clock_getTimeStr(out, outSize); }
+uint8_t ui_backend_getDateFormat()        { return services_getDateFormat(); }
+void    ui_backend_setDateFormat(uint8_t i) { services_setDateFormat(i); }
+uint8_t ui_backend_getTimeFormat()        { return services_getTimeFormat(); }
+void    ui_backend_setTimeFormat(uint8_t i) { services_setTimeFormat(i); }
+
+bool ui_backend_getBleEnabled()        { return services_getBleEnabled(); }
+void ui_backend_setBleEnabled(bool v)  { services_setBleEnabled(v); }
+bool ui_backend_getBleLedEnabled()     { return services_getBleLedEnabled(); }
+void ui_backend_setBleLedEnabled(bool v) { services_setBleLedEnabled(v); }
+void ui_backend_startBlePairing()      { transport_startPairingWindow(); }
+bool ui_backend_isBlePairingActive()   { return transport_isPairingActive(); }

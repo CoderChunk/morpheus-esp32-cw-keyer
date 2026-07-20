@@ -138,6 +138,7 @@ void ui_renderer_service(unsigned long now) {
     case UI_SCREEN_CALLSIGN_EDIT:     ui_screens_drawCallsignEdit(u8g2);    break;
     case UI_SCREEN_DISPLAY_TIMEOUT:   ui_screens_drawDisplayTimeout(u8g2);  break;
     case UI_SCREEN_CLOCK_EDIT:        ui_screens_drawClockEdit(u8g2);       break;
+    case UI_SCREEN_DATE_FORMAT:       ui_screens_drawDateFormat(u8g2);      break;
     default: break;
   }
 

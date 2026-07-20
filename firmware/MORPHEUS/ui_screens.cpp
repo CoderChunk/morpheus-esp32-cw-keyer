@@ -273,10 +273,13 @@ void ui_screens_drawList(U8G2 &u8g2) {
         n.type == NODE_TRAIN_DRILL || n.type == NODE_TRAIN_FARNSWORTH ||
         n.type == NODE_STATS || n.type == NODE_GAME_START || n.type == NODE_GAME_INFO ||
         n.type == NODE_VOLUME || n.type == NODE_PROFILE_LOAD || n.type == NODE_PROFILE_SAVE ||
-        n.type == NODE_CALLSIGN_EDIT || n.type == NODE_CLOCK_EDIT) {
+        n.type == NODE_CALLSIGN_EDIT || n.type == NODE_CLOCK_EDIT || 
+        n.type == NODE_BLE_PAIR_NOW) {
       tag = ">";
     } else if (n.type == NODE_TIMEOUT) {
       tag = ui_state_getDisplayTimeoutLabel();
+    } else if (n.type == NODE_DATE_FORMAT) {
+      tag = ui_state_getDateFormatLabel();
     } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
       tag = ">";
     } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
@@ -1086,4 +1089,12 @@ void ui_screens_drawClockEdit(U8G2 &u8g2) {
   u8g2.setFont(UI_FONT_SMALL);
   int pw = u8g2.getStrWidth(preview);
   u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - pw) / 2, UI_CONTENT_Y1 - 2, preview);
+}
+
+void ui_screens_drawDateFormat(U8G2 &u8g2) {
+  drawCenteredBarTitle(u8g2, "DATE FORMAT");
+  const char *label = ui_state_getDateFormatLabel();
+  u8g2.setFont(UI_FONT_BOLD);
+  int w = u8g2.getStrWidth(label);
+  u8g2.drawStr(UI_CONTENT_X0 + ((int)UI_CONTENT_WIDTH - w) / 2, UI_HEADER_RULE_Y + 36, label);
 }

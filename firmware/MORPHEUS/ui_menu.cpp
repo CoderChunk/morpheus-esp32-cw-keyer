@@ -73,7 +73,9 @@ static const UiMenuNode MENU_STATS[] = {
 
 static const UiMenuNode MENU_BLUETOOTH[] = {
   N_INF("STATUS",       INFO_BLE_STATUS),
-  N_ROW("PAIRING",      NODE_STUB),
+  N_TGL("BLE",          PARAM_BLE_ENABLED),
+  N_TGL("STATUS LED",   PARAM_BLE_LED_ENABLED),
+  { "PAIR NOW", NODE_BLE_PAIR_NOW, nullptr, 0, 0 },
   N_ACT("BOND RESET",   ACTION_BOND_RESET),
 };
 static const UiMenuNode MENU_CONNECTIVITY[] = {
@@ -143,9 +145,14 @@ static const UiMenuNode MENU_CALLSIGN[] = {
   { "EDIT", NODE_CALLSIGN_EDIT, nullptr, 0, 0 },
   N_TGL("ENABLED", PARAM_CALLSIGN_EN),
 };
+static const UiMenuNode MENU_DATETIME[] = {
+  { "SET DATE/TIME", NODE_CLOCK_EDIT, nullptr, 0, 0 },
+  { "DATE FORMAT",   NODE_DATE_FORMAT, nullptr, 0, 0 },
+  N_TGL("TIME FORMAT", PARAM_TIME_FORMAT),
+};
 static const UiMenuNode MENU_SET_SYSTEM[] = {
   N_SUB("CALLSIGN",     MENU_CALLSIGN),
-  { "DATE & TIME", NODE_CLOCK_EDIT, nullptr, 0, 0 },
+  N_SUB("DATE&TIME",    MENU_DATETIME),
   N_INF("ABOUT",         INFO_ABOUT),
   N_ACT("RESTART",       ACTION_RESTART),
   N_ACT("FACTORY RESET", ACTION_FACTORY_RESET),

@@ -31,7 +31,7 @@ enum UiScreen {
   UI_SCREEN_TRAIN_DRILL, UI_SCREEN_TRAIN_FARNSWORTH, UI_SCREEN_TRAIN_EXAM_RESULT,
   UI_SCREEN_GAME_COPY, UI_SCREEN_GAME_MEMORY, UI_SCREEN_GAME_SPEED, UI_SCREEN_GAME_PAUSE,
   UI_SCREEN_VOLUME, UI_SCREEN_CALLSIGN_EDIT, UI_SCREEN_DISPLAY_TIMEOUT,
-  UI_SCREEN_CLOCK_EDIT
+  UI_SCREEN_CLOCK_EDIT, UI_SCREEN_DATE_FORMAT, UI_SCREEN_TIME_FORMAT
 };
 
 void ui_state_init(unsigned long now);
@@ -173,5 +173,7 @@ uint8_t       ui_state_getGamePauseFocus();
 
 int     ui_state_getClockEditFieldValue(uint8_t fieldIndex);   // 0=Year,1=Month,2=Day,3=Hour,4=Minute
 uint8_t ui_state_getClockEditFieldIndex();
+const char *ui_state_getDateFormatLabel();
+const char *ui_state_getTimeFormatLabel();
 
 #endif

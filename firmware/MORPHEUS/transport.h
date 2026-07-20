@@ -54,4 +54,9 @@ bool transport_hasTrustedDevice();
 // Diagnostics addition - current negotiated MTU, 0 if not connected.
 uint16_t transport_getCurrentMtu();
 
+bool transport_getBleEnabled();
+void transport_setBleEnabled(bool enabled);
+void transport_startPairingWindow();
+bool transport_isPairingActive();
+
 #endif // MORPHEUS_TRANSPORT_H

@@ -93,6 +93,7 @@ static void handleGamePause(const UiEvent &ev);
 
 static void pushClockEdit();
 static void handleClockEdit(const UiEvent &ev);
+static void handleDateFormat(const UiEvent &ev);
 
 uint16_t ui_state_getMenuAnimFrame() { return menuAnimFrame; }
 
@@ -162,18 +163,24 @@ static bool getToggleValue(uint8_t paramId) {
     case PARAM_IAMBIC_MODE:    return ui_backend_getIambicModeIsB();
     case PARAM_DISPLAY_INVERT: return ui_backend_getDisplayInvert();
     case PARAM_CALLSIGN_EN:    return ui_backend_getCallsignEnabled();
+    case PARAM_TIME_FORMAT:    return ui_backend_getTimeFormat() == 1;
+    case PARAM_BLE_ENABLED:    return ui_backend_getBleEnabled();
+    case PARAM_BLE_LED_ENABLED:return ui_backend_getBleLedEnabled();
     default: return false;
   }
 }
 static void setToggleValue(uint8_t paramId, bool v) {
   switch (paramId) {
-    case PARAM_PADDLE_REV:     ui_backend_setPaddleReversed(v); break;
-    case PARAM_MODE:           ui_backend_setModeIsPaddle(v); break;
-    case PARAM_DECODER_EN:     ui_backend_setDecoderEnabled(v); break;
-    case PARAM_SIDETONE_EN:    ui_backend_setSidetoneEnabled(v); break;
-    case PARAM_IAMBIC_MODE:    ui_backend_setIambicModeIsB(v); break;
-    case PARAM_DISPLAY_INVERT: ui_backend_setDisplayInvert(v); break;
-    case PARAM_CALLSIGN_EN:    ui_backend_setCallsignEnabled(v); break;
+    case PARAM_PADDLE_REV:     ui_backend_setPaddleReversed(v);     break;
+    case PARAM_MODE:           ui_backend_setModeIsPaddle(v);       break;
+    case PARAM_DECODER_EN:     ui_backend_setDecoderEnabled(v);     break;
+    case PARAM_SIDETONE_EN:    ui_backend_setSidetoneEnabled(v);    break;
+    case PARAM_IAMBIC_MODE:    ui_backend_setIambicModeIsB(v);      break;
+    case PARAM_DISPLAY_INVERT: ui_backend_setDisplayInvert(v);      break;
+    case PARAM_CALLSIGN_EN:    ui_backend_setCallsignEnabled(v);    break;
+    case PARAM_TIME_FORMAT:    ui_backend_setTimeFormat(v ? 1 : 0); break;
+    case PARAM_BLE_ENABLED:    ui_backend_setBleEnabled(v);         break;
+    case PARAM_BLE_LED_ENABLED:ui_backend_setBleLedEnabled(v);      break;
     default: break;
   }
 }
@@ -186,6 +193,9 @@ static const char *getToggleLabel(uint8_t paramId) {
     case PARAM_IAMBIC_MODE:    return "IAMBIC MODE";
     case PARAM_DISPLAY_INVERT: return "INVERT";
     case PARAM_CALLSIGN_EN:    return "CALLSIGN";
+    case PARAM_TIME_FORMAT:    return "TIME FORMAT";
+    case PARAM_BLE_ENABLED:    return "BLE";
+    case PARAM_BLE_LED_ENABLED:return "STATUS LED";
     default: return "";
   }
 }
@@ -193,13 +203,15 @@ static void getToggleOptionLabelsShort(uint8_t paramId, const char *&offLabel, c
   switch (paramId) {
     case PARAM_MODE:        offLabel = "STR"; onLabel = "PAD"; break;
     case PARAM_IAMBIC_MODE: offLabel = "A";   onLabel = "B";   break;
+    case PARAM_TIME_FORMAT: offLabel = "24H"; onLabel = "12H"; break;
     default:                offLabel = "OFF"; onLabel = "ON";  break;
   }
 }
 static void getToggleOptionLabelsFull(uint8_t paramId, const char *&offLabel, const char *&onLabel) {
   switch (paramId) {
     case PARAM_MODE:        offLabel = "Straight Key"; onLabel = "Paddle Key"; break;
-    case PARAM_IAMBIC_MODE: offLabel = "Mode A";        onLabel = "Mode B";    break;
+    case PARAM_IAMBIC_MODE: offLabel = "Mode A";       onLabel = "Mode B";     break;
+    case PARAM_TIME_FORMAT: offLabel = "24-hour";      onLabel = "12-hour";    break;
     default: getToggleOptionLabelsShort(paramId, offLabel, onLabel); break;
   }
 }
@@ -1057,6 +1069,17 @@ static void handleList(const UiEvent &ev) {
         markDirty();
       } else if (n.type == NODE_CLOCK_EDIT) {
         pushClockEdit();
+      } else if (n.type == NODE_DATE_FORMAT) {
+        currentScreen = UI_SCREEN_DATE_FORMAT;
+        markDirty();
+      } else if (n.type == NODE_BLE_PAIR_NOW) {
+        if (!ui_backend_getBleEnabled()) {
+          showActionToast("BLE IS OFF");
+        } else {
+          ui_backend_startBlePairing();
+          showActionToast("PAIRING MODE ON");
+        }
+        markDirty();
       } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
         uint8_t slot = (uint8_t)(n.paramId - 1);
         if (audioResourceBusy() && !ui_backend_isMemoryPlaying()) {
@@ -1334,6 +1357,33 @@ static void handleDisplayTimeout(const UiEvent &ev) {
       break;
     default: break;
   }
+}
+
+static const char *DATE_FORMAT_LABELS[DATE_FORMAT_COUNT] = { "YYYY-MM-DD", "DD-MM-YYYY", "MM-DD-YYYY" };
+
+static void handleDateFormat(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int idx = (int)ui_backend_getDateFormat() + ev.detents;
+      if (idx < 0) idx = 0;
+      if (idx > DATE_FORMAT_COUNT - 1) idx = DATE_FORMAT_COUNT - 1;
+      ui_backend_setDateFormat((uint8_t)idx);
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+    case UI_EV_BACK:
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+const char *ui_state_getDateFormatLabel() {
+  uint8_t idx = ui_backend_getDateFormat();
+  if (idx >= DATE_FORMAT_COUNT) idx = DEFAULT_DATE_FORMAT;
+  return DATE_FORMAT_LABELS[idx];
 }
 
 const char *ui_state_getDisplayTimeoutLabel() {
@@ -1707,6 +1757,7 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_CALLSIGN_EDIT:     handleCallsignEdit(ev);     break;
     case UI_SCREEN_DISPLAY_TIMEOUT:   handleDisplayTimeout(ev);   break;
     case UI_SCREEN_CLOCK_EDIT:        handleClockEdit(ev);        break;
+    case UI_SCREEN_DATE_FORMAT:       handleDateFormat(ev);       break;
     default: break;
   }
 }

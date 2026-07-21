@@ -91,6 +91,8 @@ static bool lastReceiving = false;
 static bool lastDecoderEnabled = true;
 static char lastLiveWord[UI_LINE_CHARS + 1] = "";
 static char lastLivePattern[UI_PATTERN_CHARS + 1] = "";
+static char lastCallsign[12] = "";
+static bool lastCallsignEnabled = false;
 
 static void pollLiveData(unsigned long now) {
   if (now - lastPollMs < DISPLAY_INTERVAL_MS) return;
@@ -109,6 +111,37 @@ static void pollLiveData(unsigned long now) {
 
   bool decoderEn = ui_backend_getDecoderEnabled();
   if (decoderEn != lastDecoderEnabled) { uiStatus.decoderEnabled = decoderEn; lastDecoderEnabled = decoderEn; changed = true; }
+
+  char callsign[12];
+  ui_backend_getCallsign(callsign, sizeof(callsign));
+  bool callsignEn = ui_backend_getCallsignEnabled();
+  if (strcmp(callsign, lastCallsign) != 0 || callsignEn != lastCallsignEnabled) {
+    strncpy(uiStatus.callsign, callsign, sizeof(uiStatus.callsign) - 1);
+    uiStatus.callsign[sizeof(uiStatus.callsign) - 1] = '\0';
+    uiStatus.callsignEnabled = callsignEn;
+    strncpy(lastCallsign, callsign, sizeof(lastCallsign) - 1);
+    lastCallsign[sizeof(lastCallsign) - 1] = '\0';
+    lastCallsignEnabled = callsignEn;
+    changed = true;
+  }
+
+  static char lastDateStr[11] = "";
+  static char lastTimeStr[6] = "";
+
+  char dateStr[11], timeStr[6];
+  ui_backend_clockGetDateStr(dateStr, sizeof(dateStr));
+  ui_backend_clockGetTimeStr(timeStr, sizeof(timeStr));
+  if (strcmp(dateStr, lastDateStr) != 0 || strcmp(timeStr, lastTimeStr) != 0) {
+    strncpy(uiStatus.date, dateStr, sizeof(uiStatus.date) - 1);
+    uiStatus.date[sizeof(uiStatus.date) - 1] = '\0';
+    strncpy(uiStatus.time, timeStr, sizeof(uiStatus.time) - 1);
+    uiStatus.time[sizeof(uiStatus.time) - 1] = '\0';
+    strncpy(lastDateStr, dateStr, sizeof(lastDateStr) - 1);
+    lastDateStr[sizeof(lastDateStr) - 1] = '\0';
+    strncpy(lastTimeStr, timeStr, sizeof(lastTimeStr) - 1);
+    lastTimeStr[sizeof(lastTimeStr) - 1] = '\0';
+    changed = true;
+  }
 
   char liveWord[UI_LINE_CHARS + 1];
   ui_backend_getLiveWord(liveWord, sizeof(liveWord));
@@ -140,6 +173,7 @@ void display_init() {
   ui_input_init();
   ui_state_init(millis());
   ui_renderer_init();
+  ui_renderer_setInverted(ui_backend_getDisplayInvert());
 }
 
 void display_service(unsigned long now) {

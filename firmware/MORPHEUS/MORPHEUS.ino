@@ -21,6 +21,8 @@
 #include "core_games.h"
 #include "core_stats.h"
 #include "core_profiles.h"
+#include "core_clock.h"
+#include "core_led.h"
 #include "display.h"
 #include "transport.h"
 #include "services.h"
@@ -29,6 +31,7 @@ void events_onKeyDown(unsigned long now) {
 #if FEATURE_SERIAL
   services_logKeyDown(now);
 #endif
+  core_led_pulseTx();
 }
 
 void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now) {
@@ -99,6 +102,8 @@ void setup() {
   core_games_init();
   core_stats_init();
   core_profiles_init();
+  core_clock_init();
+  core_led_init();
 
   services_loadSettings();
   core_stats_recordSessionStart();
@@ -136,6 +141,7 @@ void loop() {
   core_games_service(now);
   core_stats_service(now);
   services_serviceSettings(now);
+  core_led_service(now);
 
 #if FEATURE_BLE
   transport_service(now);

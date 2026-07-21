@@ -26,18 +26,21 @@
 #define FEATURE_OLED                  1
 #define FEATURE_BLE                   1
 #define FEATURE_SIDETONE              1
-#define FEATURE_SERIAL                1
+#define FEATURE_SERIAL                0
 #define FEATURE_DEBUG_SERIAL_COMMANDS 0
 
-#define DEBUG_KEYER_TONE 1
+#define DEBUG_KEYER_TONE  0
 
 #define PIN_OLED_SDA      21
 #define PIN_OLED_SCL      22
 #define PIN_JACK_TIP      25
 #define PIN_JACK_RING     26
 #define PIN_BUZZER        18
+#define PIN_STATUS_LED 	  27
 
 #define OLED_I2C_ADDR     0x3C
+
+static const char 		   FIRMWARE_VERSION[] 		 = "2.1.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -53,7 +56,7 @@ static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 5;   // bumped: +volumePercent, +sidetoneEnabled
+static const uint16_t      SETTINGS_VERSION          = 8;   // bumped: +bleEnabled, +bleLedEnabled
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 // ----------------------------------------------------------------------------
@@ -120,6 +123,58 @@ static const bool    DEFAULT_SIDETONE_ENABLED = true;
 // recovery path after resetting live settings, not something a reset
 // should destroy (same precedent as Statistics/Games high scores).
 // ----------------------------------------------------------------------------
-static const uint16_t PROFILES_VERSION = 1;
+static const uint16_t PROFILES_VERSION = 2;   // bumped: +contrast, +OUTDOOR, +SILENT
+
+// ----------------------------------------------------------------------------
+// Callsign, Iambic Mode, Weighting, Display Invert/Timeout
+// ----------------------------------------------------------------------------
+static const uint8_t CALLSIGN_MAX_LEN         = 12;   // matches UiStatusData.callsign[12]
+static const bool    DEFAULT_CALLSIGN_ENABLED = false;
+
+static const uint8_t DEFAULT_WEIGHT_PERCENT   = 50;   // 50 = standard 1:1, unchanged behavior
+static const uint8_t WEIGHT_MIN               = 30;
+static const uint8_t WEIGHT_MAX               = 70;
+static const uint8_t WEIGHT_STEP              = 5;
+
+// Timeout is a fixed picklist, not a free-ranging value - stored as an
+// index into DISPLAY_TIMEOUT_SECONDS[], last entry (0) means "Never".
+static const uint16_t DISPLAY_TIMEOUT_SECONDS[] 	= { 15, 30, 60, 120, 300, 600, 900, 1800, 0 };
+static const uint8_t  DISPLAY_TIMEOUT_OPTION_COUNT 	= 9;
+static const uint8_t  DEFAULT_DISPLAY_TIMEOUT_INDEX = 8;   // "Never"
+
+static const bool DEFAULT_DISPLAY_INVERT = false;
+
+// ----------------------------------------------------------------------------
+// Date/Time display format - fixed picklists, same pattern as Display
+// Timeout. Formatting itself is applied inside core_clock.cpp, so every
+// consumer (currently just Home) picks up the choice automatically.
+// ----------------------------------------------------------------------------
+static const uint8_t DATE_FORMAT_COUNT 	 = 3;   // 0=YYYY-MM-DD, 1=DD-MM-YYYY, 2=MM-DD-YYYY
+static const uint8_t DEFAULT_DATE_FORMAT = 0;
+
+static const uint8_t TIME_FORMAT_COUNT 	 = 2;   // 0=24-hour, 1=12-hour
+static const uint8_t DEFAULT_TIME_FORMAT = 0;
+
+// ----------------------------------------------------------------------------
+// Status LED (single RED LED, GPIO27, non-PWM - pattern-based, not
+// brightness-based). See project hardware notes: this pin was
+// deliberately kept single/minimal to preserve future ESP32-C3 port
+// viability (GPIO budget concern already on record).
+// ----------------------------------------------------------------------------
+static const unsigned long LED_BLINK_SLOW_MS = 600;   // BLE advertising
+static const unsigned long LED_BLINK_FAST_MS = 150;   // BLE pairing in progress
+static const unsigned long LED_TX_PULSE_MS   = 40;    // minimum visible pulse on a real keydown
+
+// ----------------------------------------------------------------------------
+// LED Morse Trainer - visual dit/dah flash durations, independent of the
+// live sidetone/keyer WPM (deliberately slower/more deliberate by
+// default - reading a flash is a different skill than hearing a tone,
+// and defaulting to keyer WPM could be uncomfortably fast for a new
+// visual-copy learner). Adjustable the same way other trainer speeds are.
+// ----------------------------------------------------------------------------
+static const int DEFAULT_LED_TRAINER_WPM = 10;
+static const unsigned long BLE_PAIRING_WINDOW_MS = 60000;   // pairing mode auto-expires after 1 min
+static const unsigned long LED_CONNECT_CONFIRM_BLINK_MS = 200;
+static const uint8_t       LED_CONNECT_CONFIRM_BLINK_COUNT = 3;
 
 #endif // MORPHEUS_CONFIG_H

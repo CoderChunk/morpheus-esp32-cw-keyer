@@ -10,6 +10,7 @@
 
 #include "ui_backend.h"
 #include "ui_config.h"
+#include "ui_renderer.h"
 #include "config.h"
 #include "core_keyer.h"
 #include "core_decoder.h"
@@ -18,6 +19,8 @@
 #include "core_games.h"
 #include "core_stats.h"
 #include "core_profiles.h"
+#include "core_clock.h"
+#include "core_led.h"
 #include "transport.h"
 #include "services.h"
 #include <esp_system.h>
@@ -368,8 +371,17 @@ static ProfileId toCoreProfileId(uint8_t uiProfileId) {
   }
 }
 
-void ui_backend_profileLoad(uint8_t uiProfileId) { core_profiles_load(toCoreProfileId(uiProfileId)); }
-void ui_backend_profileSave(uint8_t uiProfileId) { core_profiles_save(toCoreProfileId(uiProfileId)); }
+void ui_backend_profileLoad(uint8_t uiProfileId) {
+  ProfileId id = toCoreProfileId(uiProfileId);
+  core_profiles_load(id);
+  ui_renderer_setContrast(core_profiles_getContrast(id));
+}
+
+void ui_backend_profileSave(uint8_t uiProfileId) {
+  ProfileId id = toCoreProfileId(uiProfileId);
+  core_profiles_setContrastForSave(id, ui_renderer_getContrast());
+  core_profiles_save(id);
+}
 
 int      ui_backend_profileGetWpm(uint8_t uiProfileId)            { return core_profiles_getWpm(toCoreProfileId(uiProfileId)); }
 uint16_t ui_backend_profileGetToneHz(uint8_t uiProfileId)         { return core_profiles_getToneHz(toCoreProfileId(uiProfileId)); }
@@ -379,3 +391,45 @@ const char *ui_backend_profileGetModeStr(uint8_t uiProfileId) {
 }
 uint8_t  ui_backend_profileGetVolume(uint8_t uiProfileId)          { return core_profiles_getVolume(toCoreProfileId(uiProfileId)); }
 bool     ui_backend_profileGetSidetoneEnabled(uint8_t uiProfileId) { return core_profiles_getSidetoneEnabled(toCoreProfileId(uiProfileId)); }
+uint8_t  ui_backend_profileGetContrast(uint8_t uiProfileId)        { return core_profiles_getContrast(toCoreProfileId(uiProfileId)); }
+
+bool ui_backend_getIambicModeIsB() { return core_keyer_getIambicMode() == IAMBIC_MODE_B; }
+void ui_backend_setIambicModeIsB(bool isB) { core_keyer_setIambicMode(isB ? IAMBIC_MODE_B : IAMBIC_MODE_A); }
+uint8_t ui_backend_getWeightPercent() { return core_keyer_getWeightPercent(); }
+void    ui_backend_setWeightPercent(uint8_t p) { core_keyer_setWeightPercent(p); }
+
+bool    ui_backend_getDisplayInvert()      { return services_getDisplayInvert(); }
+void    ui_backend_setDisplayInvert(bool v){ services_setDisplayInvert(v); ui_renderer_setInverted(v); }
+uint8_t ui_backend_getDisplayTimeoutIndex() { return services_getDisplayTimeoutIndex(); }
+void    ui_backend_setDisplayTimeoutIndex(uint8_t i) { services_setDisplayTimeoutIndex(i); }
+
+unsigned long ui_backend_getDisplayTimeoutActualMs() {
+  uint8_t idx = services_getDisplayTimeoutIndex();
+  if (idx >= DISPLAY_TIMEOUT_OPTION_COUNT) idx = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+  uint16_t sec = DISPLAY_TIMEOUT_SECONDS[idx];
+  return (sec == 0) ? 0 : (unsigned long)sec * 1000UL;
+}
+
+void ui_backend_getCallsign(char *out, size_t outSize) { services_getCallsign(out, outSize); }
+void ui_backend_setCallsign(const char *value)         { services_setCallsign(value); }
+bool ui_backend_getCallsignEnabled()                   { return services_getCallsignEnabled(); }
+void ui_backend_setCallsignEnabled(bool enabled)       { services_setCallsignEnabled(enabled); }
+
+bool ui_backend_clockIsSet() { return core_clock_isSet(); }
+void ui_backend_clockSet(uint16_t y, uint8_t mo, uint8_t d, uint8_t h, uint8_t mi) { core_clock_set(y, mo, d, h, mi); }
+void ui_backend_clockGetComponents(uint16_t &y, uint8_t &mo, uint8_t &d, uint8_t &h, uint8_t &mi) {
+  core_clock_getComponents(y, mo, d, h, mi);
+}
+void ui_backend_clockGetDateStr(char *out, size_t outSize) { core_clock_getDateStr(out, outSize); }
+void ui_backend_clockGetTimeStr(char *out, size_t outSize) { core_clock_getTimeStr(out, outSize); }
+uint8_t ui_backend_getDateFormat()        { return services_getDateFormat(); }
+void    ui_backend_setDateFormat(uint8_t i) { services_setDateFormat(i); }
+uint8_t ui_backend_getTimeFormat()        { return services_getTimeFormat(); }
+void    ui_backend_setTimeFormat(uint8_t i) { services_setTimeFormat(i); }
+
+bool ui_backend_getBleEnabled()        { return services_getBleEnabled(); }
+void ui_backend_setBleEnabled(bool v)  { services_setBleEnabled(v); }
+bool ui_backend_getBleLedEnabled()     { return services_getBleLedEnabled(); }
+void ui_backend_setBleLedEnabled(bool v) { services_setBleLedEnabled(v); }
+void ui_backend_startBlePairing()      { transport_startPairingWindow(); }
+bool ui_backend_isBlePairingActive()   { return transport_isPairingActive(); }

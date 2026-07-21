@@ -6,6 +6,7 @@
 enum OperatingMode { MODE_STRAIGHT, MODE_PADDLE };
 enum ElementType   { ELEM_NONE, ELEM_DIT, ELEM_DAH };
 enum KeyState      { STATE_IDLE, STATE_DIT, STATE_DAH };
+enum IambicMode : uint8_t { IAMBIC_MODE_A, IAMBIC_MODE_B };
 
 void core_keyer_init();
 void core_keyer_service(unsigned long now);
@@ -41,5 +42,10 @@ uint8_t core_keyer_getVolume();
 void    core_keyer_setVolume(uint8_t percent);
 bool    core_keyer_getSidetoneEnabled();
 void    core_keyer_setSidetoneEnabled(bool enabled);
+
+IambicMode core_keyer_getIambicMode();
+void       core_keyer_setIambicMode(IambicMode mode);
+uint8_t    core_keyer_getWeightPercent();
+void       core_keyer_setWeightPercent(uint8_t percent);
 
 #endif // MORPHEUS_CORE_KEYER_H

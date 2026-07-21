@@ -3,7 +3,8 @@
 #include <Arduino.h>
 #include "core_keyer.h"
 
-enum ProfileId : uint8_t { PROFILE_DEFAULT = 0, PROFILE_PORTABLE, PROFILE_CONTEST, PROFILE_PRACTICE, PROFILE_COUNT };
+enum ProfileId : uint8_t { PROFILE_DEFAULT = 0, PROFILE_PORTABLE, PROFILE_CONTEST, PROFILE_PRACTICE,
+                           PROFILE_OUTDOOR, PROFILE_SILENT, PROFILE_COUNT };
 
 void core_profiles_init();
 
@@ -23,5 +24,8 @@ bool          core_profiles_getPaddleReversed(ProfileId id);
 OperatingMode core_profiles_getMode(ProfileId id);
 uint8_t       core_profiles_getVolume(ProfileId id);
 bool          core_profiles_getSidetoneEnabled(ProfileId id);
+uint8_t       core_profiles_getContrast(ProfileId id);
+void 		  core_profiles_setContrastForSave(ProfileId id, uint8_t contrast);
+
 
 #endif

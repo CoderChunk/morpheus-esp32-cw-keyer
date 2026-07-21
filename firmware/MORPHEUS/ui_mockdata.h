@@ -41,7 +41,7 @@ struct UiStatusData {
   char callsign[12];
   bool callsignEnabled;
   char date[11];
-  char time[6];
+  char time[9];   // was 6 - "HH:MM AM/PM" (12-hour format) needs 8 chars + null
 };
 
 extern UiStatusData uiStatus;

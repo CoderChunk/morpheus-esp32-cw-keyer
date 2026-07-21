@@ -28,12 +28,13 @@
 #include "ui_renderer.h"
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 UiStatusData uiStatus = {
   18, 750, false, UI_MODE_PADDLE,
   "SECR", true, false, true,
   "CQ CQ DE MORPHEUS", "TNX FER QSO", "73", ".--",
-  "VU2ABC", true,
+  "", false,
   "2026-07-12", "21:35"
 };
 
@@ -82,11 +83,17 @@ static bool audioResourceBusy();
 static void handleGameCopy(const UiEvent &ev);
 static void handleGameMemory(const UiEvent &ev);
 static void handleGameSpeed(const UiEvent &ev);
+static void pushCallsignEdit();
+static void handleCallsignEdit(const UiEvent &ev);
 
 static UiScreen pauseReturnScreen = UI_SCREEN_HOME;
 static uint8_t  gamePauseFocusIdx = 0;
 
 static void handleGamePause(const UiEvent &ev);
+
+static void pushClockEdit();
+static void handleClockEdit(const UiEvent &ev);
+static void handleDateFormat(const UiEvent &ev);
 
 uint16_t ui_state_getMenuAnimFrame() { return menuAnimFrame; }
 
@@ -98,13 +105,13 @@ static void setInfoTitleFrom(const char *label) {
   strncpy(infoTitle, label, sizeof(infoTitle) - 1);
   infoTitle[sizeof(infoTitle) - 1] = '\0';
 }
-
 static int getParamValue(uint8_t paramId) {
   switch (paramId) {
     case PARAM_WPM:      return ui_backend_getWpm();
     case PARAM_TONE:     return (int)ui_backend_getToneHz();
     case PARAM_CONTRAST: return (int)ui_renderer_getContrast();
     case PARAM_VOLUME:   return (int)ui_backend_getVolume();
+    case PARAM_WEIGHT:   return (int)ui_backend_getWeightPercent();
     default: return 0;
   }
 }
@@ -114,6 +121,7 @@ static void setParamValue(uint8_t paramId, int value) {
     case PARAM_TONE:     ui_backend_setToneHz((uint16_t)value); break;
     case PARAM_CONTRAST: ui_renderer_setContrast((uint8_t)value); break;
     case PARAM_VOLUME:   ui_backend_setVolume((uint8_t)value); break;
+    case PARAM_WEIGHT:   ui_backend_setWeightPercent((uint8_t)value); break;
     default: break;
   }
 }
@@ -122,7 +130,8 @@ static void getParamRange(uint8_t paramId, int &lo, int &hi) {
     case PARAM_WPM:      lo = UI_WPM_MIN;      hi = UI_WPM_MAX;      break;
     case PARAM_TONE:     lo = UI_TONE_MIN_HZ;  hi = UI_TONE_MAX_HZ;  break;
     case PARAM_CONTRAST: lo = UI_CONTRAST_MIN; hi = UI_CONTRAST_MAX; break;
-    case PARAM_VOLUME:   lo = VOLUME_MIN; hi = VOLUME_MAX; break;
+    case PARAM_VOLUME:   lo = VOLUME_MIN;      hi = VOLUME_MAX;      break;
+    case PARAM_WEIGHT:   lo = WEIGHT_MIN;      hi = WEIGHT_MAX;      break;
     default: lo = 0; hi = 0; break;
   }
 }
@@ -131,6 +140,7 @@ static int getParamStep(uint8_t paramId) {
     case PARAM_TONE:     return 10;
     case PARAM_CONTRAST: return 5;
     case PARAM_VOLUME:   return VOLUME_STEP;
+    case PARAM_WEIGHT:   return WEIGHT_STEP;
     default: return 1;
   }
 }
@@ -140,46 +150,68 @@ static const char *getParamLabel(uint8_t paramId) {
     case PARAM_TONE:     return "TONE";
     case PARAM_CONTRAST: return "CONTRAST";
     case PARAM_VOLUME:   return "VOLUME";
+    case PARAM_WEIGHT:   return "WEIGHTING";
     default: return "";
   }
 }
-
 static bool getToggleValue(uint8_t paramId) {
   switch (paramId) {
-    case PARAM_PADDLE_REV:  return ui_backend_getPaddleReversed();
-    case PARAM_MODE:        return ui_backend_getModeIsPaddle();
-    case PARAM_DECODER_EN:  return ui_backend_getDecoderEnabled();
-    case PARAM_SIDETONE_EN: return ui_backend_getSidetoneEnabled();
+    case PARAM_PADDLE_REV:     return ui_backend_getPaddleReversed();
+    case PARAM_MODE:           return ui_backend_getModeIsPaddle();
+    case PARAM_DECODER_EN:     return ui_backend_getDecoderEnabled();
+    case PARAM_SIDETONE_EN:    return ui_backend_getSidetoneEnabled();
+    case PARAM_IAMBIC_MODE:    return ui_backend_getIambicModeIsB();
+    case PARAM_DISPLAY_INVERT: return ui_backend_getDisplayInvert();
+    case PARAM_CALLSIGN_EN:    return ui_backend_getCallsignEnabled();
+    case PARAM_TIME_FORMAT:    return ui_backend_getTimeFormat() == 1;
+    case PARAM_BLE_ENABLED:    return ui_backend_getBleEnabled();
+    case PARAM_BLE_LED_ENABLED:return ui_backend_getBleLedEnabled();
     default: return false;
   }
 }
 static void setToggleValue(uint8_t paramId, bool v) {
   switch (paramId) {
-    case PARAM_PADDLE_REV:  ui_backend_setPaddleReversed(v); break;
-    case PARAM_MODE:        ui_backend_setModeIsPaddle(v); break;
-    case PARAM_DECODER_EN:  ui_backend_setDecoderEnabled(v); break;
-    case PARAM_SIDETONE_EN: ui_backend_setSidetoneEnabled(v); break;
+    case PARAM_PADDLE_REV:     ui_backend_setPaddleReversed(v);     break;
+    case PARAM_MODE:           ui_backend_setModeIsPaddle(v);       break;
+    case PARAM_DECODER_EN:     ui_backend_setDecoderEnabled(v);     break;
+    case PARAM_SIDETONE_EN:    ui_backend_setSidetoneEnabled(v);    break;
+    case PARAM_IAMBIC_MODE:    ui_backend_setIambicModeIsB(v);      break;
+    case PARAM_DISPLAY_INVERT: ui_backend_setDisplayInvert(v);      break;
+    case PARAM_CALLSIGN_EN:    ui_backend_setCallsignEnabled(v);    break;
+    case PARAM_TIME_FORMAT:    ui_backend_setTimeFormat(v ? 1 : 0); break;
+    case PARAM_BLE_ENABLED:    ui_backend_setBleEnabled(v);         break;
+    case PARAM_BLE_LED_ENABLED:ui_backend_setBleLedEnabled(v);      break;
     default: break;
   }
 }
 static const char *getToggleLabel(uint8_t paramId) {
   switch (paramId) {
-    case PARAM_PADDLE_REV: return "PADDLE REV";
-    case PARAM_MODE:       return "KEYER MODE";
-    case PARAM_DECODER_EN: return "DECODER";
-    case PARAM_SIDETONE_EN: return "SIDETONE";
+    case PARAM_PADDLE_REV:     return "PADDLE REV";
+    case PARAM_MODE:           return "KEYER MODE";
+    case PARAM_DECODER_EN:     return "DECODER";
+    case PARAM_SIDETONE_EN:    return "SIDETONE";
+    case PARAM_IAMBIC_MODE:    return "IAMBIC MODE";
+    case PARAM_DISPLAY_INVERT: return "INVERT";
+    case PARAM_CALLSIGN_EN:    return "CALLSIGN";
+    case PARAM_TIME_FORMAT:    return "TIME FORMAT";
+    case PARAM_BLE_ENABLED:    return "BLE";
+    case PARAM_BLE_LED_ENABLED:return "STATUS LED";
     default: return "";
   }
 }
 static void getToggleOptionLabelsShort(uint8_t paramId, const char *&offLabel, const char *&onLabel) {
   switch (paramId) {
-    case PARAM_MODE: offLabel = "STR"; onLabel = "PAD"; break;
-    default:         offLabel = "OFF"; onLabel = "ON";  break;
+    case PARAM_MODE:        offLabel = "STR"; onLabel = "PAD"; break;
+    case PARAM_IAMBIC_MODE: offLabel = "A";   onLabel = "B";   break;
+    case PARAM_TIME_FORMAT: offLabel = "24H"; onLabel = "12H"; break;
+    default:                offLabel = "OFF"; onLabel = "ON";  break;
   }
 }
 static void getToggleOptionLabelsFull(uint8_t paramId, const char *&offLabel, const char *&onLabel) {
   switch (paramId) {
-    case PARAM_MODE: offLabel = "Straight Key"; onLabel = "Paddle Key"; break;
+    case PARAM_MODE:        offLabel = "Straight Key"; onLabel = "Paddle Key"; break;
+    case PARAM_IAMBIC_MODE: offLabel = "Mode A";       onLabel = "Mode B";     break;
+    case PARAM_TIME_FORMAT: offLabel = "24-hour";      onLabel = "12-hour";    break;
     default: getToggleOptionLabelsShort(paramId, offLabel, onLabel); break;
   }
 }
@@ -215,9 +247,9 @@ bool ui_state_isTriggerPlaying(uint8_t paramId) {
 static void buildProfileInfoLines(uint8_t uiProfileId) {
   snprintf(infoLine1, sizeof(infoLine1), "%d WPM  %s",
            ui_backend_profileGetWpm(uiProfileId), ui_backend_profileGetModeStr(uiProfileId));
-  snprintf(infoLine2, sizeof(infoLine2), "Tone %u Hz  Vol %u%%",
-           (unsigned)ui_backend_profileGetToneHz(uiProfileId),
-           (unsigned)ui_backend_profileGetVolume(uiProfileId));
+  snprintf(infoLine2, sizeof(infoLine2), "Vol %u%%  Contrast %u",
+           (unsigned)ui_backend_profileGetVolume(uiProfileId),
+           (unsigned)ui_backend_profileGetContrast(uiProfileId));
   snprintf(infoLine3, sizeof(infoLine3), "Rev:%s  Tone:%s",
            ui_backend_profileGetPaddleReversed(uiProfileId) ? "ON" : "OFF",
            ui_backend_profileGetSidetoneEnabled(uiProfileId) ? "ON" : "OFF");
@@ -228,7 +260,7 @@ static void buildInfoContent(uint8_t infoId) {
   switch (infoId) {
     case INFO_ABOUT:
       snprintf(infoLine1, sizeof(infoLine1), "MORPHEUS-CW");
-      snprintf(infoLine2, sizeof(infoLine2), "v1.2.2");
+      snprintf(infoLine2, sizeof(infoLine2), "v%s", FIRMWARE_VERSION);
       snprintf(infoLine3, sizeof(infoLine3), "(c) Coder Chunk");
       break;
     case INFO_BLE_STATUS:
@@ -263,6 +295,8 @@ static void buildInfoContent(uint8_t infoId) {
     case INFO_PROFILE_PORTABLE: buildProfileInfoLines(UI_PROFILE_PORTABLE); break;
     case INFO_PROFILE_CONTEST:  buildProfileInfoLines(UI_PROFILE_CONTEST);  break;
     case INFO_PROFILE_PRACTICE: buildProfileInfoLines(UI_PROFILE_PRACTICE); break;
+    case INFO_PROFILE_OUTDOOR:  buildProfileInfoLines(UI_PROFILE_OUTDOOR);  break;
+    case INFO_PROFILE_SILENT:   buildProfileInfoLines(UI_PROFILE_SILENT);   break;
     case INFO_GAMES_GUIDE:
       snprintf(infoLine1, sizeof(infoLine1), "Confirm=Play/Retry");
       snprintf(infoLine2, sizeof(infoLine2), "Hold Back=Pause menu");
@@ -381,6 +415,18 @@ static unsigned long  actionToastStartMs = 0;
 static bool           pendingRestart = false;
 static unsigned long  pendingRestartAtMs = 0;
 static const unsigned long RESTART_DELAY_MS = 600;
+
+static const char CALLSIGN_CHARSET[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/";
+static const uint8_t CALLSIGN_EDIT_SLOTS = CALLSIGN_MAX_LEN - 1;
+
+static char    callsignEditBuf[CALLSIGN_EDIT_SLOTS];
+static uint8_t callsignEditCursor = 0;
+
+static uint16_t clockEditYear = 2026;
+static uint8_t  clockEditMonth = 1, clockEditDay = 1, clockEditHour = 0, clockEditMinute = 0;
+static uint8_t  clockEditField = 0;   // 0=Year,1=Month,2=Day,3=Hour,4=Minute
+
+static unsigned long lastActivityMs = 0;   // display-timeout idle tracking
 
 static void showActionToast(const char *text) {
   strncpy(actionToastText, text, sizeof(actionToastText) - 1);
@@ -665,15 +711,16 @@ static void refreshDiagLiveContent(unsigned long now) {
       diagLivePageCount = 2;
       if (diagLivePage == 0) {
         setInfoTitleFrom("SYSTEM INFO 1/2");
-        snprintf(diagLiveLines[0], 24, "FW: MORPHEUS v1.2.2");
+        snprintf(diagLiveLines[0], 24, "MORPHEUS v%s", FIRMWARE_VERSION);
         snprintf(diagLiveLines[1], 24, "Chip: %s r%u", ui_backend_getChipModel(), (unsigned)ui_backend_getChipRevision());
-        snprintf(diagLiveLines[2], 24, "CPU: %u MHz  SDK %s",
-                 (unsigned)ui_backend_getCpuFreqMHz(), ui_backend_getSdkVersionStr());
+        snprintf(diagLiveLines[2], 24, "CPU: %u MHz", (unsigned)ui_backend_getCpuFreqMHz());
+        snprintf(diagLiveLines[3], 24, "SDK: %s", ui_backend_getSdkVersionStr());
       } else {
         setInfoTitleFrom("SYSTEM INFO 2/2");
         formatUptime(ui_backend_getUptimeMs(), diagLiveLines[0], 24);
         snprintf(diagLiveLines[1], 24, "Reset: %s", ui_backend_getResetReasonStr());
         snprintf(diagLiveLines[2], 24, "Heap: %u B", (unsigned)ui_backend_getFreeHeapBytes());
+        diagLiveLines[3][0] = '\0';
       }
       break;
     }
@@ -978,11 +1025,6 @@ static void handleList(const UiEvent &ev) {
         pushList(n.children, n.childCount, n.label);
       } else if (n.type == NODE_VALUE && n.paramId != PARAM_NONE) {
         pushEditValue(n.paramId);
-      } else if (n.type == NODE_VOLUME) {
-        volumeScreenEnterMs = lastEventNow;
-        volumeEntrySnapshot = ui_backend_getVolume();
-        currentScreen = UI_SCREEN_VOLUME;
-        markDirty();
       } else if (n.type == NODE_TOGGLE && n.paramId != PARAM_NONE) {
         pushEditToggle(n.paramId);
       } else if (n.type == NODE_ACTION && n.paramId != ACTION_NONE) {
@@ -1008,6 +1050,11 @@ static void handleList(const UiEvent &ev) {
         buildGameInfoContent(n.paramId, n.label);
         currentScreen = UI_SCREEN_INFO;
         markDirty();
+      } else if (n.type == NODE_VOLUME) {
+        volumeScreenEnterMs = lastEventNow;
+        volumeEntrySnapshot = ui_backend_getVolume();
+        currentScreen = UI_SCREEN_VOLUME;
+        markDirty();
       } else if (n.type == NODE_PROFILE_LOAD && n.paramId != UI_PROFILE_NONE) {
         ui_backend_profileLoad(n.paramId);
         showActionToast("PROFILE LOADED");
@@ -1015,8 +1062,25 @@ static void handleList(const UiEvent &ev) {
       } else if (n.type == NODE_PROFILE_SAVE && n.paramId != UI_PROFILE_NONE) {
         pendingProfileId = n.paramId;
         pushDialog(ACTION_PROFILE_SAVE, n.label);
+      } else if (n.type == NODE_CALLSIGN_EDIT) {
+        pushCallsignEdit();
+      } else if (n.type == NODE_TIMEOUT) {
+        currentScreen = UI_SCREEN_DISPLAY_TIMEOUT;
+        markDirty();
+      } else if (n.type == NODE_CLOCK_EDIT) {
+        pushClockEdit();
+      } else if (n.type == NODE_DATE_FORMAT) {
+        currentScreen = UI_SCREEN_DATE_FORMAT;
+        markDirty();
+      } else if (n.type == NODE_BLE_PAIR_NOW) {
+        if (!ui_backend_getBleEnabled()) {
+          showActionToast("BLE IS OFF");
+        } else {
+          ui_backend_startBlePairing();
+          showActionToast("PAIRING MODE ON");
+        }
+        markDirty();
       } else if (n.type == NODE_TRIGGER && n.paramId != 0) {
-        // Immediate, non-destructive: play now, stay on this list, toast.
         uint8_t slot = (uint8_t)(n.paramId - 1);
         if (audioResourceBusy() && !ui_backend_isMemoryPlaying()) {
           showActionToast("AUDIO BUSY");
@@ -1134,6 +1198,39 @@ static void handleDiagDisplay(const UiEvent &ev) {
   }
 }
 
+static void handleDiagGpio(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      uint8_t pageCount = ui_state_getDiagGpioPageCount();
+      int p = (int)diagGpioPage + ev.detents;
+      if (p < 0) p = 0;
+      if (p > (int)pageCount - 1) p = (int)pageCount - 1;
+      diagGpioPage = (uint8_t)p;
+      markDirty();
+      break;
+    }
+    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
+    default: break;
+  }
+}
+
+static void handleDiagLive(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE:
+      if (diagLivePageCount > 1) {
+        int p = (int)diagLivePage + ev.detents;
+        if (p < 0) p = 0;
+        if (p > (int)diagLivePageCount - 1) p = (int)diagLivePageCount - 1;
+        diagLivePage = (uint8_t)p;
+        refreshDiagLiveContent(lastEventNow);
+        markDirty();
+      }
+      break;
+    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
+    default: break;
+  }
+}
+
 static void handleDiagAudio(const UiEvent &ev) {
   switch (ev.type) {
     case UI_EV_ROTATE:
@@ -1147,8 +1244,9 @@ static void handleDiagAudio(const UiEvent &ev) {
           markDirty();
         }
       } else {
-        int p = ((int)diagAudioPage + ev.detents) % (int)DIAG_AUDIO_PAGE_COUNT;
-        if (p < 0) p += DIAG_AUDIO_PAGE_COUNT;
+        int p = (int)diagAudioPage + ev.detents;
+        if (p < 0) p = 0;
+        if (p > (int)DIAG_AUDIO_PAGE_COUNT - 1) p = (int)DIAG_AUDIO_PAGE_COUNT - 1;
         diagAudioPage = (uint8_t)p;
         markDirty();
       }
@@ -1171,37 +1269,6 @@ static void handleDiagAudio(const UiEvent &ev) {
       currentScreen = UI_SCREEN_LIST;
       markDirty();
       break;
-    default: break;
-  }
-}
-
-static void handleDiagGpio(const UiEvent &ev) {
-  switch (ev.type) {
-    case UI_EV_ROTATE: {
-      uint8_t pageCount = ui_state_getDiagGpioPageCount();
-      int p = ((int)diagGpioPage + ev.detents) % (int)pageCount;
-      if (p < 0) p += pageCount;
-      diagGpioPage = (uint8_t)p;
-      markDirty();
-      break;
-    }
-    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
-    default: break;
-  }
-}
-
-static void handleDiagLive(const UiEvent &ev) {
-  switch (ev.type) {
-    case UI_EV_ROTATE:
-      if (diagLivePageCount > 1) {
-        int p = ((int)diagLivePage + ev.detents) % (int)diagLivePageCount;
-        if (p < 0) p += diagLivePageCount;
-        diagLivePage = (uint8_t)p;
-        refreshDiagLiveContent(lastEventNow);
-        markDirty();
-      }
-      break;
-    case UI_EV_BACK: currentScreen = UI_SCREEN_LIST; markDirty(); break;
     default: break;
   }
 }
@@ -1268,6 +1335,217 @@ bool ui_state_getVolumePreviewOn() {
   unsigned long elapsed = (lastEventNow - volumeScreenEnterMs) % UI_VOLUME_PREVIEW_PERIOD_MS;
   return elapsed < UI_VOLUME_PREVIEW_ON_MS;
 }
+
+static const char *TIMEOUT_LABELS[DISPLAY_TIMEOUT_OPTION_COUNT] = {
+  "15s", "30s", "1 Min", "2 Min", "5 Min", "10 Min", "15 Min", "30 Min", "Never"
+};
+
+static void handleDisplayTimeout(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int idx = (int)ui_backend_getDisplayTimeoutIndex() + ev.detents;
+      if (idx < 0) idx = 0;
+      if (idx > DISPLAY_TIMEOUT_OPTION_COUNT - 1) idx = DISPLAY_TIMEOUT_OPTION_COUNT - 1;
+      ui_backend_setDisplayTimeoutIndex((uint8_t)idx);
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+    case UI_EV_BACK:
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+static const char *DATE_FORMAT_LABELS[DATE_FORMAT_COUNT] = { "YYYY-MM-DD", "DD-MM-YYYY", "MM-DD-YYYY" };
+
+static void handleDateFormat(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      int idx = (int)ui_backend_getDateFormat() + ev.detents;
+      if (idx < 0) idx = 0;
+      if (idx > DATE_FORMAT_COUNT - 1) idx = DATE_FORMAT_COUNT - 1;
+      ui_backend_setDateFormat((uint8_t)idx);
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+    case UI_EV_BACK:
+      currentScreen = UI_SCREEN_LIST;
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+const char *ui_state_getDateFormatLabel() {
+  uint8_t idx = ui_backend_getDateFormat();
+  if (idx >= DATE_FORMAT_COUNT) idx = DEFAULT_DATE_FORMAT;
+  return DATE_FORMAT_LABELS[idx];
+}
+
+const char *ui_state_getDisplayTimeoutLabel() {
+  uint8_t idx = ui_backend_getDisplayTimeoutIndex();
+  if (idx >= DISPLAY_TIMEOUT_OPTION_COUNT) idx = DEFAULT_DISPLAY_TIMEOUT_INDEX;
+  return TIMEOUT_LABELS[idx];
+}
+
+static void pushCallsignEdit() {
+  char stored[CALLSIGN_MAX_LEN];
+  ui_backend_getCallsign(stored, sizeof(stored));
+
+  for (uint8_t i = 0; i < CALLSIGN_EDIT_SLOTS; i++) callsignEditBuf[i] = ' ';
+  size_t storedLen = strlen(stored);
+  for (uint8_t i = 0; i < storedLen && i < CALLSIGN_EDIT_SLOTS; i++) {
+    callsignEditBuf[i] = (char)toupper((unsigned char)stored[i]);
+  }
+  callsignEditCursor = 0;
+  currentScreen = UI_SCREEN_CALLSIGN_EDIT;
+  markDirty();
+}
+
+static void pushClockEdit() {
+  if (ui_backend_clockIsSet()) {
+    ui_backend_clockGetComponents(clockEditYear, clockEditMonth, clockEditDay, clockEditHour, clockEditMinute);
+  } else {
+    clockEditYear = 2026; clockEditMonth = 1; clockEditDay = 1; clockEditHour = 0; clockEditMinute = 0;
+  }
+  clockEditField = 0;
+  currentScreen = UI_SCREEN_CLOCK_EDIT;
+  markDirty();
+}
+
+static void handleClockEdit(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      switch (clockEditField) {
+        case 0: {
+          int v = (int)clockEditYear + ev.detents;
+          if (v < 2020) v = 2020;
+          if (v > 2099) v = 2099;
+          clockEditYear = (uint16_t)v;
+          break;
+        }
+        case 1: {
+          int v = (int)clockEditMonth + ev.detents;
+          if (v < 1) v = 1;
+          if (v > 12) v = 12;
+          clockEditMonth = (uint8_t)v;
+          break;
+        }
+        case 2: {
+          int v = (int)clockEditDay + ev.detents;
+          if (v < 1) v = 1;
+          if (v > 31) v = 31;
+          clockEditDay = (uint8_t)v;
+          break;
+        }
+        case 3: {
+          int v = (int)clockEditHour + ev.detents;
+          if (v < 0) v = 0;
+          if (v > 23) v = 23;
+          clockEditHour = (uint8_t)v;
+          break;
+        }
+        case 4: {
+          int v = (int)clockEditMinute + ev.detents;
+          if (v < 0) v = 0;
+          if (v > 59) v = 59;
+          clockEditMinute = (uint8_t)v;
+          break;
+        }
+        default: break;
+      }
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT:
+      if (clockEditField < 4) {
+        clockEditField++;
+      } else {
+        ui_backend_clockSet(clockEditYear, clockEditMonth, clockEditDay, clockEditHour, clockEditMinute);
+        showActionToast("CLOCK SET");
+        currentScreen = UI_SCREEN_LIST;
+      }
+      markDirty();
+      break;
+    case UI_EV_BACK:
+      if (clockEditField > 0) {
+        clockEditField--;
+      } else {
+        currentScreen = UI_SCREEN_LIST;   // cancel - nothing applied
+      }
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+int ui_state_getClockEditFieldValue(uint8_t fieldIndex) {
+  switch (fieldIndex) {
+    case 0: return (int)clockEditYear;
+    case 1: return (int)clockEditMonth;
+    case 2: return (int)clockEditDay;
+    case 3: return (int)clockEditHour;
+    case 4: return (int)clockEditMinute;
+    default: return 0;
+  }
+}
+uint8_t ui_state_getClockEditFieldIndex() { return clockEditField; }
+
+static void handleCallsignEdit(const UiEvent &ev) {
+  switch (ev.type) {
+    case UI_EV_ROTATE: {
+      const char *pos = strchr(CALLSIGN_CHARSET, callsignEditBuf[callsignEditCursor]);
+      int idx = (pos != nullptr) ? (int)(pos - CALLSIGN_CHARSET) : 0;
+      int len = (int)strlen(CALLSIGN_CHARSET);
+      idx = (idx + ev.detents) % len;
+      if (idx < 0) idx += len;
+      callsignEditBuf[callsignEditCursor] = CALLSIGN_CHARSET[idx];
+      markDirty();
+      break;
+    }
+    case UI_EV_SELECT: {
+      // Confirming a blank ends the string here (truncates at cursor).
+      // Note: does not scan for earlier blanks introduced by backing up
+      // mid-string - a minor accepted simplification.
+      if (callsignEditBuf[callsignEditCursor] == ' ') {
+        char finalStr[CALLSIGN_MAX_LEN];
+        uint8_t i = 0;
+        for (; i < callsignEditCursor; i++) finalStr[i] = callsignEditBuf[i];
+        finalStr[i] = '\0';
+        ui_backend_setCallsign(finalStr);
+        currentScreen = UI_SCREEN_LIST;
+      } else if (callsignEditCursor + 1 < CALLSIGN_EDIT_SLOTS) {
+        callsignEditCursor++;
+      } else {
+        char finalStr[CALLSIGN_MAX_LEN];
+        uint8_t i = 0;
+        for (; i < CALLSIGN_EDIT_SLOTS; i++) finalStr[i] = callsignEditBuf[i];
+        finalStr[i] = '\0';
+        ui_backend_setCallsign(finalStr);
+        currentScreen = UI_SCREEN_LIST;
+      }
+      markDirty();
+      break;
+    }
+    case UI_EV_BACK:
+      if (callsignEditCursor > 0) {
+        callsignEditCursor--;
+      } else {
+        currentScreen = UI_SCREEN_LIST;   // cancel - nothing was ever applied
+      }
+      markDirty();
+      break;
+    default: break;
+  }
+}
+
+const char *ui_state_getCallsignEditBuffer()  { return callsignEditBuf; }
+uint8_t     ui_state_getCallsignEditCursor()  { return callsignEditCursor; }
+uint8_t     ui_state_getCallsignEditSlotCount() { return CALLSIGN_EDIT_SLOTS; }
 
 static void handleTrainDrill(const UiEvent &ev) {
   switch (ev.type) {
@@ -1405,6 +1683,13 @@ static void handleGamePause(const UiEvent &ev) {
 void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
   lastEventNow = now;
 
+  lastActivityMs = now;
+  if (ui_renderer_isSleeping()) {
+    ui_renderer_setSleeping(false);
+    markDirty();
+    return;   // swallow the waking input
+  }
+
   if (currentScreen == UI_SCREEN_SPLASH) {
     if (ev.type == UI_EV_SELECT || ev.type == UI_EV_BACK) goHome();
     return;
@@ -1469,6 +1754,10 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_GAME_SPEED:        handleGameSpeed(ev);        break;
     case UI_SCREEN_GAME_PAUSE:        handleGamePause(ev);        break;
     case UI_SCREEN_VOLUME:            handleVolume(ev);           break;
+    case UI_SCREEN_CALLSIGN_EDIT:     handleCallsignEdit(ev);     break;
+    case UI_SCREEN_DISPLAY_TIMEOUT:   handleDisplayTimeout(ev);   break;
+    case UI_SCREEN_CLOCK_EDIT:        handleClockEdit(ev);        break;
+    case UI_SCREEN_DATE_FORMAT:       handleDateFormat(ev);       break;
     default: break;
   }
 }
@@ -1504,6 +1793,13 @@ void ui_state_service(unsigned long now) {
 
   if (bleOverlayKind == BLE_OVERLAY_RESULT_OK || bleOverlayKind == BLE_OVERLAY_RESULT_FAIL) {
     if (now - bleOverlayStartMs >= UI_BLE_OVERLAY_MS) { bleOverlayKind = BLE_OVERLAY_NONE; markDirty(); }
+  }
+
+  unsigned long timeoutMs = ui_backend_getDisplayTimeoutActualMs();
+  if (timeoutMs > 0 && !ui_renderer_isSleeping() && currentScreen != UI_SCREEN_SPLASH) {
+    if (now - lastActivityMs >= timeoutMs) {
+      ui_renderer_setSleeping(true);
+    }
   }
 
   if (actionToastActive && (now - actionToastStartMs >= UI_SAVED_TOAST_MS)) {
@@ -1609,6 +1905,7 @@ void ui_state_init(unsigned long now) {
   actionToastActive = false;
   pendingRestart = false;
   tuneActive = false;
+  lastActivityMs = now;
   currentTrainDrillId = TRAIN_DRILL_NONE;
   lastTrainPhaseSeen = 255;
   lastTrainTypedLenSeen = 255;

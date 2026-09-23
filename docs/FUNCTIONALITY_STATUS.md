@@ -23,7 +23,7 @@ inventory of what is actually implemented, to close that gap.
 | **Memory keyer** | ✅ | 5 fixed canned-text slots (CQ CQ CQ / 599 599 / TU TU / QRZ? / AR AR), shared playback engine with Training/Games |
 | **Clock** | ✅ (by design, software-only) | Manual set, no RTC chip, no NTP — drifts on internal oscillator, resets on reboot by design. Date format (3) and time format (2) choices persist; the time value itself does not |
 | **Status LED** | ✅ (mostly) | Single LED, patterns for pairing (fast blink) and connect-confirm (3 pulses then dark), TX keydown pulse — gated by a user-visible BLE-LED preference |
-| **BLE telemetry** | ✅ | NimBLE, one characteristic pushing JSON per completed word, MITM+bonding+LE Secure Connections, single-trusted-device allowlist, bounded 60s pairing window, BLE on/off persisted (default off) |
+| **BLE telemetry** | ✅ | NimBLE, one characteristic pushing JSON per completed word, MITM+bonding+LE Secure Connections, multi-device trusted allowlist (up to `BLE_TRUSTED_DEVICE_CAP`=3 remembered devices, one active connection at a time), bounded 60s pairing window, BLE on/off persisted (default off) |
 | **Settings persistence** | ✅ | Versioned NVS blob (`SETTINGS_VERSION=8`), debounced writes (5s), clean fallback-and-upgrade on version/size mismatch, factory reset (UI-triggered only) |
 | **Menu/UI** | ✅ | 10 top-level branches (CW Keyer, Training, Statistics, Connectivity, Profiles, Settings, Diagnostics, Tools, Games, Help), rotary encoder + confirm/back buttons, ~9 diagnostic screens |
 

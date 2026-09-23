@@ -53,6 +53,14 @@ bool transport_isConnected();
 bool transport_isSecure();
 bool transport_hasTrustedDevice();
 
+// Multi-device pairing (config.h's BLE_TRUSTED_DEVICE_CAP). Count/cap
+// for a "2/3 devices" style display; address-by-index for a future
+// per-device "forget this one" screen (transport_resetBond() today
+// only forgets all of them at once).
+uint8_t     transport_getTrustedDeviceCount();
+uint8_t     transport_getTrustedDeviceCap();
+const char *transport_getTrustedDeviceAddress(uint8_t index);
+
 // Diagnostics addition - current negotiated MTU, 0 if not connected.
 uint16_t transport_getCurrentMtu();
 

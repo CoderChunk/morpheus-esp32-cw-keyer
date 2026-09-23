@@ -266,7 +266,7 @@ static void buildInfoContent(uint8_t infoId) {
     case INFO_BLE_STATUS:
       snprintf(infoLine1, sizeof(infoLine1), "Link: %s", ui_backend_bleIsConnected() ? "Connected" : "Advertising");
       snprintf(infoLine2, sizeof(infoLine2), "Secure: %s", ui_backend_bleIsSecure() ? "Yes" : "No");
-      snprintf(infoLine3, sizeof(infoLine3), "Bonded: %s", ui_backend_bleHasTrustedDevice() ? "Yes" : "No");
+      snprintf(infoLine3, sizeof(infoLine3), "Paired: %u/%u", (unsigned)ui_backend_bleTrustedDeviceCount(), (unsigned)ui_backend_bleTrustedDeviceCap());
       break;
     case INFO_DEVICE_INFO:
       snprintf(infoLine1, sizeof(infoLine1), "%s", ui_backend_getDeviceName());
@@ -446,7 +446,7 @@ static void buildDialogContent(uint8_t actionId, const char *rowLabel) {
   strncpy(dialogTitle, rowLabel, sizeof(dialogTitle) - 1);
   dialogTitle[sizeof(dialogTitle) - 1] = '\0';
   switch (actionId) {
-    case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Clear BLE bond?"); break;
+    case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Forget ALL devices?"); break;
     case ACTION_FACTORY_RESET: snprintf(dialogMessage, sizeof(dialogMessage), "Reset all settings?"); break;
     case ACTION_RESTART:       snprintf(dialogMessage, sizeof(dialogMessage), "Restart device now?"); break;
     case ACTION_PROFILE_SAVE:  snprintf(dialogMessage, sizeof(dialogMessage), "Overwrite this profile?"); break;
@@ -706,7 +706,7 @@ static void refreshDiagLiveContent(unsigned long now) {
       setInfoTitleFrom("BLE STATUS");
       snprintf(diagLiveLines[0], 24, "Link: %s", ui_backend_bleIsConnected() ? "Connected" : "Advertising");
       snprintf(diagLiveLines[1], 24, "Secure: %s", ui_backend_bleIsSecure() ? "Yes" : "No");
-      snprintf(diagLiveLines[2], 24, "Bonded: %s", ui_backend_bleHasTrustedDevice() ? "Yes" : "No");
+      snprintf(diagLiveLines[2], 24, "Paired: %u/%u", (unsigned)ui_backend_bleTrustedDeviceCount(), (unsigned)ui_backend_bleTrustedDeviceCap());
       uint16_t mtu = ui_backend_getBleMtu();
       if (mtu > 0) snprintf(diagLiveLines[3], 24, "MTU: %u bytes", (unsigned)mtu);
       else         snprintf(diagLiveLines[3], 24, "MTU: --");

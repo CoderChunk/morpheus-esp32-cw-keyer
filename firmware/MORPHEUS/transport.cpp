@@ -14,9 +14,40 @@ static volatile uint16_t bleConnHandle = BLE_CONN_HANDLE_INVALID;
 static volatile bool bleLinkSecure = false;
 static volatile unsigned long bleStateChangeMs = 0;
 static volatile bool bleAwaitingTimeout = false; // true while showing PAIR_OK/PAIR_FAIL
-static bool hasTrustedDevice = false;
-static char trustedAddress[24] = {0};
+// Multi-device pairing: up to BLE_TRUSTED_DEVICE_CAP remembered bonded
+// addresses. Still exactly one ACTIVE connection at a time (see the
+// isCurrentlyConnected() guard in onConnect() below) - this list only
+// controls who is allowed to connect, never how many at once.
+static uint8_t trustedDeviceCount = 0;
+static char trustedAddresses[BLE_TRUSTED_DEVICE_CAP][24];
 static const size_t BLE_ESCAPED_WORD_FIELD_CAP = BLE_WORD_FIELD_CAP * 6;
+
+static bool isTrustedAddress(const char *addr) {
+  for (uint8_t i = 0; i < trustedDeviceCount; i++) {
+    if (strcmp(trustedAddresses[i], addr) == 0) return true;
+  }
+  return false;
+}
+
+// Returns false if addr is new AND the list is already full - caller
+// must reject the connection in that case, not just skip remembering it.
+static bool addTrustedAddress(const char *addr) {
+  if (isTrustedAddress(addr)) return true;
+  if (trustedDeviceCount >= BLE_TRUSTED_DEVICE_CAP) return false;
+  strncpy(trustedAddresses[trustedDeviceCount], addr, sizeof(trustedAddresses[0]) - 1);
+  trustedAddresses[trustedDeviceCount][sizeof(trustedAddresses[0]) - 1] = '\0';
+  trustedDeviceCount++;
+  return true;
+}
+
+static void saveTrustedDevices() {
+  blePrefs.putUChar("trustedCount", trustedDeviceCount);
+  for (uint8_t i = 0; i < trustedDeviceCount; i++) {
+    char key[16];
+    snprintf(key, sizeof(key), "trustedAddr%u", (unsigned)i);
+    blePrefs.putString(key, trustedAddresses[i]);
+  }
+}
 
 // ----------------------------------------------------------------------------
 // BLE on/off (new) - MORPHEUS no longer advertises unconditionally at boot.
@@ -101,9 +132,23 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     char peerAddr[24];
     strncpy(peerAddr, connInfo.getAddress().toString().c_str(), sizeof(peerAddr) - 1);
     peerAddr[sizeof(peerAddr) - 1] = '\0';
-    if (hasTrustedDevice && strcmp(peerAddr, trustedAddress) != 0) {
+    // One active connection at a time, regardless of how many devices
+    // are trusted - a second incoming connection while another is
+    // already live gets turned away rather than silently stomping the
+    // single global bleConnHandle/bleLinkSecure state below.
+    if (isCurrentlyConnected()) {
 #if FEATURE_SERIAL
-      Serial.print(F("EVT BLE_REJECT addr=")); Serial.println(peerAddr);
+      Serial.print(F("EVT BLE_REJECT_BUSY addr=")); Serial.println(peerAddr);
+#endif
+      pServer->disconnect(connInfo);
+      return;
+    }
+    // Any already-trusted device may reconnect. An unknown device may
+    // only connect (and become trusted on successful auth, see
+    // onAuthenticationComplete) while there is still a free slot.
+    if (trustedDeviceCount >= BLE_TRUSTED_DEVICE_CAP && !isTrustedAddress(peerAddr)) {
+#if FEATURE_SERIAL
+      Serial.print(F("EVT BLE_REJECT_FULL addr=")); Serial.println(peerAddr);
 #endif
       pServer->disconnect(connInfo);
       return;
@@ -178,15 +223,17 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     char peerAddr[24];
     strncpy(peerAddr, connInfo.getAddress().toString().c_str(), sizeof(peerAddr) - 1);
     peerAddr[sizeof(peerAddr) - 1] = '\0';
-    if (!hasTrustedDevice) {
-      hasTrustedDevice = true;
-      strncpy(trustedAddress, peerAddr, sizeof(trustedAddress) - 1);
-      trustedAddress[sizeof(trustedAddress) - 1] = '\0';
-      blePrefs.putBool("hasBond", true);
-      blePrefs.putString("trustedAddr", trustedAddress);
+    if (!isTrustedAddress(peerAddr)) {
+      // onConnect() already rejected this address if the list was full,
+      // so addTrustedAddress() here should always succeed - the check
+      // is defensive, not expected to fail in normal operation.
+      if (addTrustedAddress(peerAddr)) {
+        saveTrustedDevices();
 #if FEATURE_SERIAL
-      Serial.print(F("EVT BLE_TRUSTED addr=")); Serial.println(trustedAddress);
+        Serial.print(F("EVT BLE_TRUSTED addr=")); Serial.print(peerAddr);
+        Serial.print(F(" count=")); Serial.println(trustedDeviceCount);
 #endif
+      }
     }
     portENTER_CRITICAL(&bleStateMux);
     bleAwaitingTimeout = true;
@@ -210,10 +257,31 @@ static void beginAdvertisingIfEnabled() {
 
 void transport_init() {
   blePrefs.begin("cwkeyer", false);
-  hasTrustedDevice = blePrefs.getBool("hasBond", false);
-  String savedAddr = blePrefs.getString("trustedAddr", "");
-  strncpy(trustedAddress, savedAddr.c_str(), sizeof(trustedAddress) - 1);
-  trustedAddress[sizeof(trustedAddress) - 1] = '\0';
+
+  trustedDeviceCount = blePrefs.getUChar("trustedCount", 0);
+  if (trustedDeviceCount > BLE_TRUSTED_DEVICE_CAP) trustedDeviceCount = BLE_TRUSTED_DEVICE_CAP;
+  for (uint8_t i = 0; i < trustedDeviceCount; i++) {
+    char key[16];
+    snprintf(key, sizeof(key), "trustedAddr%u", (unsigned)i);
+    String addr = blePrefs.getString(key, "");
+    strncpy(trustedAddresses[i], addr.c_str(), sizeof(trustedAddresses[i]) - 1);
+    trustedAddresses[i][sizeof(trustedAddresses[i]) - 1] = '\0';
+  }
+
+  // One-time migration from the pre-multi-device single-address scheme
+  // ("hasBond"/"trustedAddr") so an already-bonded phone isn't silently
+  // forgotten by this firmware upgrade - NimBLE's own bond store (the
+  // actual crypto keys) is untouched either way, only this app-level
+  // allowlist changed shape.
+  if (trustedDeviceCount == 0 && blePrefs.getBool("hasBond", false)) {
+    String legacyAddr = blePrefs.getString("trustedAddr", "");
+    if (legacyAddr.length() > 0) {
+      addTrustedAddress(legacyAddr.c_str());
+      saveTrustedDevices();
+    }
+    blePrefs.remove("hasBond");
+    blePrefs.remove("trustedAddr");
+  }
 
   NimBLEDevice::init(BLE_DEVICE_NAME);
   NimBLEDevice::setSecurityAuth(true, true, true); // bonding, MITM, secure connections
@@ -251,8 +319,12 @@ void transport_init() {
   updateLedForCurrentState();
 
 #if FEATURE_SERIAL
-  Serial.print(F("BLE ready. Trusted device: "));
-  Serial.println(hasTrustedDevice ? trustedAddress : "(none yet - open to first pairing)");
+  Serial.print(F("BLE ready. Trusted devices: "));
+  Serial.print(trustedDeviceCount);
+  Serial.print(F("/")); Serial.println(BLE_TRUSTED_DEVICE_CAP);
+  for (uint8_t i = 0; i < trustedDeviceCount; i++) {
+    Serial.print(F("  ")); Serial.println(trustedAddresses[i]);
+  }
 #endif
 }
 
@@ -330,11 +402,18 @@ void transport_resetBond() {
     NimBLEConnInfo connInfo = bleServer->getPeerInfo(0);
     bleServer->disconnect(connInfo);
   }
+  // Forgets ALL trusted devices, not just one - there is no per-device
+  // "forget this one" action yet (see transport_getTrustedDeviceCount()/
+  // transport_getTrustedDeviceAddress() if adding one later).
   NimBLEDevice::deleteAllBonds();
-  blePrefs.remove("hasBond");
-  blePrefs.remove("trustedAddr");
-  hasTrustedDevice = false;
-  trustedAddress[0] = '\0';
+  for (uint8_t i = 0; i < BLE_TRUSTED_DEVICE_CAP; i++) {
+    char key[16];
+    snprintf(key, sizeof(key), "trustedAddr%u", (unsigned)i);
+    blePrefs.remove(key);
+  }
+  blePrefs.remove("trustedCount");
+  trustedDeviceCount = 0;
+  memset(trustedAddresses, 0, sizeof(trustedAddresses));
   if (bleEnabled) {
     NimBLEDevice::startAdvertising();
     advertisingActive = true;
@@ -391,7 +470,13 @@ bool transport_isPairingActive() { return pairingWindowActive; }
 // ----------------------------------------------------------------------------
 bool transport_isConnected()      { return isCurrentlyConnected(); }
 bool transport_isSecure()         { return bleLinkSecure; }
-bool transport_hasTrustedDevice() { return hasTrustedDevice; }
+bool transport_hasTrustedDevice() { return trustedDeviceCount > 0; }
+uint8_t transport_getTrustedDeviceCount() { return trustedDeviceCount; }
+uint8_t transport_getTrustedDeviceCap()   { return BLE_TRUSTED_DEVICE_CAP; }
+const char *transport_getTrustedDeviceAddress(uint8_t index) {
+  if (index >= trustedDeviceCount) return "";
+  return trustedAddresses[index];
+}
 uint16_t transport_getCurrentMtu() {
   if (bleServer == nullptr || !isCurrentlyConnected()) return 0;
   return bleServer->getPeerMTU(bleConnHandle);
@@ -408,6 +493,9 @@ void transport_resetBond() {}
 bool transport_isConnected()      { return false; }
 bool transport_isSecure()         { return false; }
 bool transport_hasTrustedDevice() { return false; }
+uint8_t transport_getTrustedDeviceCount() { return 0; }
+uint8_t transport_getTrustedDeviceCap()   { return 0; }
+const char *transport_getTrustedDeviceAddress(uint8_t index) { (void)index; return ""; }
 uint16_t transport_getCurrentMtu() { return 0; }
 
 bool transport_getBleEnabled() { return false; }

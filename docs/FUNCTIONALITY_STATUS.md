@@ -51,9 +51,9 @@ These are real gaps worth prioritizing before the next release, since the code e
 
 ## 4. Test coverage gap
 
-- `tests/test_decoder_logic.py` tests a **parallel Python reimplementation** of the decoder's timing logic, not the actual C++ source — a real decoder regression would not be caught by this test.
+- ~~`tests/test_decoder_logic.py` tests a parallel Python reimplementation, not the actual C++ source~~ — **fixed**: `tests/native/` now compiles and links `firmware/MORPHEUS/core_decoder.cpp` itself (host g++, no ESP32 toolchain needed) and exercises it directly, including PROGMEM table lookup, reverse lookup, enable/disable state clearing, and training-sink routing — none of which the Python mirror could test since it doesn't implement them. Verified to actually catch a real decoder regression (a DIT/DAH classification bug) that the Python mirror passed cleanly through. Run with `tests/native/run.sh`. `test_decoder_logic.py` is kept as-is (still a fast, dependency-free timing-model sanity check).
 - `tests/test_ble_json_budget.py` checks `config.h` constant arithmetic, not `transport.cpp` behavior.
-- No automated tests exist for: keyer (iambic timing, weighting), trainer (Koch level-up, adaptive WPM, exam scoring), games, statistics persistence, profiles, clock, LED, or the UI state machine.
+- No automated tests exist for: keyer (iambic timing, weighting), trainer (Koch level-up, adaptive WPM, exam scoring), games, statistics persistence, profiles, clock, LED, or the UI state machine. The `tests/native/` harness established here (Arduino.h stub + linking the real .cpp) is reusable for these — keyer would be the natural next target given decoder now depends on it.
 
 ## 5. Stale documentation identified
 
@@ -70,4 +70,4 @@ These are real gaps worth prioritizing before the next release, since the code e
 2. Add a Statistics → Reset Lifetime menu action (with a confirm dialog, matching the existing factory-reset pattern).
 3. Either wire `core_led_trainerFlashOn/Off()` into a Training mode, or remove the dead code and the unused `DEFAULT_LED_TRAINER_WPM` constant.
 4. Refresh `README.md` and `CHANGELOG.md` to match the current v2.1.0 feature set (see the accompanying `USER_MANUAL.md` for the full current feature list).
-5. Replace or supplement `test_decoder_logic.py` with a test that actually exercises `core_decoder.cpp`.
+5. ~~Replace or supplement `test_decoder_logic.py` with a test that actually exercises `core_decoder.cpp`~~ — done, see `tests/native/`.

@@ -213,11 +213,20 @@ arduino-cli compile --fqbn esp32:esp32:esp32 firmware/MORPHEUS
 arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32 firmware/MORPHEUS
 ```
 
-Host-side decoder tests can be run with:
+Host-side decoder timing-model tests can be run with:
 
 ```sh
 python -m unittest discover -s tests
 ```
+
+A native test that compiles and exercises the actual `core_decoder.cpp`
+(not a reimplementation) can be run with:
+
+```sh
+tests/native/run.sh
+```
+
+Requires only a host C++17 compiler (`g++`) - no other dependencies.
 
 See `docs/build.md` for more detail.
 

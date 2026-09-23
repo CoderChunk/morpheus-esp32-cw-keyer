@@ -450,6 +450,7 @@ static void buildDialogContent(uint8_t actionId, const char *rowLabel) {
     case ACTION_FACTORY_RESET: snprintf(dialogMessage, sizeof(dialogMessage), "Reset all settings?"); break;
     case ACTION_RESTART:       snprintf(dialogMessage, sizeof(dialogMessage), "Restart device now?"); break;
     case ACTION_PROFILE_SAVE:  snprintf(dialogMessage, sizeof(dialogMessage), "Overwrite this profile?"); break;
+    case ACTION_STATS_RESET:   snprintf(dialogMessage, sizeof(dialogMessage), "Erase lifetime stats?"); break;
     default:                   snprintf(dialogMessage, sizeof(dialogMessage), "Confirm action?"); break;
   }
 }
@@ -484,6 +485,10 @@ static void executeDialogAction() {
     case ACTION_PROFILE_SAVE:
       ui_backend_profileSave(pendingProfileId);
       showActionToast("PROFILE SAVED");
+      break;
+    case ACTION_STATS_RESET:
+      ui_backend_statsResetLifetime();
+      showActionToast("STATS RESET");
       break;
     default: break;
   }

@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.1.0";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.3.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -161,7 +161,6 @@ static const uint8_t DEFAULT_TIME_FORMAT = 0;
 // deliberately kept single/minimal to preserve future ESP32-C3 port
 // viability (GPIO budget concern already on record).
 // ----------------------------------------------------------------------------
-static const unsigned long LED_BLINK_SLOW_MS = 600;   // BLE advertising
 static const unsigned long LED_BLINK_FAST_MS = 150;   // BLE pairing in progress
 static const unsigned long LED_TX_PULSE_MS   = 40;    // minimum visible pulse on a real keydown
 

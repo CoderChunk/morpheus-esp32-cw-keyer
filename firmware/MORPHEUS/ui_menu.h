@@ -9,8 +9,13 @@ enum UiNodeType : uint8_t {
   NODE_TRAIN_DRILL, NODE_TRAIN_FARNSWORTH, NODE_STATS,
   NODE_GAME_START, NODE_GAME_INFO, NODE_VOLUME,
   NODE_PROFILE_LOAD, NODE_PROFILE_SAVE, NODE_CALLSIGN_EDIT,
-  NODE_TIMEOUT, NODE_CLOCK_EDIT, NODE_DATE_FORMAT, NODE_BLE_PAIR_NOW
+  NODE_TIMEOUT, NODE_CLOCK_EDIT, NODE_DATE_FORMAT, NODE_BLE_PAIR_NOW,
+  NODE_LED_TEST
 };
+
+// Diagnostics > LED Test rows - instant action + toast, no confirm dialog,
+// same immediacy as NODE_TRIGGER (memory msg playback).
+enum UiLedTestId : uint8_t { LED_TEST_NONE = 0, LED_TEST_ON, LED_TEST_OFF, LED_TEST_BLINK };
 
 // Consumed only within ui_state.cpp/ui_backend.cpp - never crosses into
 // core_trainer.h directly (ui_state.cpp's frozen no-core-includes rule).

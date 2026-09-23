@@ -11,10 +11,19 @@ be played entirely from the app.
 pip install -r requirements.txt
 ```
 
-The device must already be **bonded** at the OS level (pair once via
-your system's Bluetooth settings or `bluetoothctl`, confirming the
-passkey shown on the MORPHEUS display) — this tool connects to an
-existing bond, it does not perform pairing itself.
+## Pairing
+
+The word and control-event characteristics require a bonded, encrypted
+link. Click **Pair New Device** in the app — on Linux this registers
+the app itself as a BlueZ pairing agent (`ble_pairing.py`) and shows an
+in-app dialog asking you to read the passkey off the MORPHEUS display
+and enter/confirm it, the same experience as a smartwatch companion
+app. No terminal, no separate OS Settings screen.
+
+That button needs `dbus-next` (Linux only — see `requirements.txt`). If
+it's missing, or you're on Windows/macOS, the button is disabled and
+you'll need to pair once via your OS's own Bluetooth settings instead;
+everything else in the app works identically either way once bonded.
 
 ## Run
 
@@ -72,5 +81,9 @@ corresponding page in `pages.py`.
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: runs `bleak` on a background
   thread, exposes Qt signals to the GUI thread
+- `ble_pairing.py` — `PairingWorker`: registers a BlueZ Agent1 D-Bus
+  service (Linux) and bridges its passkey/confirmation callbacks to Qt
+  signals, on its own background thread and asyncio loop
+- `pairing_dialog.py` — the in-app "Pair New Device" dialog
 - `pages.py` — the CW Keyer / Training / Games / Placeholder page widgets
 - `protocol.py` — UUID and command-vocabulary constants

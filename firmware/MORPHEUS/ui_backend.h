@@ -219,4 +219,7 @@ void ui_backend_setBleLedEnabled(bool enabled);
 void ui_backend_startBlePairing();
 bool ui_backend_isBlePairingActive();
 
+// ledTestId: see UiLedTestId in ui_menu.h (1=ON, 2=OFF, 3=BLINK).
+void ui_backend_ledTest(uint8_t ledTestId);
+
 #endif // UI_BACKEND_H

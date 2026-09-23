@@ -36,6 +36,9 @@ static unsigned long txPulseStartMs = 0;
 
 static bool trainerOwnsLed = false;
 
+static bool blinkTestActive = false;
+static unsigned long blinkTestStartMs = 0;
+
 static void writeLed(bool on) {
   digitalWrite(PIN_STATUS_LED, on ? HIGH : LOW);
 }
@@ -49,6 +52,7 @@ void core_led_init() {
   confirmBlinkActive = false;
   txPulseActive = false;
   trainerOwnsLed = false;
+  blinkTestActive = false;
 }
 
 void core_led_setBleLedEnabled(bool enabled) { bleLedEnabled = enabled; }
@@ -73,12 +77,37 @@ void core_led_pulseTx() {
 }
 
 void core_led_trainerFlashOn() {
+  blinkTestActive = false;   // a manual ON overrides any running diag blink test
   trainerOwnsLed = true;
   writeLed(true);
 }
 void core_led_trainerFlashOff() {
+  blinkTestActive = false;
   writeLed(false);
   trainerOwnsLed = false;
+}
+
+void core_led_startBlinkTest() {
+  trainerOwnsLed = true;
+  blinkTestActive = true;
+  blinkTestStartMs = millis();
+}
+
+// Self-terminating, same shape as serviceConfirmBlink: N on/off pulses,
+// then releases trainerOwnsLed on its own so a diag-screen exit mid-test
+// can't strand the LED.
+static bool serviceBlinkTest(unsigned long now) {
+  unsigned long elapsed = now - blinkTestStartMs;
+  unsigned long totalMs = (unsigned long)LED_DIAG_BLINK_COUNT * LED_DIAG_BLINK_MS * 2;
+  if (elapsed >= totalMs) {
+    blinkTestActive = false;
+    trainerOwnsLed = false;
+    writeLed(false);
+    return false;
+  }
+  bool on = (elapsed % (LED_DIAG_BLINK_MS * 2)) < LED_DIAG_BLINK_MS;
+  writeLed(on);
+  return true;
 }
 
 // Confirmation blink: N short on/off pulses, then done. Fully
@@ -121,6 +150,7 @@ static void serviceRadioPattern(unsigned long now) {
 }
 
 void core_led_service(unsigned long now) {
+  if (blinkTestActive) { serviceBlinkTest(now); return; }
   if (trainerOwnsLed) return;
 
   if (txPulseActive) {

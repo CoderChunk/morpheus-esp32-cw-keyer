@@ -177,4 +177,10 @@ static const unsigned long BLE_PAIRING_WINDOW_MS = 60000;   // pairing mode auto
 static const unsigned long LED_CONNECT_CONFIRM_BLINK_MS = 200;
 static const uint8_t       LED_CONNECT_CONFIRM_BLINK_COUNT = 3;
 
+// Diagnostics > LED Test > Blink: a bounded, self-terminating pattern
+// (not an indefinite toggle) so leaving the diag screen never strands
+// the LED mid-test.
+static const unsigned long LED_DIAG_BLINK_MS    = 200;
+static const uint8_t       LED_DIAG_BLINK_COUNT = 6;
+
 #endif // MORPHEUS_CONFIG_H

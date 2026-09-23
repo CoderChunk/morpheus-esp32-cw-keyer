@@ -84,6 +84,15 @@ static void handleDebugSerialCommand() {
   } else if (line == "RESET BOND") {
     transport_resetBond();
     Serial.println(F("EVT DEBUG_BOND_RESET"));
+  } else if (line == "LED ON") {
+    core_led_trainerFlashOn();
+    Serial.println(F("EVT DEBUG_LED_ON"));
+  } else if (line == "LED OFF") {
+    core_led_trainerFlashOff();
+    Serial.println(F("EVT DEBUG_LED_OFF"));
+  } else if (line == "LED BLINK") {
+    core_led_startBlinkTest();
+    Serial.println(F("EVT DEBUG_LED_BLINK"));
   }
 }
 #endif

@@ -1092,6 +1092,10 @@ static void handleList(const UiEvent &ev) {
           showActionToast(toast);
         }
         markDirty();
+      } else if (n.type == NODE_LED_TEST && n.paramId != LED_TEST_NONE) {
+        ui_backend_ledTest(n.paramId);
+        showActionToast(n.label);
+        markDirty();
       } else if (n.type == NODE_INFO) {
         pushInfo(n.paramId, n.label);
       } else {

@@ -138,6 +138,7 @@ int      ui_backend_statsPeakAdaptiveWpm();
 
 uint8_t  ui_backend_statsHistoryCount();
 uint16_t ui_backend_statsHistoryEntry(uint8_t indexFromNewest);
+void     ui_backend_statsResetLifetime();
 
 bool    ui_backend_isGameSessionActive();
 void    ui_backend_gameStart(uint8_t uiGameId);

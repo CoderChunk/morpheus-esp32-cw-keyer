@@ -301,6 +301,7 @@ int      ui_backend_statsPeakAdaptiveWpm()       { return core_stats_lifetime_ge
 
 uint8_t  ui_backend_statsHistoryCount()            { return core_stats_history_getCount(); }
 uint16_t ui_backend_statsHistoryEntry(uint8_t idx) { return core_stats_history_getEntry(idx); }
+void     ui_backend_statsResetLifetime()           { core_stats_resetLifetime(); }
 
 // Games
 bool ui_backend_isGameSessionActive() { return core_games_isSessionActive(); }

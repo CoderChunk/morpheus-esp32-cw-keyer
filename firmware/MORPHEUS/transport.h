@@ -41,9 +41,11 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
 // NimBLE's own internal bond store, clears this app's trusted-device
 // allowlist, and reopens advertising to a new pairing. Never touches
 // operator settings (services.cpp's NVS namespace) - that separation is
-// load-bearing, not incidental. Called from MORPHEUS.ino, either after a
-// boot-time held button (see PIN_BOND_RESET) or via the temporary
-// FEATURE_DEBUG_SERIAL_COMMANDS "RESET BOND" command.
+// load-bearing, not incidental. Reachable today via the menu
+// (Connectivity > Bluetooth > Bond Reset, ACTION_BOND_RESET in
+// ui_menu.cpp) or the temporary FEATURE_DEBUG_SERIAL_COMMANDS
+// "RESET BOND" command - there is no dedicated hardware button for
+// this; add one (and its own PIN_* define) if that's ever needed.
 void transport_resetBond();
 
 // Read-only status - added for UI info screens (ui_backend.cpp).

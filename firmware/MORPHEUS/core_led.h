@@ -21,4 +21,11 @@ void core_led_pulseTx();
 void core_led_trainerFlashOn();
 void core_led_trainerFlashOff();
 
+// Diagnostics > LED Test > Blink: fires a short, bounded, self-terminating
+// blink pattern (LED_DIAG_BLINK_COUNT x LED_DIAG_BLINK_MS) and then
+// releases the LED back to normal (BLE/TX) display on its own - no
+// separate "stop" call needed, so leaving the diag screen mid-test can't
+// strand the LED in test mode.
+void core_led_startBlinkTest();
+
 #endif

@@ -13,6 +13,7 @@
 #include "core_morseplayer.h"
 #include "core_keyer.h"
 #include "core_decoder.h"
+#include "core_led.h"
 #include "config.h"
 #include <string.h>
 
@@ -41,11 +42,16 @@ static bool loadNextChar(MorsePlayer &p) {
   }
 }
 
+// LED flash is synced 1:1 with the audible element (on for the dit/dah,
+// off for every gap) so Training/Farnsworth/Memory playback is visible
+// as well as audible - the same single choke point every consumer of
+// this engine already shares for the tone.
 static void startElementTone(MorsePlayer &p, unsigned long now) {
   if (!core_keyer_diagToneStart(core_keyer_getSidetoneFreq())) {
     p.active = false;   // real keying took priority
     return;
   }
+  core_led_trainerFlashOn();
   p.phase = MorsePlayer::P_TONE_ON;
   p.phaseStartMs = now;
   bool isDah = (p.curPattern[p.curPatternPos] == '-');
@@ -54,6 +60,7 @@ static void startElementTone(MorsePlayer &p, unsigned long now) {
 
 static void startGap(MorsePlayer &p, unsigned long now, unsigned long durationMs) {
   core_keyer_diagToneStop();
+  core_led_trainerFlashOff();
   p.phase = MorsePlayer::P_GAP;
   p.phaseStartMs = now;
   p.phaseDurationMs = durationMs;
@@ -76,6 +83,7 @@ bool core_morseplayer_start(MorsePlayer &p, const char *text,
 
 void core_morseplayer_stop(MorsePlayer &p) {
   core_keyer_diagToneStop();
+  core_led_trainerFlashOff();
   p.active = false;
   p.phase = MorsePlayer::P_IDLE;
   p.cursor = nullptr;

@@ -36,6 +36,8 @@ void ui_backend_getTranscriptLines(char *lineA, size_t aSize, char *lineB, size_
 bool ui_backend_bleIsConnected();
 bool ui_backend_bleIsSecure();
 bool ui_backend_bleHasTrustedDevice();
+uint8_t ui_backend_bleTrustedDeviceCount();
+uint8_t ui_backend_bleTrustedDeviceCap();
 const char *ui_backend_getDeviceName();
 
 unsigned long ui_backend_getUptimeMs();

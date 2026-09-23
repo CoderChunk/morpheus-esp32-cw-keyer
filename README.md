@@ -71,7 +71,7 @@ Every subsystem is isolated and independently expandable, making MORPHEUS suitab
 ### Wireless Telemetry
 
 * Secure BLE communication (bonding, MITM protection, LE Secure Connections)
-* Passkey authentication, single-trusted-device allowlist
+* Passkey authentication, multi-device trusted allowlist (up to 3 remembered devices, one active connection at a time)
 * Bounded, auto-expiring pairing window
 * Real-time word transmission (JSON payload per completed word)
 

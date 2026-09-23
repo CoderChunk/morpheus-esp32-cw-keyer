@@ -105,6 +105,8 @@ void ui_backend_getTranscriptLines(char *lineA, size_t aSize, char *lineB, size_
 bool ui_backend_bleIsConnected()     { return transport_isConnected(); }
 bool ui_backend_bleIsSecure()        { return transport_isSecure(); }
 bool ui_backend_bleHasTrustedDevice(){ return transport_hasTrustedDevice(); }
+uint8_t ui_backend_bleTrustedDeviceCount(){ return transport_getTrustedDeviceCount(); }
+uint8_t ui_backend_bleTrustedDeviceCap()  { return transport_getTrustedDeviceCap(); }
 const char *ui_backend_getDeviceName() { return BLE_DEVICE_NAME; }
 uint16_t ui_backend_getBleMtu() { return transport_getCurrentMtu(); }
 

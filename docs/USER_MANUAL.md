@@ -215,24 +215,39 @@ reset your live settings by mistake.
 **Menu → Connectivity → Bluetooth**
 
 Bluetooth is **off by default**. When enabled, MORPHEUS broadcasts each
-completed word (text, current WPM, keying mode, timestamp) to one paired
-device.
+completed word (text, current WPM, keying mode, timestamp) to whichever
+paired device is currently connected — only **one active connection at
+a time**, even though multiple devices can be remembered (see below).
 
-### Pairing
+### Pairing multiple devices
+
+MORPHEUS remembers up to **3 paired devices** (e.g. your phone and a
+laptop) and any of them may reconnect later — but still only one at a
+time can actually be connected and receiving data.
 
 1. Turn Bluetooth on (**Bluetooth → BLE toggle**).
 2. Select **Pair Now** — the device becomes discoverable for 60 seconds
    (auto-closes if nothing connects).
 3. On your phone/computer, connect and confirm the 6-digit passkey shown
    on the MORPHEUS display.
-4. Once paired, that device is remembered ("bonded") as the single trusted
-   device. Any other device attempting to connect is refused.
+4. Once paired, that device is added to the trusted list and can
+   reconnect on its own from then on (no passkey needed again).
+5. Repeat with up to 2 more devices whenever you like — pairing a new
+   one doesn't remove an existing one.
+
+Once all 3 slots are used, a brand-new (never-paired) device cannot pair
+until you free a slot — see Bond Reset below. Any of your 3 already-
+trusted devices can still reconnect at any time, slots full or not.
+
+**Menu → Diagnostics → BLE Status** (or Connectivity → Bluetooth →
+Status) shows how many devices are currently paired, e.g. `Paired: 2/3`.
 
 ### Bond Reset
 
-**Bluetooth → Bond Reset** clears the remembered device, allowing a new
-device to pair. There is currently no physical button for this — it must
-be done through the menu.
+**Bluetooth → Bond Reset** forgets **all** paired devices at once (there
+is no per-device "forget this one" option yet), letting new devices pair
+from a clean slate. There is currently no physical button for this — it
+must be done through the menu.
 
 ### Status LED
 

@@ -80,6 +80,12 @@ static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;
 static const uint16_t BLE_CONN_HANDLE_INVALID  = 0xFFFF;
 
+// Multi-device pairing: MORPHEUS remembers up to this many bonded
+// devices (e.g. a phone AND a laptop) and any of them may reconnect,
+// but still only ONE active connection at a time - the trusted-device
+// list controls who is ALLOWED to connect, not how many simultaneously.
+static const uint8_t  BLE_TRUSTED_DEVICE_CAP   = 3;
+
 // ----------------------------------------------------------------------------
 // Training module tunables
 // ----------------------------------------------------------------------------

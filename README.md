@@ -2,7 +2,9 @@
 
 > **Forge the Sound of Morse.**
 
-An open-source ESP32 CW keyer featuring real-time Morse decoding, secure Bluetooth telemetry, OLED visualization, and a fully modular architecture designed for experimentation, learning, and modern amateur radio applications.
+An open-source ESP32 CW keyer featuring real-time Morse decoding, Koch/Farnsworth/adaptive training, three CW arcade games, an OLED operator interface, and secure Bluetooth Low Energy telemetry.
+
+Current firmware version: **v2.3.0**. See `docs/USER_MANUAL.md` for full operating instructions and `docs/FUNCTIONALITY_STATUS.md` for a code-grounded audit of what's implemented vs. still stubbed.
 
 ---
 
@@ -14,10 +16,14 @@ It is a development platform for modern CW technology.
 
 The firmware combines:
 
-* Straight key operation
-* Iambic paddle support (Mode B)
+* Straight key and iambic paddle (Mode A/B) keying
 * Real-time Morse decoding
-* OLED operator interface
+* Six training modes (Koch, Characters, Words, Callsigns, Adaptive, Exam) plus Farnsworth spacing
+* Three CW arcade games with persisted high scores
+* Session and lifetime statistics
+* Six named operating profiles (Default, Portable, Contest, Practice, Outdoor, Silent)
+* A 5-slot memory keyer
+* A rotary-encoder-driven OLED menu system
 * Secure Bluetooth Low Energy telemetry
 * Modular event-driven architecture
 
@@ -30,71 +36,87 @@ Every subsystem is isolated and independently expandable, making MORPHEUS suitab
 ### CW Keying
 
 * Straight key operation
-* Iambic paddle support
-* Iambic Mode B memory
-* Accurate timing engine
-* Configurable WPM
-* Sidetone generation
+* Iambic paddle support, Mode A and Mode B
+* Configurable WPM (5–40)
+* Adjustable keying weighting (30–70%)
+* Paddle reverse
+* Sidetone generation (200–2000 Hz, adjustable volume)
 
 ### Real-Time Decoding
 
 * Live Morse decoding
-* Character recognition
-* Word detection
+* Character and word recognition
 * Timing-based classification
-* Morse pattern visualization
+* Runtime enable/disable
+
+### Training
+
+* Koch Method, Characters, Words, Callsigns, Adaptive, and Exam modes
+* Farnsworth spacing practice
+* Per-mode statistics and a 90%-to-pass Exam mode
+
+### Games
+
+* Copy Challenge (falling-character reaction game)
+* Memory Challenge (Simon-style growing chain)
+* Speed Challenge "Overdrive" (accelerating fixed-tempo beat)
+* Persisted high scores, survive Factory Reset
+
+### Statistics & Profiles
+
+* Session and lifetime statistics, boot-time WPM history
+* Six named operating profiles bundling WPM/tone/paddle-reverse/mode/volume/contrast
+* 5-slot memory keyer for canned CQ/exchange messages
 
 ### Wireless Telemetry
 
-* Secure BLE communication
-* Encrypted pairing
-* Passkey authentication
-* Bonded device support
-* Real-time word transmission
+* Secure BLE communication (bonding, MITM protection, LE Secure Connections)
+* Passkey authentication, single-trusted-device allowlist
+* Bounded, auto-expiring pairing window
+* Real-time word transmission (JSON payload per completed word)
 
 ### Operator Display
 
-* OLED status display
-* Live decoded text
-* Current WPM
-* Operating mode indication
-* BLE connection status
-* Pairing information
+* OLED status display with live decoded text
+* Current WPM and operating mode
+* BLE connection status and pairing information
+* Status LED: keydown pulse, BLE pairing/connect feedback, and training/playback flash
 
 ### Diagnostics
 
-* Serial diagnostics
-* Event logging
-* Status monitoring
-* Runtime statistics
-* Heap information
+* Serial diagnostics (opt-in, off by default)
+* Input, display, audio, BLE, GPIO, and LED diagnostic screens
+* Runtime statistics and heap information
 
 ---
 
 # Architecture
 
-MORPHEUS follows a modular architecture.
+MORPHEUS follows a modular, event-driven architecture. See `docs/architecture.md` for the full breakdown.
 
 ```
              +----------------+
              |  MORPHEUS.ino  |
              +--------+-------+
                       |
-      +---------------+---------------+
-      |               |               |
-+-----v-----+   +-----v-----+   +-----v-----+
-| Keyer     |   | Decoder   |   | Services  |
-+-----+-----+   +-----+-----+   +-----------+
-      |               |
-      |               |
-+-----v-----+   +-----v-----+
-| Display   |   | Transport |
-+-----------+   +-----------+
+   +----------+----------+----------+----------+----------+
+   |          |          |          |          |          |
++--v--+   +---v---+  +---v---+  +---v---+  +---v---+  +---v---+
+|Keyer|   |Decoder|  |Trainer|  | Games |  | Stats |  |Profiles|
++--+--+   +---+---+  +-------+  +-------+  +-------+  +-------+
+   |          |
++--v--+   +---v-----+   +----------+   +---------+
+|Clock|   |Transport|   | Services |   |Status LED|
++-----+   +---------+   +----------+   +---------+
+                      |
+                 +----v----+
+                 |    UI   |
+                 | (menu / |
+                 | screens)|
+                 +---------+
 ```
 
-Each module has a clearly defined responsibility.
-
-This separation allows contributors to improve individual systems without affecting the entire firmware.
+Each module has a clearly defined responsibility. This separation allows contributors to improve individual systems without affecting the entire firmware.
 
 ---
 
@@ -106,17 +128,18 @@ This separation allows contributors to improve individual systems without affect
 
 ### OLED
 
-* SH1106 OLED
-* I2C Interface
+* SH1106 OLED, I2C interface
 
 ### Inputs
 
-* Straight key
-* Iambic paddle
+* Straight key or iambic paddle
+* Rotary encoder (navigation)
+* Confirm and Back buttons
 
 ### Output
 
 * Piezo buzzer sidetone
+* Status LED
 * BLE telemetry
 * OLED display
 
@@ -124,16 +147,21 @@ This separation allows contributors to improve individual systems without affect
 
 # Pin Assignment
 
-| Function             | GPIO |
-| -------------------- | ---: |
-| OLED SDA             |   21 |
-| OLED SCL             |   22 |
-| Key / DIT            |   25 |
-| DAH                  |   26 |
-| Buzzer               |   18 |
-| Mode Switch          |   33 |
-| Bond Reset Button    |   27 |
-| Reserved Keypad ADC  |   34 |
+| Function          | GPIO |
+| ----------------- | ---: |
+| OLED SDA           |   21 |
+| OLED SCL           |   22 |
+| Key / DIT          |   25 |
+| DAH                |   26 |
+| Buzzer             |   18 |
+| Status LED         |   27 |
+| Rotary Encoder A   |   19 |
+| Rotary Encoder B   |   23 |
+| Encoder Push       |    4 |
+| Confirm Button     |   14 |
+| Back Button        |   13 |
+
+See `docs/wiring.md` for the full wiring diagram.
 
 ---
 
@@ -144,27 +172,26 @@ morpheus-esp32-cw-keyer/
 ├── docs
 │   ├── architecture.md
 │   ├── build.md
-│   └── wiring.md
+│   ├── Hardware_Architecture.md
+│   ├── wiring.md
+│   ├── USER_MANUAL.md
+│   └── FUNCTIONALITY_STATUS.md
 ├── firmware
 │   └── MORPHEUS
-│       ├── config.h
-│       ├── core_decoder.cpp
-│       ├── core_decoder.h
-│       ├── core_keyer.cpp
-│       ├── core_keyer.h
-│       ├── display.cpp
-│       ├── display.h
 │       ├── MORPHEUS.ino
-│       ├── services.cpp
-│       ├── services.h
-│       ├── transport.cpp
-│       └── transport.h
+│       ├── config.h
+│       ├── core_*.{h,cpp}      # keyer, decoder, trainer, games, stats,
+│       │                       # profiles, memory, morseplayer, clock, led
+│       ├── ui_*.{h,cpp}        # menu, screens, state, renderer, input,
+│       │                       # backend, icons, fonts, splash
+│       ├── display.{h,cpp}
+│       ├── services.{h,cpp}
+│       └── transport.{h,cpp}
 ├── tests
 │   ├── test_ble_json_budget.py
 │   └── test_decoder_logic.py
 ├── LICENSE
 └── README.md
-
 ```
 
 ---
@@ -179,11 +206,20 @@ morpheus-esp32-cw-keyer/
 4. Select your ESP32 board.
 5. Compile and upload.
 
+## arduino-cli
+
+```sh
+arduino-cli compile --fqbn esp32:esp32:esp32 firmware/MORPHEUS
+arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32 firmware/MORPHEUS
+```
+
 Host-side decoder tests can be run with:
 
 ```sh
 python -m unittest discover -s tests
 ```
+
+See `docs/build.md` for more detail.
 
 ---
 
@@ -206,10 +242,11 @@ config.h
 Features can be enabled or disabled:
 
 ```cpp
-#define FEATURE_OLED      1
-#define FEATURE_BLE       1
-#define FEATURE_SIDETONE  1
-#define FEATURE_SERIAL    1
+#define FEATURE_OLED                  1
+#define FEATURE_BLE                   1
+#define FEATURE_SIDETONE              1
+#define FEATURE_SERIAL                0   // opt-in diagnostic logging
+#define FEATURE_DEBUG_SERIAL_COMMANDS 0   // opt-in serial debug commands
 ```
 
 ---
@@ -223,24 +260,27 @@ MORPHEUS uses:
 * Bonded devices
 * Encrypted communication
 
-Only trusted devices may reconnect after pairing.
+Only trusted devices may reconnect after pairing. BLE is off by default and must be explicitly enabled; even when enabled, advertising only runs during a bounded, auto-expiring pairing window.
 
 ---
 
 # Future Development
 
-Contributors are encouraged to explore:
+The following are present in the menu today as explicit "Feature not yet" placeholders:
 
-* Koch training
-* Farnsworth spacing
-* Adaptive timing
-* CW training modes
-* Mobile applications
-* Web dashboards
-* Contest logging
-* Network gateways
-* Statistics and analytics
-* SDR integrations
+* Wi-Fi
+* Keyboard (HID) output
+* Firmware Update (OTA)
+* Battery monitoring
+
+Contributors are also encouraged to explore:
+
+* OTA firmware updates
+* A hardware bond-reset trigger
+* Test coverage for the keyer, trainer, games, stats, profiles, and UI state machine
+* Mobile applications, web dashboards, contest logging, network gateways, SDR integrations
+
+See `docs/FUNCTIONALITY_STATUS.md` for the full, current gap analysis.
 
 ---
 

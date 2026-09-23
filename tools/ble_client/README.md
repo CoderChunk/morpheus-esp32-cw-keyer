@@ -5,6 +5,9 @@ live word telemetry, plus full remote control of **Training** and
 **Games** — including a virtual straight key, so drills and games can
 be played entirely from the app.
 
+See **[TESTING.md](TESTING.md)** for a step-by-step guide to testing
+this app (pairing, connection, Training, Games) against real hardware.
+
 ## Setup
 
 ```sh

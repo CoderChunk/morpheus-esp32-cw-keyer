@@ -35,6 +35,7 @@
 #define N_GAME_INFO(lbl, iid)  { lbl, NODE_GAME_INFO, nullptr, 0, iid }
 #define N_PLOAD(lbl, pid) { lbl, NODE_PROFILE_LOAD, nullptr, 0, pid }
 #define N_PSAVE(lbl, pid) { lbl, NODE_PROFILE_SAVE, nullptr, 0, pid }
+#define N_LED(lbl, tid)   { lbl, NODE_LED_TEST, nullptr, 0, tid }
 
 // --- Memory Msgs: 5 fixed canned messages, must match core_memory.cpp ---------
 static const UiMenuNode MENU_MEM[] = {
@@ -164,12 +165,22 @@ static const UiMenuNode MENU_SETTINGS[] = {
   N_SUB("SYSTEM",       MENU_SET_SYSTEM),
 };
 
+// LED Test: instant ON/OFF + a bounded, self-terminating BLINK pattern
+// (core_led_startBlinkTest) - no confirm dialog, same immediacy as the
+// Memory Msgs triggers.
+static const UiMenuNode MENU_DIAG_LED[] = {
+  N_LED("LED ON",    LED_TEST_ON),
+  N_LED("LED OFF",   LED_TEST_OFF),
+  N_LED("BLINK TEST", LED_TEST_BLINK),
+};
+
 static const UiMenuNode MENU_DIAG[] = {
   N_DIAG("INPUT TEST",    DIAG_INPUT),
   N_DIAG("DISPLAY TEST",  DIAG_DISPLAY),
   N_DIAG("AUDIO TEST",    DIAG_AUDIO),
   N_DIAG("BLE STATUS",    DIAG_BLE),
   N_DIAG("GPIO MONITOR",  DIAG_GPIO),
+  N_SUB ("LED TEST",      MENU_DIAG_LED),
   N_DIAG("SYSTEM INFO",   DIAG_SYSTEM),
   N_DIAG("MEMORY/PERF",   DIAG_MEMORY),
   N_DIAG("NVS/SETTINGS",  DIAG_NVS),

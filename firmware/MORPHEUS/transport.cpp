@@ -35,6 +35,14 @@ static bool bleEnabled = false;
 static bool pairingWindowActive = false;
 static unsigned long pairingWindowStartMs = 0;
 
+// v2.1.1 fix: the LED previously inferred "pairing" from bleEnabled +
+// not-connected alone, so once the bounded pairing window auto-expired
+// (advertising genuinely stopped - see transport_service() below) the LED
+// kept blinking forever even though the radio was no longer discoverable.
+// Tracking the real advertising state directly keeps the LED honest about
+// whether the device can actually be found and connected to right now.
+static bool advertisingActive = false;
+
 // v1.2.1 fix: bleAwaitingTimeout and bleStateChangeMs must always be read and
 // written together, as one consistent pair - never one updated without the
 // other. See original file header note (unchanged) for the full v1.2.0 bug
@@ -56,8 +64,10 @@ static void updateLedForCurrentState() {
     core_led_setRadioState(LED_RADIO_OFF);
   } else if (isCurrentlyConnected()) {
     core_led_setRadioState(LED_RADIO_CONNECTED);
+  } else if (advertisingActive) {
+    core_led_setRadioState(LED_RADIO_PAIRING);   // genuinely discoverable right now
   } else {
-    core_led_setRadioState(LED_RADIO_PAIRING);   // advertising (pairingWindowActive or otherwise) reads as "pairing"
+    core_led_setRadioState(LED_RADIO_OFF);       // BLE on, but not currently advertising
   }
 }
 
@@ -101,6 +111,7 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     bleConnHandle = connInfo.getConnHandle();
     bleLinkSecure = false;
     pairingWindowActive = false;   // a real connection ends the pairing window
+    advertisingActive = false;     // NimBLE stops advertising once connected
     pushDisplayStatus(DISPLAY_LINK_CONNECTED);
     updateLedForCurrentState();
 #if FEATURE_SERIAL
@@ -127,6 +138,7 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     // silently restart it.
     if (bleEnabled) {
       NimBLEDevice::startAdvertising();
+      advertisingActive = true;
     }
     updateLedForCurrentState();
   }
@@ -191,6 +203,7 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 static void beginAdvertisingIfEnabled() {
   if (!bleEnabled) return;
   NimBLEDevice::getAdvertising()->start();
+  advertisingActive = true;
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
 }
@@ -263,6 +276,7 @@ void transport_service(unsigned long now) {
     if (now - pairingWindowStartMs >= BLE_PAIRING_WINDOW_MS) {
       pairingWindowActive = false;
       NimBLEDevice::getAdvertising()->stop();
+      advertisingActive = false;
       updateLedForCurrentState();
 #if FEATURE_SERIAL
       Serial.println(F("EVT BLE_PAIRING_WINDOW_EXPIRED"));
@@ -323,6 +337,7 @@ void transport_resetBond() {
   trustedAddress[0] = '\0';
   if (bleEnabled) {
     NimBLEDevice::startAdvertising();
+    advertisingActive = true;
   }
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
@@ -348,6 +363,7 @@ void transport_setBleEnabled(bool enabled) {
       bleServer->disconnect(connInfo);
     }
     NimBLEDevice::getAdvertising()->stop();
+    advertisingActive = false;
     updateLedForCurrentState();
 #if FEATURE_SERIAL
     Serial.println(F("EVT BLE_DISABLED"));
@@ -360,6 +376,7 @@ void transport_startPairingWindow() {
   pairingWindowActive = true;
   pairingWindowStartMs = millis();
   NimBLEDevice::getAdvertising()->start();
+  advertisingActive = true;
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
 #if FEATURE_SERIAL

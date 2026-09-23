@@ -433,3 +433,18 @@ bool ui_backend_getBleLedEnabled()     { return services_getBleLedEnabled(); }
 void ui_backend_setBleLedEnabled(bool v) { services_setBleLedEnabled(v); }
 void ui_backend_startBlePairing()      { transport_startPairingWindow(); }
 bool ui_backend_isBlePairingActive()   { return transport_isPairingActive(); }
+
+// Diagnostics > LED Test - direct hardware exercise, bypasses the
+// BLE/training LED-priority logic entirely (this IS the priority owner
+// while the test runs). ledTestId values match ui_menu.h's UiLedTestId
+// ordering (LED_TEST_ON=1, LED_TEST_OFF=2, LED_TEST_BLINK=3): documented
+// positional mapping, not a shared header - same convention as
+// ui_backend_trainStartSession() above.
+void ui_backend_ledTest(uint8_t ledTestId) {
+  switch (ledTestId) {
+    case 1: core_led_trainerFlashOn();  break;
+    case 2: core_led_trainerFlashOff(); break;
+    case 3: core_led_startBlinkTest();  break;
+    default: break;
+  }
+}

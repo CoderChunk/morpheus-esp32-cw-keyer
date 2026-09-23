@@ -69,4 +69,28 @@ void transport_setBleEnabled(bool enabled);
 void transport_startPairingWindow();
 bool transport_isPairingActive();
 
+// ----------------------------------------------------------------------------
+// Remote-control channel (ble_control.cpp) - Training/Games/virtual
+// keying. transport.cpp only carries bytes on BLE_CONTROL_CMD/EVT_UUID;
+// it has no idea what a "command" means, same boundary as
+// transport_notifyWordCompleted() staying ignorant of core_decoder.
+// ----------------------------------------------------------------------------
+typedef void (*BleControlCommandHandler)(const char *json);
+
+// Self-registration, same pattern as core_decoder_setTrainingSink():
+// ble_control_init() calls this once, transport.cpp never needs to know
+// ble_control.h exists.
+void transport_setControlCommandHandler(BleControlCommandHandler handler);
+
+// Sends one JSON event on the control-notify characteristic. Silently
+// does nothing (returns false) if not connected+secure, or if json is
+// longer than the current negotiated MTU allows - callers are expected
+// to keep payloads well within BLE_CONTROL_EVT_CAP and just accept a
+// dropped update rather than corrupt one on the wire.
+bool transport_sendControlEvent(const char *json);
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+void transport_debugDumpState();
+#endif
+
 #endif // MORPHEUS_TRANSPORT_H

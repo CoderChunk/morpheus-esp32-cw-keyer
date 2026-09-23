@@ -74,7 +74,18 @@ static const float STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT = 2.0f;
 static const char     BLE_DEVICE_NAME[]        = "MORPHEUS-CW";
 static const char     BLE_SERVICE_UUID[]       = "7a48a2b0-0001-4ad4-9f1a-1c2d3e4f5a6b";
 static const char     BLE_WORD_CHAR_UUID[]     = "7a48a2b0-0002-4ad4-9f1a-1c2d3e4f5a6b";
-static const uint16_t BLE_REQUESTED_MTU        = 128;
+// Remote-control channel (Training/Games/virtual keying) - separate from
+// the word-telemetry characteristic above so existing word-only clients
+// are unaffected. CMD is client->device (write), EVT is device->client
+// (notify): live training/game state pushes plus command acks/errors.
+static const char     BLE_CONTROL_CMD_UUID[]   = "7a48a2b0-0003-4ad4-9f1a-1c2d3e4f5a6b";
+static const char     BLE_CONTROL_EVT_UUID[]   = "7a48a2b0-0004-4ad4-9f1a-1c2d3e4f5a6b";
+// Bumped from 128: control-event JSON (training/game state) carries more
+// fields than the word payload and needs more headroom. Still well
+// within what NimBLE/BlueZ negotiate down to on either side.
+static const uint16_t BLE_REQUESTED_MTU        = 247;
+static const uint16_t BLE_CONTROL_CMD_CAP      = 96;    // max incoming command JSON length
+static const uint16_t BLE_CONTROL_EVT_CAP      = 220;   // max outgoing state JSON length
 static const uint8_t  BLE_WORD_FIELD_CAP       = 24;
 static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;

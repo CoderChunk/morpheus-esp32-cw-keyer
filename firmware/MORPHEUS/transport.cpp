@@ -9,6 +9,9 @@
 
 static NimBLEServer *bleServer = nullptr;
 static NimBLECharacteristic *bleWordChar = nullptr;
+static NimBLECharacteristic *bleControlCmdChar = nullptr;
+static NimBLECharacteristic *bleControlEvtChar = nullptr;
+static BleControlCommandHandler controlCommandHandler = nullptr;
 static Preferences blePrefs;
 static volatile uint16_t bleConnHandle = BLE_CONN_HANDLE_INVALID;
 static volatile bool bleLinkSecure = false;
@@ -182,8 +185,7 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     // and disconnected everyone; that path must not have this callback
     // silently restart it.
     if (bleEnabled) {
-      NimBLEDevice::startAdvertising();
-      advertisingActive = true;
+      advertisingActive = NimBLEDevice::startAdvertising();
     }
     updateLedForCurrentState();
   }
@@ -244,13 +246,33 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
   }
 };
 
+// Command characteristic write handler - forwards the raw JSON string
+// to whoever registered via transport_setControlCommandHandler() (only
+// ble_control.cpp does, today). transport.cpp never interprets the
+// bytes itself, matching the same ignorance-of-payload boundary as the
+// word-notify characteristic in the other direction.
+class ControlCmdCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
+    (void)connInfo;
+    if (controlCommandHandler == nullptr) return;
+    std::string value = pChar->getValue();
+    if (value.empty() || value.size() >= BLE_CONTROL_CMD_CAP) return;
+    char buf[BLE_CONTROL_CMD_CAP];
+    memcpy(buf, value.data(), value.size());
+    buf[value.size()] = '\0';
+    controlCommandHandler(buf);
+  }
+};
+
 // Advertising start is now conditional, not automatic - called from
 // transport_init() (only if bleEnabled was true last session),
 // transport_setBleEnabled(true), and transport_startPairingWindow().
 static void beginAdvertisingIfEnabled() {
   if (!bleEnabled) return;
-  NimBLEDevice::getAdvertising()->start();
-  advertisingActive = true;
+  advertisingActive = NimBLEDevice::getAdvertising()->start();
+#if FEATURE_SERIAL
+  if (!advertisingActive) Serial.println(F("EVT BLE_ADV_START_FAILED"));
+#endif
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
 }
@@ -298,6 +320,20 @@ void transport_init() {
       NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN
   );
   bleWordChar->setValue("{}");
+
+  bleControlCmdChar = pSvc->createCharacteristic(
+      BLE_CONTROL_CMD_UUID,
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN
+  );
+  bleControlCmdChar->setCallbacks(new ControlCmdCallbacks());
+
+  bleControlEvtChar = pSvc->createCharacteristic(
+      BLE_CONTROL_EVT_UUID,
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+      NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN
+  );
+  bleControlEvtChar->setValue("{}");
+
   pSvc->start();
 
   NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
@@ -391,6 +427,31 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
 #endif
 }
 
+void transport_setControlCommandHandler(BleControlCommandHandler handler) {
+  controlCommandHandler = handler;
+}
+
+bool transport_sendControlEvent(const char *json) {
+  if (bleServer == nullptr || bleControlEvtChar == nullptr) return false;
+  uint16_t connHandle = bleConnHandle;
+  if (connHandle == BLE_CONN_HANDLE_INVALID) return false;
+  if (!bleLinkSecure) return false;
+  size_t len = strlen(json);
+  uint16_t mtu = bleServer->getPeerMTU(connHandle);
+  if (mtu == 0) mtu = 23;
+  size_t available = (mtu > 3) ? (size_t)(mtu - 3) : 0;
+  if (len == 0 || len > available || len >= BLE_CONTROL_EVT_CAP) {
+#if FEATURE_SERIAL
+    Serial.print(F("EVT BLE_CTRL_SKIP reason=too_large len=")); Serial.print(len);
+    Serial.print(F(" mtu=")); Serial.println(mtu);
+#endif
+    return false;
+  }
+  bleControlEvtChar->setValue(json);
+  bleControlEvtChar->notify();
+  return true;
+}
+
 // ----------------------------------------------------------------------------
 // Bond Reset (v1.2.0)
 // ----------------------------------------------------------------------------
@@ -415,8 +476,7 @@ void transport_resetBond() {
   trustedDeviceCount = 0;
   memset(trustedAddresses, 0, sizeof(trustedAddresses));
   if (bleEnabled) {
-    NimBLEDevice::startAdvertising();
-    advertisingActive = true;
+    advertisingActive = NimBLEDevice::startAdvertising();
   }
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
@@ -429,6 +489,17 @@ void transport_resetBond() {
 // BLE on/off + pairing window (new)
 // ----------------------------------------------------------------------------
 bool transport_getBleEnabled() { return bleEnabled; }
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+// Temporary bench-diagnostic dump - not part of the stable API.
+void transport_debugDumpState() {
+  Serial.print(F("EVT BLE_STATE bleEnabled=")); Serial.print(bleEnabled);
+  Serial.print(F(" pairingWindowActive=")); Serial.print(pairingWindowActive);
+  Serial.print(F(" advertisingActive=")); Serial.print(advertisingActive);
+  Serial.print(F(" connected=")); Serial.print(isCurrentlyConnected());
+  Serial.print(F(" trustedCount=")); Serial.println(trustedDeviceCount);
+}
+#endif
 
 void transport_setBleEnabled(bool enabled) {
   if (enabled == bleEnabled) return;
@@ -454,8 +525,7 @@ void transport_startPairingWindow() {
   if (!bleEnabled) return;
   pairingWindowActive = true;
   pairingWindowStartMs = millis();
-  NimBLEDevice::getAdvertising()->start();
-  advertisingActive = true;
+  advertisingActive = NimBLEDevice::getAdvertising()->start();
   pushDisplayStatus(DISPLAY_LINK_ADV);
   updateLedForCurrentState();
 #if FEATURE_SERIAL
@@ -489,6 +559,8 @@ void transport_service(unsigned long now) { (void)now; }
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {
   (void)word; (void)wpm; (void)mode; (void)now;
 }
+void transport_setControlCommandHandler(BleControlCommandHandler handler) { (void)handler; }
+bool transport_sendControlEvent(const char *json) { (void)json; return false; }
 void transport_resetBond() {}
 bool transport_isConnected()      { return false; }
 bool transport_isSecure()         { return false; }

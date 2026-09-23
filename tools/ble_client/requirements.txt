@@ -1,2 +1,5 @@
 PySide6>=6.6
 bleak>=0.21
+# In-app pairing (ble_pairing.py) talks to BlueZ over D-Bus directly -
+# Linux-only, used by the "Pair New Device" button.
+dbus-next>=0.2.3; sys_platform == "linux"

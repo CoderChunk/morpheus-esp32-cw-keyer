@@ -10,14 +10,17 @@ firmware) - including a virtual straight key so drills and games can be
 played entirely from this app.
 
 The word and control-event characteristics require an encrypted +
-authenticated link, so the OS must already have BONDED with the device
-(passkey confirmed once) before this client can subscribe - this tool
-does not perform pairing itself.
+authenticated link, so the device must be BONDED first. On Linux, the
+"Pair New Device" button handles this in-app (registers as a BlueZ
+pairing agent - see ble_pairing.py) with no terminal or OS Settings
+detour. On other platforms, or if dbus-next isn't installed, that
+button is disabled and pairing must be done once via the OS's own
+Bluetooth settings before connecting here.
 
 Usage:
     python3 morpheus_ble_client.py
 
-Requires: PySide6, bleak (see requirements.txt)
+Requires: PySide6, bleak, and (Linux only) dbus-next - see requirements.txt
 """
 
 import sys
@@ -42,6 +45,16 @@ from PySide6.QtWidgets import (
 from ble_client_core import BleWorker
 from pages import GamesPage, KeyerPage, PlaceholderPage, TrainingPage
 import protocol as proto
+
+try:
+    from pairing_dialog import PairingDialog
+    PAIRING_AVAILABLE = True
+except ImportError:
+    # dbus-next (or PySide6/bleak themselves) missing, or non-Linux -
+    # in-app pairing is Linux-only. Degrade to a disabled button rather
+    # than crashing the whole app over an optional feature.
+    PairingDialog = None
+    PAIRING_AVAILABLE = False
 
 DARK_STYLESHEET = """
 QMainWindow, QWidget { background-color: #1a1b22; color: #e6e6e6; font-size: 10.5pt; }
@@ -221,6 +234,16 @@ class MainWindow(QMainWindow):
         self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         row.addWidget(self.status_label, 1)
 
+        self.pair_btn = QPushButton("Pair New Device")
+        self.pair_btn.clicked.connect(self._on_pair_clicked)
+        if not PAIRING_AVAILABLE:
+            self.pair_btn.setEnabled(False)
+            self.pair_btn.setToolTip(
+                "In-app pairing needs dbus-next and is Linux-only. "
+                "Pair once via your OS's Bluetooth settings instead."
+            )
+        row.addWidget(self.pair_btn)
+
         row.addWidget(QLabel("Address (optional):"))
         self.address_edit = QLineEdit()
         self.address_edit.setPlaceholderText(f"blank = scan for \"{proto.DEVICE_NAME}\"")
@@ -248,6 +271,12 @@ class MainWindow(QMainWindow):
     def _on_disconnect_clicked(self):
         self.disconnect_btn.setEnabled(False)
         self.worker.stop()
+
+    def _on_pair_clicked(self):
+        dialog = PairingDialog(proto.DEVICE_NAME, self)
+        dialog.exec()
+        if dialog.success:
+            self.statusBar().showMessage("Paired - click Connect to link up.", 6000)
 
     def _on_status_changed(self, text: str):
         self.status_label.setText(text)

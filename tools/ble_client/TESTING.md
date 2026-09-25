@@ -60,8 +60,9 @@ single-device test bench).
 python3 morpheus_ble_client.py
 ```
 
-1. Click **Pair New Device** (top bar). If it's greyed out, `dbus-next`
-   isn't installed or you're not on Linux — see §1.
+1. Click the device pill (top bar, next to the MORPHEUS logo) to open
+   the connection dialog, then click **Pair New Device**. If it's greyed
+   out, `dbus-next` isn't installed or you're not on Linux — see §1.
 2. Click **Start Pairing** in the dialog that opens.
 3. **Expected:** the dialog shows *"Looking for MORPHEUS-CW..."*, then
    either:
@@ -91,10 +92,13 @@ python3 morpheus_ble_client.py
 
 Whether you just paired in-app or already had a bond:
 
-1. Leave **Address** blank (auto-discovers by name) and click **Connect**
-2. **Expected:** status dot turns green, status text shows
-   `Connected: MORPHEUS-CW (XX:XX:XX:XX:XX:XX)` within ~10s
-3. Click **Disconnect** — dot turns red, status shows `Disconnected`
+1. Click the device pill (top bar) to open the connection dialog, leave
+   **Address** blank (auto-discovers by name), and click **Connect**
+2. **Expected:** the device pill's dot turns green and shows
+   `Connected`; the status bar shows the full
+   `Connected: MORPHEUS-CW (XX:XX:XX:XX:XX:XX)` detail, within ~10s
+3. Click **Disconnect** in the same dialog — dot turns red, shows
+   `Disconnected`
 
 If this hangs on *"Scanning..."*, the same BLE-enabled/already-connected
 causes from §3 apply.
@@ -106,9 +110,9 @@ causes from §3 apply.
 1. Sidebar → **CW Keyer**
 2. On the physical device, key a short word on the paddle/straight key
    and let it finish (pause past the word gap)
-3. **Expected:** the word appears as a new row in the **Word Log** table
-   (Time / Word / WPM / Mode) and is appended to the **Live Transcript**
-   below it. **WPM**/**Mode**/**Words received** counters at the top update.
+3. **Expected:** the word is appended to the **Live Transcript** panel,
+   the **Mode**/**Words Received**/**Last Word** pills update, and the
+   WPM dial shows the word's reported speed.
 
 ---
 

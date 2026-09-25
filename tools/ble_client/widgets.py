@@ -184,6 +184,57 @@ class ChevronIcon(IconWidget):
         p.drawPath(path)
 
 
+class BatteryIcon(IconWidget):
+    """Battery outline, drawn empty/neutral since the firmware has no BLE
+    battery service - there is no real level to fill it with, so this
+    is a static glyph for visual match rather than a fake reading."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        self._pen(p, 0.1)
+        p.setBrush(Qt.NoBrush)
+        w, h = self.width(), self.height()
+        body = QRectF(w * 0.04, h * 0.22, w * 0.78, h * 0.56)
+        p.drawRoundedRect(body, h * 0.1, h * 0.1)
+        cap = QRectF(w * 0.86, h * 0.36, w * 0.1, h * 0.28)
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        p.drawRoundedRect(cap, w * 0.02, w * 0.02)
+
+
+class SignalBarsIcon(IconWidget):
+    """Ascending signal bars, drawn as an outline (not filled) since
+    there is no real RSSI/link-quality data behind it - see BatteryIcon."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        w, h = self.width(), self.height()
+        n, bw, gap = 4, w * 0.16, w * 0.06
+        x = w * 0.02
+        for i in range(n):
+            bh = h * (0.32 + 0.68 * (i + 1) / n)
+            p.drawRoundedRect(QRectF(x, h - bh, bw, bh), 1, 1)
+            x += bw + gap
+
+
+class DocumentIcon(IconWidget):
+    """Simple page-with-lines glyph, used for the Live Transcript header."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        self._pen(p, 0.1)
+        p.setBrush(Qt.NoBrush)
+        w, h = self.width(), self.height()
+        p.drawRoundedRect(QRectF(w * 0.16, h * 0.08, w * 0.68, h * 0.84), 2, 2)
+        for frac in (0.36, 0.54, 0.72):
+            p.drawLine(QPointF(w * 0.3, h * frac), QPointF(w * 0.7, h * frac))
+
+
 class LetterBadge(IconWidget):
     """Fallback icon: a plain letter in a ring, for sections that don't
     have a bespoke vector icon yet - plain ASCII always renders safely,
@@ -206,6 +257,23 @@ class LetterBadge(IconWidget):
         font.setPointSizeF(max(7.0, self._size * 0.42))
         p.setFont(font)
         p.drawText(rect, Qt.AlignCenter, self.letter)
+
+
+class ClickablePanel(QWidget):
+    """A plain QWidget that emits `clicked` on left-click, so a styled
+    container (like the top-bar device pill) can act as a button
+    without fighting QPushButton's own content layout."""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class LogoMark(QWidget):
@@ -299,7 +367,7 @@ class WpmDial(QWidget):
         label_font.setBold(True)
         p.setFont(label_font)
         label_rect = QRectF(rect.x(), rect.center().y() + side * 0.06, rect.width(), side * 0.1)
-        p.drawText(label_rect, Qt.AlignCenter, "LIVE WPM")
+        p.drawText(label_rect, Qt.AlignCenter, "WPM")
 
 
 class RoundIconButton(QPushButton):

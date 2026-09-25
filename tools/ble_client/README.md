@@ -1,9 +1,10 @@
 # MORPHEUS BLE Test Client
 
-A desktop GUI (PySide6) for testing MORPHEUS over Bluetooth Low Energy:
-live word telemetry, plus full remote control of **Training** and
-**Games** — including a virtual straight key, so drills and games can
-be played entirely from the app.
+A full-screen desktop GUI (PySide6) for testing MORPHEUS over Bluetooth
+Low Energy: live word telemetry, plus full remote control of
+**Training** and **Games** — including a virtual straight key, so
+drills and games can be played entirely from the app. Launches
+maximized with a sidebar-navigated, card-based dark theme.
 
 See **[TESTING.md](TESTING.md)** for a step-by-step guide to testing
 this app (pairing, connection, Training, Games) against real hardware.

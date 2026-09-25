@@ -169,6 +169,23 @@ class TextLinesIcon(IconWidget):
             p.drawLine(QPointF(w * 0.16, y), QPointF(x2, y))
 
 
+class PulseIcon(IconWidget):
+    """Zigzag waveform line - used for the Character Practice header."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        self._pen(p, 0.11)
+        p.setBrush(Qt.NoBrush)
+        w, h = self.width(), self.height()
+        pts = [(0.0, 0.5), (0.2, 0.5), (0.34, 0.14), (0.48, 0.86), (0.62, 0.5), (1.0, 0.5)]
+        path = QPainterPath()
+        path.moveTo(w * pts[0][0], h * pts[0][1])
+        for fx, fy in pts[1:]:
+            path.lineTo(w * fx, h * fy)
+        p.drawPath(path)
+
+
 class ChevronIcon(IconWidget):
     """Small right-pointing chevron, used as a row affordance."""
 
@@ -368,6 +385,93 @@ class WpmDial(QWidget):
         p.setFont(label_font)
         label_rect = QRectF(rect.x(), rect.center().y() + side * 0.06, rect.width(), side * 0.1)
         p.drawText(label_rect, Qt.AlignCenter, "WPM")
+
+
+class RingGauge(QWidget):
+    """Generic circular percentage gauge - e.g. Training's live Accuracy
+    (correct/attempts, computed from real train_state fields)."""
+
+    def __init__(self, label: str, color=None, parent=None):
+        super().__init__(parent)
+        self._value = 0
+        self._label = label
+        self._color = color or ACCENT
+        self.setMinimumSize(170, 170)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+
+    def set_value(self, percent):
+        try:
+            self._value = max(0, min(100, int(percent)))
+        except (TypeError, ValueError):
+            self._value = 0
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        side = min(self.width(), self.height()) - 12
+        rect = QRectF((self.width() - side) / 2, (self.height() - side) / 2, side, side)
+
+        track = QPen(QColor("#232636"), side * 0.09)
+        track.setCapStyle(Qt.RoundCap)
+        p.setPen(track)
+        p.drawArc(rect, 90 * 16, -360 * 16)
+
+        if self._value > 0:
+            arc_pen = QPen(self._color, side * 0.09)
+            arc_pen.setCapStyle(Qt.RoundCap)
+            p.setPen(arc_pen)
+            p.drawArc(rect, 90 * 16, int(-360 * (self._value / 100.0) * 16))
+
+        p.setPen(WHITE)
+        value_font = QFont()
+        value_font.setPointSizeF(side * 0.15)
+        value_font.setBold(True)
+        p.setFont(value_font)
+        value_rect = QRectF(rect.x(), rect.center().y() - side * 0.16, rect.width(), side * 0.2)
+        p.drawText(value_rect, Qt.AlignCenter, f"{self._value}%")
+
+        p.setPen(MUTED)
+        label_font = QFont()
+        label_font.setPointSizeF(side * 0.07)
+        label_font.setBold(True)
+        p.setFont(label_font)
+        label_rect = QRectF(rect.x(), rect.center().y() + side * 0.05, rect.width(), side * 0.12)
+        p.drawText(label_rect, Qt.AlignCenter, self._label)
+
+
+class MorseGlyph(QWidget):
+    """Renders a Morse pattern (e.g. ".-.") as dot/dash bars - the real
+    pattern for the live training target character, from protocol.MORSE_TABLE
+    (an exact copy of the firmware's own morseTable)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._pattern = ""
+        self.setMinimumHeight(30)
+
+    def set_pattern(self, pattern: str):
+        self._pattern = pattern or ""
+        self.update()
+
+    def paintEvent(self, _event):
+        if not self._pattern:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(WHITE)
+        h = min(self.height(), 26)
+        dot_w = h * 0.5
+        dash_w = h * 1.7
+        gap = h * 0.55
+        widths = [dot_w if c == "." else dash_w for c in self._pattern]
+        total = sum(widths) + gap * (len(widths) - 1)
+        x = (self.width() - total) / 2
+        y = (self.height() - h * 0.42) / 2
+        for w in widths:
+            p.drawRoundedRect(QRectF(x, y, w, h * 0.42), h * 0.2, h * 0.2)
+            x += w + gap
 
 
 class RoundIconButton(QPushButton):

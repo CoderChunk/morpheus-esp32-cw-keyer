@@ -211,6 +211,39 @@ QLabel#pillValue { font-size: 14pt; font-weight: 800; color: #ffffff; }
 QWidget#plainPanel { background-color: #161825; border: 1px solid #232636; border-radius: 16px; }
 QLabel#panelTitle { font-size: 10pt; font-weight: 700; color: #c7cbdb; letter-spacing: 0.5px; }
 
+QLabel#pageTitle { font-size: 22pt; font-weight: 800; color: #ffffff; }
+QLabel#pageSubtitle { font-size: 10pt; color: #8a8fa3; }
+
+QWidget#segmentGroup { background-color: #12141d; border: 1px solid #232636; border-radius: 12px; }
+QPushButton#segmentButton {
+    background-color: transparent; color: #9096ab; font-weight: 700; font-size: 9.5pt;
+    padding: 9px 14px; border-radius: 8px; border: none;
+}
+QPushButton#segmentButton:checked { background-color: #5b7cfa; color: #ffffff; }
+QPushButton#segmentButton:hover:!checked { background-color: #1c1f2e; color: #e8e9ee; }
+
+QLabel#infoGlyph { color: #5b7cfa; font-size: 13pt; }
+
+QPushButton#ctaButton {
+    background-color: #5b7cfa; font-size: 11pt; padding: 12px 22px;
+}
+QPushButton#ctaButton:hover { background-color: #6f8dfb; }
+
+QWidget#practiceStage {
+    background-color: #0f1117; border: 1px solid #232636; border-radius: 14px;
+}
+
+QWidget#examBanner { background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 12px; }
+
+QLabel#kochChar {
+    background-color: #12141d; border: 1px solid #232636; border-radius: 10px;
+    color: #4a4e5e; font-weight: 800; font-size: 11pt;
+}
+QLabel#kochChar[state="unlocked"] { color: #3ddc84; border-color: #234f38; }
+QLabel#kochChar[state="current"] {
+    color: #ffffff; background-color: #5b7cfa; border-color: #5b7cfa;
+}
+
 QLabel#heroTitle { font-size: 26pt; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
 QLabel#heroSubtitle { font-size: 10pt; font-weight: 700; color: #cdd3ea; letter-spacing: 1px; }
 QLabel#heroTagline { font-size: 9.5pt; color: #9aa1bd; }
@@ -357,7 +390,7 @@ class MainWindow(QMainWindow):
         # forms into an unreadable single thin row of controls.
         pages = {
             "CW Keyer": self.keyer_page,
-            "Training": _centered(self.training_page, 900),
+            "Training": self.training_page,
             "Games": _centered(self.games_page, 900),
         }
         for name in SIDEBAR_SECTIONS:

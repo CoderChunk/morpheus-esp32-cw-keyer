@@ -3,6 +3,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -26,7 +27,10 @@ from widgets import (
     CircularKeyButton,
     DocumentIcon,
     HeroPanel,
+    MorseGlyph,
     PieIcon,
+    PulseIcon,
+    RingGauge,
     RoundIconButton,
     TextLinesIcon,
     WpmDial,
@@ -417,115 +421,394 @@ class KeyerPage(QWidget):
 
 # ----------------------------------------------------------------------------
 class TrainingPage(QWidget):
+    """Styled to match the reference template's Training tab, but every
+    number and control here is backed by the real BLE protocol. The
+    firmware has no commands to set speed, pick a "lesson", or switch
+    a listen/type input mode remotely (ble_control.cpp only accepts
+    train_start/stop/confirm and key_down/up) - so unlike the template's
+    mockup, this doesn't show fake WPM/lesson/mode pickers. The Koch
+    progress grid uses protocol.KOCH_ORDER (an exact copy of the
+    firmware's own character sequence) driven by the real live
+    kochLevel field, and the Morse glyph uses protocol.MORSE_TABLE (an
+    exact copy of the firmware's decoder table) for the real target
+    character - not fabricated data, just real data rendered visually.
+    """
+
     command_requested = Signal(dict)
 
     def __init__(self):
         super().__init__()
+        self._active = False
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(14)
+        root.setSpacing(18)
 
-        # --- controls ---------------------------------------------------
-        controls = card("Session")
-        crow = QHBoxLayout(controls)
-        crow.addWidget(QLabel("Mode:"))
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(proto.TRAIN_MODES)
-        crow.addWidget(self.mode_combo)
-        self.start_btn = QPushButton("Start")
-        self.start_btn.clicked.connect(self._on_start)
-        crow.addWidget(self.start_btn)
+        root.addWidget(self._build_header())
+        root.addWidget(self._build_toolbar())
+
+        body = QHBoxLayout()
+        body.setSpacing(18)
+        body.addWidget(self._build_practice_card(), 2)
+
+        side = QVBoxLayout()
+        side.setSpacing(18)
+        side.addWidget(self._build_progress_card())
+        side.addWidget(self._build_stats_card())
+        side_widget = QWidget()
+        side_widget.setLayout(side)
+        body.addWidget(side_widget, 1)
+        root.addLayout(body)
+        root.addStretch(1)
+
+        self._on_mode_changed(self.mode_group.checkedButton())
+
+    # ------------------------------------------------------------------
+    def _build_header(self) -> QWidget:
+        header = QHBoxLayout()
+        header.setSpacing(18)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        title = QLabel("Training")
+        title.setObjectName("pageTitle")
+        subtitle = QLabel("Build your CW skills with live device drills")
+        subtitle.setObjectName("pageSubtitle")
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        header.addLayout(title_col)
+        header.addStretch(1)
+
+        seg = QWidget()
+        seg.setObjectName("segmentGroup")
+        seg_row = QHBoxLayout(seg)
+        seg_row.setContentsMargins(4, 4, 4, 4)
+        seg_row.setSpacing(2)
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        for mode in proto.TRAIN_MODES:
+            btn = QPushButton(proto.TRAIN_MODE_LABELS.get(mode, mode))
+            btn.setObjectName("segmentButton")
+            btn.setCheckable(True)
+            btn.setProperty("trainMode", mode)
+            seg_row.addWidget(btn)
+            self.mode_group.addButton(btn)
+        list(self.mode_group.buttons())[0].setChecked(True)
+        self.mode_group.buttonClicked.connect(self._on_mode_changed)
+        header.addWidget(seg)
+
+        note = QHBoxLayout()
+        note.setSpacing(8)
+        info_icon = QLabel("ⓘ")
+        info_icon.setObjectName("infoGlyph")
+        note.addWidget(info_icon)
+        self.mode_desc_label = QLabel()
+        self.mode_desc_label.setObjectName("sectionLabel")
+        self.mode_desc_label.setWordWrap(True)
+        self.mode_desc_label.setMaximumWidth(220)
+        note.addWidget(self.mode_desc_label)
+        header.addLayout(note)
+
+        wrap = QWidget()
+        wrap.setLayout(header)
+        return wrap
+
+    def _build_toolbar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("plainPanel")
+        shadow = QGraphicsDropShadowEffect(bar)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 5)
+        shadow.setColor(QColor(0, 0, 0, 90))
+        bar.setGraphicsEffect(shadow)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(18, 14, 18, 14)
+        row.setSpacing(12)
+
+        hint = QLabel("Speed and character set are configured on the device itself "
+                       "(Settings menu) - not remotely adjustable over BLE yet.")
+        hint.setObjectName("sectionLabel")
+        hint.setWordWrap(True)
+        row.addWidget(hint, 1)
+
+        self.confirm_btn = QPushButton("Confirm")
+        self.confirm_btn.setToolTip("Advance past an exam result / confirmation prompt")
+        self.confirm_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "train_confirm"}))
+        row.addWidget(self.confirm_btn)
+
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("dangerButton")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "train_stop"}))
-        crow.addWidget(self.stop_btn)
-        crow.addStretch(1)
-        root.addWidget(controls)
+        row.addWidget(self.stop_btn)
 
-        # --- live drill ---------------------------------------------------
-        live = card("Live Drill")
-        lgrid = QVBoxLayout(live)
+        self.start_btn = QPushButton("▶  Start Training")
+        self.start_btn.setObjectName("ctaButton")
+        self.start_btn.clicked.connect(self._on_start)
+        row.addWidget(self.start_btn)
+
+        return bar
+
+    def _build_practice_card(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("plainPanel")
+        shadow = QGraphicsDropShadowEffect(panel)
+        shadow.setBlurRadius(28)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(0, 0, 0, 90))
+        panel.setGraphicsEffect(shadow)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 18, 20, 24)
+        layout.setSpacing(14)
+
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        head.addWidget(PulseIcon(18, ACCENT))
+        title_col = QVBoxLayout()
+        title_col.setSpacing(0)
+        title = QLabel("Character Practice")
+        title.setObjectName("panelTitle")
+        subtitle = QLabel("Copy what you hear with the virtual key below")
+        subtitle.setObjectName("sectionLabel")
+        title_col.addWidget(title)
+        title_col.addWidget(subtitle)
+        head.addLayout(title_col)
+        head.addStretch(1)
+        self.phase_label = QLabel("--")
+        self.phase_label.setObjectName("sectionLabel")
+        head.addWidget(self.phase_label)
+        layout.addLayout(head)
+
+        stage = QWidget()
+        stage.setObjectName("practiceStage")
+        stage_layout = QVBoxLayout(stage)
+        stage_layout.setAlignment(Qt.AlignCenter)
+        stage_layout.setSpacing(10)
+        stage.setMinimumHeight(220)
         self.target_label = big_label("--")
-        lgrid.addWidget(self.target_label)
+        stage_layout.addWidget(self.target_label)
+        self.morse_glyph = MorseGlyph()
+        stage_layout.addWidget(self.morse_glyph)
+        layout.addWidget(stage, 1)
 
-        # Grid, not a single row: four stat labels in one QHBoxLayout
-        # overflowed the card width and got silently clipped by Qt
-        # rather than wrapping - a fixed 2x2 grid can't do that.
-        info_grid = QGridLayout()
-        info_grid.setHorizontalSpacing(28)
-        info_grid.setVerticalSpacing(6)
-        self.phase_label = QLabel("Phase: --")
-        self.correct_label = QLabel("Correct: 0 / 0")
-        self.koch_label = QLabel("Koch Level: --")
-        self.adaptive_label = QLabel("Adaptive WPM: --")
-        for lbl in (self.phase_label, self.correct_label, self.koch_label, self.adaptive_label):
-            lbl.setObjectName("sectionLabel")
-        info_grid.addWidget(self.phase_label, 0, 0)
-        info_grid.addWidget(self.correct_label, 0, 1)
-        info_grid.addWidget(self.koch_label, 1, 0)
-        info_grid.addWidget(self.adaptive_label, 1, 1)
-        lgrid.addLayout(info_grid)
-        root.addWidget(live)
-
-        # --- exam result ---------------------------------------------------
-        self.exam_box = card("Exam Result")
-        egrid = QGridLayout(self.exam_box)
+        self.exam_box = QWidget()
+        self.exam_box.setObjectName("examBanner")
+        ebox = QHBoxLayout(self.exam_box)
+        ebox.setContentsMargins(16, 12, 16, 12)
+        self.exam_result_label = QLabel("--")
+        self.exam_result_label.setObjectName("panelTitle")
+        ebox.addWidget(self.exam_result_label)
+        ebox.addStretch(1)
         self.exam_score_label = QLabel("--")
-        self.exam_pass_label = QLabel("--")
-        egrid.addWidget(QLabel("Score:"), 0, 0)
-        egrid.addWidget(self.exam_score_label, 0, 1)
-        egrid.addWidget(QLabel("Result:"), 1, 0)
-        egrid.addWidget(self.exam_pass_label, 1, 1)
+        self.exam_score_label.setObjectName("sectionLabel")
+        ebox.addWidget(self.exam_score_label)
         self.exam_box.setVisible(False)
-        root.addWidget(self.exam_box)
+        layout.addWidget(self.exam_box)
 
-        # --- virtual key ---------------------------------------------------
-        key_box = card("Answer (virtual straight key)")
-        kbox = QVBoxLayout(key_box)
-        self.key_button = VirtualKeyButton()
+        self.key_button = CircularKeyButton()
         self.key_button.key_down.connect(lambda: self.command_requested.emit({"cmd": "key_down"}))
         self.key_button.key_up.connect(lambda: self.command_requested.emit({"cmd": "key_up"}))
-        kbox.addWidget(self.key_button)
-        root.addWidget(key_box)
+        layout.addWidget(self.key_button, 0, Qt.AlignHCenter)
+        hint = QLabel("Hold the button or SPACE to key your answer")
+        hint.setObjectName("sectionLabel")
+        hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(hint)
 
-        root.addStretch(1)
-        self._active = False
+        return panel
+
+    def _build_progress_card(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("plainPanel")
+        shadow = QGraphicsDropShadowEffect(panel)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 5)
+        shadow.setColor(QColor(0, 0, 0, 90))
+        panel.setGraphicsEffect(shadow)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 16, 18, 18)
+        layout.setSpacing(12)
+
+        head = QHBoxLayout()
+        head.addWidget(PieIcon(16, ACCENT))
+        title = QLabel("Koch Progress")
+        title.setObjectName("panelTitle")
+        head.addWidget(title)
+        head.addStretch(1)
+        self.koch_level_label = QLabel("--")
+        self.koch_level_label.setObjectName("sectionLabel")
+        head.addWidget(self.koch_level_label)
+        layout.addLayout(head)
+
+        self.koch_row = QHBoxLayout()
+        self.koch_row.setSpacing(8)
+        self._koch_char_labels = []
+        for _ in range(6):
+            lbl = QLabel("-")
+            lbl.setObjectName("kochChar")
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setFixedSize(38, 38)
+            self.koch_row.addWidget(lbl)
+            self._koch_char_labels.append(lbl)
+        layout.addLayout(self.koch_row)
+
+        self.progress_fallback_label = QLabel("Correct: 0 / 0")
+        self.progress_fallback_label.setObjectName("sectionLabel")
+        self.progress_fallback_label.setVisible(False)
+        layout.addWidget(self.progress_fallback_label)
+
+        return panel
+
+    def _build_stats_card(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("plainPanel")
+        shadow = QGraphicsDropShadowEffect(panel)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 5)
+        shadow.setColor(QColor(0, 0, 0, 90))
+        panel.setGraphicsEffect(shadow)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 16, 18, 18)
+        layout.setSpacing(14)
+
+        head = QHBoxLayout()
+        head.addWidget(BarsIcon(16, ACCENT))
+        title = QLabel("Training Statistics")
+        title.setObjectName("panelTitle")
+        head.addWidget(title)
+        head.addStretch(1)
+        reset_btn = QPushButton("Reset")
+        reset_btn.setObjectName("compactButton")
+        reset_btn.setEnabled(False)
+        reset_btn.setToolTip("Not supported yet: these counters are tracked on-device "
+                              "and there's no reset command in the BLE control protocol.")
+        head.addWidget(reset_btn)
+        layout.addLayout(head)
+
+        body = QHBoxLayout()
+        body.setSpacing(16)
+        self.accuracy_gauge = RingGauge("Accuracy", ACCENT)
+        body.addWidget(self.accuracy_gauge)
+
+        rows = QVBoxLayout()
+        rows.setSpacing(10)
+        self.correct_stat = self._stat_row(rows, "#3ddc84", "Correct")
+        self.incorrect_stat = self._stat_row(rows, "#ff5c7a", "Incorrect")
+        self.avg_response_stat = self._stat_row(rows, "#6c7086", "Avg Response")
+        self.cpm_stat = self._stat_row(rows, "#6c7086", "Characters / min")
+        body.addLayout(rows, 1)
+        layout.addLayout(body)
+
+        return panel
+
+    def _stat_row(self, rows: QVBoxLayout, dot_color: str, label: str) -> QLabel:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color: {dot_color}; font-size: 9pt;")
+        row.addWidget(dot)
+        caption = QLabel(label)
+        caption.setObjectName("sectionLabel")
+        row.addWidget(caption)
+        row.addStretch(1)
+        value = QLabel("--")
+        value.setObjectName("pillValue")
+        row.addWidget(value)
+        rows.addLayout(row)
+        return value
+
+    # ------------------------------------------------------------------
+    def _on_mode_changed(self, button):
+        mode = button.property("trainMode")
+        self.mode_desc_label.setText(proto.TRAIN_MODE_DESCRIPTIONS.get(mode, ""))
+        is_koch = mode == "KOCH"
+        for lbl in self._koch_char_labels:
+            lbl.setVisible(is_koch)
+        self.koch_level_label.setVisible(is_koch)
+        self.progress_fallback_label.setVisible(not is_koch)
 
     def _on_start(self):
-        mode = self.mode_combo.currentText()
+        mode = self.mode_group.checkedButton().property("trainMode")
         self.command_requested.emit({"cmd": "train_start", "mode": mode})
+
+    def _selected_mode(self) -> str:
+        return self.mode_group.checkedButton().property("trainMode")
 
     def on_train_state(self, state: dict):
         active = bool(state.get("active"))
         self._active = active
         self.start_btn.setEnabled(not active)
         self.stop_btn.setEnabled(active)
-        self.mode_combo.setEnabled(not active)
+        for btn in self.mode_group.buttons():
+            btn.setEnabled(not active)
 
         if not active:
             self.target_label.setText("--")
-            self.phase_label.setText("Phase: --")
-            self.correct_label.setText("Correct: 0 / 0")
-            self.koch_label.setText("Koch Level: --")
-            self.adaptive_label.setText("Adaptive WPM: --")
+            self.morse_glyph.set_pattern("")
+            self.phase_label.setText("--")
             self.exam_box.setVisible(False)
+            self.correct_stat.setText("--")
+            self.incorrect_stat.setText("--")
+            self.avg_response_stat.setText("--")
+            self.cpm_stat.setText("--")
+            self.accuracy_gauge.set_value(0)
+            self.koch_level_label.setText("--")
+            self.progress_fallback_label.setText("Correct: 0 / 0")
+            for lbl in self._koch_char_labels:
+                lbl.setText("-")
+                lbl.setProperty("state", "")
+                lbl.style().unpolish(lbl)
+                lbl.style().polish(lbl)
             return
 
         phase = state.get("phase", "?")
-        target = state.get("target", "")
+        target = str(state.get("target", "") or "")
         self.target_label.setText(target if target else "–")
-        self.phase_label.setText(f"Phase: {phase}")
-        self.correct_label.setText(f"Correct: {state.get('correct', 0)} / {state.get('attempts', 0)}")
-        self.koch_label.setText(f"Koch Level: {state.get('kochLevel', '--')}")
-        self.adaptive_label.setText(f"Adaptive WPM: {state.get('adaptiveWpm', '--')}")
+        self.morse_glyph.set_pattern(proto.MORSE_TABLE.get(target.upper(), ""))
+        self.phase_label.setText(phase)
+
+        correct = state.get("correct", 0)
+        attempts = state.get("attempts", 0)
+        incorrect = max(0, attempts - correct)
+        accuracy = int(round(correct * 100 / attempts)) if attempts else 0
+        self.correct_stat.setText(str(correct))
+        self.incorrect_stat.setText(str(incorrect))
+        self.accuracy_gauge.set_value(accuracy)
+        # Not reported by train_state - honestly shown as unavailable
+        # rather than a fabricated number.
+        self.avg_response_stat.setText("--")
+        self.cpm_stat.setText("--")
+
+        koch_level = state.get("kochLevel")
+        if self._selected_mode() == "KOCH" and koch_level is not None:
+            self.koch_level_label.setText(f"Level {koch_level} / {len(proto.KOCH_ORDER)}")
+            start = max(0, min(koch_level, len(proto.KOCH_ORDER)) - 3)
+            window = proto.KOCH_ORDER[start:start + 6]
+            for i, lbl in enumerate(self._koch_char_labels):
+                if i < len(window):
+                    idx = start + i
+                    ch = window[i]
+                    lbl.setText(ch)
+                    if ch == target:
+                        lbl.setProperty("state", "current")
+                    elif idx < koch_level:
+                        lbl.setProperty("state", "unlocked")
+                    else:
+                        lbl.setProperty("state", "locked")
+                else:
+                    lbl.setText("")
+                    lbl.setProperty("state", "")
+                lbl.style().unpolish(lbl)
+                lbl.style().polish(lbl)
+        else:
+            self.progress_fallback_label.setText(f"Correct: {correct} / {attempts}")
 
         if phase == "EXAM_DONE":
             self.exam_box.setVisible(True)
-            self.exam_score_label.setText(f"{state.get('examScorePercent', 0)}% "
-                                           f"({state.get('examCorrect', 0)}/{state.get('examTotal', 0)})")
             passed = state.get("examPassed", False)
-            self.exam_pass_label.setText("PASSED" if passed else "FAILED")
+            self.exam_result_label.setText("PASSED" if passed else "FAILED")
+            self.exam_score_label.setText(
+                f"{state.get('examScorePercent', 0)}% "
+                f"({state.get('examCorrect', 0)}/{state.get('examTotal', 0)})"
+            )
         else:
             self.exam_box.setVisible(False)
 

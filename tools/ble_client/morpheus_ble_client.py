@@ -26,8 +26,10 @@ Requires: PySide6, bleak, and (Linux only) dbus-next - see requirements.txt
 import sys
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -56,76 +58,131 @@ except ImportError:
     PairingDialog = None
     PAIRING_AVAILABLE = False
 
+# Modern flat-dark palette: three background tiers (app / panel / card),
+# one accent, semantic red/green for disconnected/connected. Fonts and
+# paddings are sized for a maximized window, not a small fixed dialog.
 DARK_STYLESHEET = """
-QMainWindow, QWidget { background-color: #1a1b22; color: #e6e6e6; font-size: 10.5pt; }
+QMainWindow, QWidget { background-color: #0f1117; color: #e8e9ee; font-size: 11pt; }
+
+QWidget#connectionBar {
+    background-color: #161825; border-bottom: 1px solid #262939;
+}
+QWidget#sidebarPanel { background-color: #12141d; border-right: 1px solid #232636; }
+QLabel#brandTitle { font-size: 17pt; font-weight: 800; color: #ffffff; letter-spacing: 1px; }
+QLabel#brandSubtitle { font-size: 8.5pt; color: #6c7086; font-weight: 600; }
+
 QListWidget#sidebar {
-    background-color: #14151b; border: none; border-right: 1px solid #2c2e3a;
-    padding: 8px 0px; outline: none;
+    background-color: transparent; border: none; padding: 6px 10px; outline: none;
 }
 QListWidget#sidebar::item {
-    padding: 12px 20px; border-left: 3px solid transparent; color: #9aa0b0;
+    padding: 13px 14px; margin: 2px 0px; border-radius: 10px; color: #9096ab;
+    font-size: 11pt; font-weight: 500;
 }
 QListWidget#sidebar::item:selected {
-    background-color: #232532; border-left: 3px solid #3a6ff0; color: #ffffff;
+    background-color: #5b7cfa; color: #ffffff; font-weight: 700;
 }
-QListWidget#sidebar::item:hover:!selected { background-color: #1f2129; }
+QListWidget#sidebar::item:hover:!selected { background-color: #1c1f2e; color: #e8e9ee; }
+
 QLineEdit {
-    background-color: #262835; border: 1px solid #3d3f4d; border-radius: 6px;
-    padding: 6px 8px; color: #e6e6e6;
+    background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 8px;
+    padding: 9px 12px; color: #e8e9ee; selection-background-color: #5b7cfa;
 }
+QLineEdit:focus { border: 1px solid #5b7cfa; }
 QComboBox {
-    background-color: #262835; border: 1px solid #3d3f4d; border-radius: 6px;
-    padding: 6px 8px; color: #e6e6e6; min-width: 120px;
+    background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 8px;
+    padding: 9px 12px; color: #e8e9ee; min-width: 140px;
 }
+QComboBox::drop-down { border: none; width: 24px; }
+QComboBox QAbstractItemView {
+    background-color: #1c1f2e; color: #e8e9ee; border: 1px solid #2c2f42;
+    selection-background-color: #5b7cfa; outline: none;
+}
+
 QPushButton {
-    background-color: #3a6ff0; color: white; border: none; border-radius: 6px;
-    padding: 8px 16px; font-weight: 600;
+    background-color: #5b7cfa; color: white; border: none; border-radius: 8px;
+    padding: 10px 20px; font-weight: 700;
 }
-QPushButton:hover { background-color: #4d7dff; }
-QPushButton:disabled { background-color: #2c2e3a; color: #6a6d7a; }
-QPushButton#dangerButton { background-color: #4d3f3f; }
-QPushButton#dangerButton:hover { background-color: #6b4a4a; }
-QPushButton#virtualKey { font-size: 13pt; padding: 20px; background-color: #2c2e3a; }
-QPushButton#virtualKey:hover { background-color: #35384a; }
-QPushButton#virtualKey:pressed { background-color: #3a6ff0; }
+QPushButton:hover { background-color: #6f8dfb; }
+QPushButton:pressed { background-color: #4a68d9; }
+QPushButton:disabled { background-color: #1c1f2e; color: #4a4e5e; }
+QPushButton#dangerButton { background-color: #2c1f26; color: #ff8080; }
+QPushButton#dangerButton:hover { background-color: #3a2530; }
+QPushButton#dangerButton:disabled { background-color: #1c1f2e; color: #4a4e5e; }
+QPushButton#virtualKey {
+    font-size: 14pt; padding: 34px; background-color: #1c1f2e; color: #c7cbdb;
+    border: 2px solid #2c2f42; border-radius: 14px;
+}
+QPushButton#virtualKey:hover { border-color: #5b7cfa; color: #ffffff; }
+QPushButton#virtualKey:pressed { background-color: #5b7cfa; color: #ffffff; border-color: #5b7cfa; }
+
 QGroupBox {
-    border: 1px solid #2c2e3a; border-radius: 8px; margin-top: 12px;
-    padding-top: 8px; font-weight: 600; color: #9aa0b0;
+    background-color: #161825; border: 1px solid #232636; border-radius: 14px;
+    margin-top: 18px; padding: 18px; font-weight: 700; color: #9096ab; font-size: 10pt;
 }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
+QGroupBox::title {
+    subcontrol-origin: margin; left: 16px; top: 2px; padding: 0 8px;
+    color: #c7cbdb; letter-spacing: 0.5px;
+}
+
 QTableWidget {
-    background-color: #1f2129; alternate-background-color: #232532;
-    gridline-color: #2c2e3a; border: 1px solid #2c2e3a; border-radius: 6px;
+    background-color: #12141d; alternate-background-color: #161825;
+    gridline-color: #232636; border: 1px solid #232636; border-radius: 10px;
+    padding: 2px;
 }
+QTableWidget::item { padding: 6px; }
 QHeaderView::section {
-    background-color: #262835; color: #9aa0b0; padding: 6px;
-    border: none; border-bottom: 1px solid #2c2e3a; font-weight: 600;
+    background-color: #1c1f2e; color: #9096ab; padding: 10px;
+    border: none; border-bottom: 1px solid #232636; font-weight: 700;
 }
 QTextEdit {
-    background-color: #1f2129; border: 1px solid #2c2e3a; border-radius: 6px;
-    padding: 8px; font-family: 'Courier New', monospace; font-size: 13pt;
+    background-color: #12141d; border: 1px solid #232636; border-radius: 10px;
+    padding: 14px; font-family: 'Courier New', monospace; font-size: 13pt;
     color: #7ee787;
 }
 QProgressBar {
-    background-color: #1f2129; border: 1px solid #2c2e3a; border-radius: 6px;
-    height: 14px; text-align: center;
+    background-color: #12141d; border: 1px solid #232636; border-radius: 8px;
+    height: 18px; text-align: center; color: #e8e9ee; font-weight: 600;
 }
-QProgressBar::chunk { background-color: #3a6ff0; border-radius: 5px; }
-QLabel#statusDot { font-size: 16pt; }
-QLabel#sectionLabel { color: #9aa0b0; font-weight: 600; font-size: 9pt; }
+QProgressBar::chunk { background-color: #5b7cfa; border-radius: 7px; }
+
+QLabel#statusDot { font-size: 18pt; }
+QLabel#connStatusText { font-size: 11.5pt; font-weight: 700; }
+QLabel#sectionLabel { color: #9096ab; font-weight: 700; font-size: 9.5pt; }
 QLabel#bigTarget {
-    font-size: 48pt; font-weight: 700; color: #ffffff; padding: 16px;
-    background-color: #1f2129; border-radius: 10px;
+    font-size: 64pt; font-weight: 800; color: #ffffff; padding: 28px;
+    background-color: #12141d; border-radius: 16px; border: 1px solid #232636;
 }
-QLabel#placeholderTitle { font-size: 20pt; font-weight: 700; color: #ffffff; }
-QLabel#placeholderNote { color: #8a8d99; font-size: 10.5pt; margin-top: 8px; }
-QStatusBar { background-color: #14151b; color: #9aa0b0; }
+QLabel#placeholderIcon { font-size: 40pt; }
+QLabel#placeholderTitle { font-size: 24pt; font-weight: 800; color: #ffffff; }
+QLabel#placeholderNote { color: #8a8fa3; font-size: 11pt; margin-top: 8px; }
+QStatusBar { background-color: #12141d; color: #6c7086; border-top: 1px solid #232636; }
 """
+
+def _centered(widget: QWidget, max_width: int) -> QWidget:
+    """Wraps a page so it stays a readable width and centers on a wide
+    or maximized window, instead of stretching thin forms edge-to-edge."""
+    container = QWidget()
+    layout = QHBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addStretch(1)
+    widget.setMaximumWidth(max_width)
+    layout.addWidget(widget)
+    layout.addStretch(1)
+    return container
+
 
 SIDEBAR_SECTIONS = [
     "CW Keyer", "Training", "Statistics", "Connectivity", "Profiles",
     "Settings", "Diagnostics", "Tools", "Games", "Help",
 ]
+
+# Emoji-style icon glyphs risk rendering as broken/missing tofu boxes on
+# systems without a color-emoji font - verified this actually happens
+# here rather than assuming it wouldn't. Plain text-only sidebar is more
+# reliably "clean and modern" than an icon that might not render for
+# every user, so no icon set: the selected-row highlight already carries
+# the visual hierarchy.
+PLACEHOLDER_ICONS = {}
 
 PLACEHOLDER_NOTES = {
     "Statistics": "Session/lifetime statistics are tracked on-device but not yet "
@@ -154,7 +211,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MORPHEUS BLE Test Client")
-        self.resize(1080, 720)
+        self.resize(1440, 900)
 
         self.worker = BleWorker()
         self.worker.status_changed.connect(self._on_status_changed)
@@ -181,24 +238,17 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        outer.addLayout(self._build_connection_bar())
+        outer.addWidget(self._build_connection_bar())
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
-
-        self.sidebar = QListWidget()
-        self.sidebar.setObjectName("sidebar")
-        self.sidebar.setFixedWidth(200)
-        for name in SIDEBAR_SECTIONS:
-            QListWidgetItem(name, self.sidebar)
-        self.sidebar.currentRowChanged.connect(lambda i: self.stack.setCurrentIndex(i))
-        body.addWidget(self.sidebar)
+        body.addWidget(self._build_sidebar())
 
         self.stack = QStackedWidget()
         stack_container = QWidget()
         stack_layout = QVBoxLayout(stack_container)
-        stack_layout.setContentsMargins(20, 20, 20, 20)
+        stack_layout.setContentsMargins(32, 28, 32, 28)
         stack_layout.addWidget(self.stack)
         body.addWidget(stack_container, 1)
 
@@ -206,13 +256,23 @@ class MainWindow(QMainWindow):
         self.training_page = TrainingPage()
         self.games_page = GamesPage()
 
+        # Full-bleed pages (benefit from all available width, e.g. a
+        # table) go in as-is; everything else is centered with a max
+        # width so a maximized/ultrawide window doesn't stretch small
+        # forms into an unreadable single thin row of controls.
         pages = {
             "CW Keyer": self.keyer_page,
-            "Training": self.training_page,
-            "Games": self.games_page,
+            "Training": _centered(self.training_page, 900),
+            "Games": _centered(self.games_page, 900),
         }
         for name in SIDEBAR_SECTIONS:
-            page = pages.get(name) or PlaceholderPage(name, PLACEHOLDER_NOTES.get(name, "Not yet implemented."))
+            if name in pages:
+                page = pages[name]
+            else:
+                placeholder = PlaceholderPage(
+                    name, PLACEHOLDER_NOTES.get(name, "Not yet implemented."), PLACEHOLDER_ICONS.get(name, "")
+                )
+                page = _centered(placeholder, 620)
             self.stack.addWidget(page)
 
         outer.addLayout(body, 1)
@@ -221,16 +281,49 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(f"Service {proto.SERVICE_UUID}")
 
-    def _build_connection_bar(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setContentsMargins(16, 12, 16, 12)
+    def _build_sidebar(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("sidebarPanel")
+        panel.setFixedWidth(240)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        brand = QWidget()
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(24, 28, 24, 20)
+        brand_layout.setSpacing(2)
+        title = QLabel("MORPHEUS")
+        title.setObjectName("brandTitle")
+        subtitle = QLabel("BLE Control Center")
+        subtitle.setObjectName("brandSubtitle")
+        brand_layout.addWidget(title)
+        brand_layout.addWidget(subtitle)
+        layout.addWidget(brand)
+
+        self.sidebar = QListWidget()
+        self.sidebar.setObjectName("sidebar")
+        for name in SIDEBAR_SECTIONS:
+            QListWidgetItem(name, self.sidebar)
+        self.sidebar.currentRowChanged.connect(lambda i: self.stack.setCurrentIndex(i))
+        layout.addWidget(self.sidebar, 1)
+
+        return panel
+
+    def _build_connection_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("connectionBar")
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(28, 16, 28, 16)
+        row.setSpacing(14)
 
         self.status_dot = QLabel("●")
         self.status_dot.setObjectName("statusDot")
-        self.status_dot.setStyleSheet("color: #e05252;")
+        self.status_dot.setStyleSheet("color: #ff5c7a;")
         row.addWidget(self.status_dot)
 
         self.status_label = QLabel("Disconnected")
+        self.status_label.setObjectName("connStatusText")
         self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         row.addWidget(self.status_label, 1)
 
@@ -244,10 +337,10 @@ class MainWindow(QMainWindow):
             )
         row.addWidget(self.pair_btn)
 
-        row.addWidget(QLabel("Address (optional):"))
+        row.addWidget(QLabel("Address:"))
         self.address_edit = QLineEdit()
         self.address_edit.setPlaceholderText(f"blank = scan for \"{proto.DEVICE_NAME}\"")
-        self.address_edit.setFixedWidth(220)
+        self.address_edit.setFixedWidth(240)
         row.addWidget(self.address_edit)
 
         self.connect_btn = QPushButton("Connect")
@@ -260,7 +353,13 @@ class MainWindow(QMainWindow):
         self.disconnect_btn.clicked.connect(self._on_disconnect_clicked)
         row.addWidget(self.disconnect_btn)
 
-        return row
+        shadow = QGraphicsDropShadowEffect(bar)
+        shadow.setBlurRadius(24)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 120))
+        bar.setGraphicsEffect(shadow)
+
+        return bar
 
     # ------------------------------------------------------------------
     def _on_connect_clicked(self):
@@ -283,10 +382,10 @@ class MainWindow(QMainWindow):
 
     def _on_connected_changed(self, connected: bool):
         if connected:
-            self.status_dot.setStyleSheet("color: #3fd67d;")
+            self.status_dot.setStyleSheet("color: #3ddc84;")
             self.disconnect_btn.setEnabled(True)
         else:
-            self.status_dot.setStyleSheet("color: #e05252;")
+            self.status_dot.setStyleSheet("color: #ff5c7a;")
             self.connect_btn.setEnabled(True)
             self.disconnect_btn.setEnabled(False)
             self.address_edit.setEnabled(True)
@@ -302,7 +401,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     win = MainWindow()
-    win.show()
+    win.showMaximized()
     sys.exit(app.exec())
 
 

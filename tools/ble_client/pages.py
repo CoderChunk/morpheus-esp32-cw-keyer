@@ -3,9 +3,10 @@
 from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
+    QGraphicsDropShadowEffect,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -28,6 +29,18 @@ def section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setObjectName("sectionLabel")
     return lbl
+
+
+def card(title: str) -> QGroupBox:
+    """A QGroupBox with a subtle drop shadow, used as the card container
+    for every section on the Training/Games pages."""
+    box = QGroupBox(title)
+    shadow = QGraphicsDropShadowEffect(box)
+    shadow.setBlurRadius(28)
+    shadow.setOffset(0, 6)
+    shadow.setColor(QColor(0, 0, 0, 90))
+    box.setGraphicsEffect(shadow)
+    return box
 
 
 def big_label(text: str = "--") -> QLabel:
@@ -86,10 +99,16 @@ class VirtualKeyButton(QPushButton):
 
 # ----------------------------------------------------------------------------
 class PlaceholderPage(QWidget):
-    def __init__(self, title: str, note: str):
+    def __init__(self, title: str, note: str, icon: str = ""):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(10)
+        if icon:
+            i = QLabel(icon)
+            i.setObjectName("placeholderIcon")
+            i.setAlignment(Qt.AlignCenter)
+            layout.addWidget(i)
         t = QLabel(title)
         t.setObjectName("placeholderTitle")
         t.setAlignment(Qt.AlignCenter)
@@ -97,7 +116,7 @@ class PlaceholderPage(QWidget):
         n.setObjectName("placeholderNote")
         n.setAlignment(Qt.AlignCenter)
         n.setWordWrap(True)
-        n.setMaximumWidth(480)
+        n.setMaximumWidth(520)
         layout.addWidget(t)
         layout.addWidget(n)
 
@@ -177,7 +196,7 @@ class TrainingPage(QWidget):
         root.setSpacing(14)
 
         # --- controls ---------------------------------------------------
-        controls = QGroupBox("Session")
+        controls = card("Session")
         crow = QHBoxLayout(controls)
         crow.addWidget(QLabel("Mode:"))
         self.mode_combo = QComboBox()
@@ -195,25 +214,32 @@ class TrainingPage(QWidget):
         root.addWidget(controls)
 
         # --- live drill ---------------------------------------------------
-        live = QGroupBox("Live Drill")
+        live = card("Live Drill")
         lgrid = QVBoxLayout(live)
         self.target_label = big_label("--")
         lgrid.addWidget(self.target_label)
 
-        info_row = QHBoxLayout()
+        # Grid, not a single row: four stat labels in one QHBoxLayout
+        # overflowed the card width and got silently clipped by Qt
+        # rather than wrapping - a fixed 2x2 grid can't do that.
+        info_grid = QGridLayout()
+        info_grid.setHorizontalSpacing(28)
+        info_grid.setVerticalSpacing(6)
         self.phase_label = QLabel("Phase: --")
         self.correct_label = QLabel("Correct: 0 / 0")
         self.koch_label = QLabel("Koch Level: --")
         self.adaptive_label = QLabel("Adaptive WPM: --")
         for lbl in (self.phase_label, self.correct_label, self.koch_label, self.adaptive_label):
             lbl.setObjectName("sectionLabel")
-            info_row.addWidget(lbl)
-        info_row.addStretch(1)
-        lgrid.addLayout(info_row)
+        info_grid.addWidget(self.phase_label, 0, 0)
+        info_grid.addWidget(self.correct_label, 0, 1)
+        info_grid.addWidget(self.koch_label, 1, 0)
+        info_grid.addWidget(self.adaptive_label, 1, 1)
+        lgrid.addLayout(info_grid)
         root.addWidget(live)
 
         # --- exam result ---------------------------------------------------
-        self.exam_box = QGroupBox("Exam Result")
+        self.exam_box = card("Exam Result")
         egrid = QGridLayout(self.exam_box)
         self.exam_score_label = QLabel("--")
         self.exam_pass_label = QLabel("--")
@@ -225,7 +251,7 @@ class TrainingPage(QWidget):
         root.addWidget(self.exam_box)
 
         # --- virtual key ---------------------------------------------------
-        key_box = QGroupBox("Answer (virtual straight key)")
+        key_box = card("Answer (virtual straight key)")
         kbox = QVBoxLayout(key_box)
         self.key_button = VirtualKeyButton()
         self.key_button.key_down.connect(lambda: self.command_requested.emit({"cmd": "key_down"}))
@@ -256,11 +282,10 @@ class TrainingPage(QWidget):
             self.exam_box.setVisible(False)
             return
 
-        mode = state.get("mode", "?")
         phase = state.get("phase", "?")
         target = state.get("target", "")
         self.target_label.setText(target if target else "–")
-        self.phase_label.setText(f"Mode: {mode}   Phase: {phase}")
+        self.phase_label.setText(f"Phase: {phase}")
         self.correct_label.setText(f"Correct: {state.get('correct', 0)} / {state.get('attempts', 0)}")
         self.koch_label.setText(f"Koch Level: {state.get('kochLevel', '--')}")
         self.adaptive_label.setText(f"Adaptive WPM: {state.get('adaptiveWpm', '--')}")
@@ -285,7 +310,7 @@ class GamesPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
 
-        controls = QGroupBox("Session")
+        controls = card("Session")
         crow = QHBoxLayout(controls)
         crow.addWidget(QLabel("Game:"))
         self.game_combo = QComboBox()
@@ -310,7 +335,7 @@ class GamesPage(QWidget):
         crow.addStretch(1)
         root.addWidget(controls)
 
-        live = QGroupBox("Live Game")
+        live = card("Live Game")
         lgrid = QVBoxLayout(live)
         self.target_label = big_label("--")
         lgrid.addWidget(self.target_label)
@@ -320,19 +345,23 @@ class GamesPage(QWidget):
         self.progress.setTextVisible(False)
         lgrid.addWidget(self.progress)
 
-        info_row = QHBoxLayout()
+        info_grid = QGridLayout()
+        info_grid.setHorizontalSpacing(28)
+        info_grid.setVerticalSpacing(6)
         self.phase_label = QLabel("Phase: --")
         self.score_label = QLabel("Score: --")
         self.lives_label = QLabel("Lives: --")
         self.high_label = QLabel("High Score: --")
         for lbl in (self.phase_label, self.score_label, self.lives_label, self.high_label):
             lbl.setObjectName("sectionLabel")
-            info_row.addWidget(lbl)
-        info_row.addStretch(1)
-        lgrid.addLayout(info_row)
+        info_grid.addWidget(self.phase_label, 0, 0)
+        info_grid.addWidget(self.score_label, 0, 1)
+        info_grid.addWidget(self.lives_label, 1, 0)
+        info_grid.addWidget(self.high_label, 1, 1)
+        lgrid.addLayout(info_grid)
         root.addWidget(live)
 
-        key_box = QGroupBox("Answer (virtual straight key)")
+        key_box = card("Answer (virtual straight key)")
         kbox = QVBoxLayout(key_box)
         self.key_button = VirtualKeyButton()
         self.key_button.key_down.connect(lambda: self.command_requested.emit({"cmd": "key_down"}))
@@ -370,7 +399,7 @@ class GamesPage(QWidget):
         phase = state.get("phase", "?")
         paused = state.get("paused", False)
         phase_text = f"{phase} (PAUSED)" if paused else phase
-        self.phase_label.setText(f"Game: {game}   Phase: {phase_text}")
+        self.phase_label.setText(f"Phase: {phase_text}")
         self.high_label.setText(f"High Score: {state.get('highScore', '--')}")
 
         if game == "COPY":

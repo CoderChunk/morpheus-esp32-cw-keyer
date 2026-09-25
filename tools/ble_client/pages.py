@@ -1,7 +1,5 @@
 """Page widgets for the MORPHEUS BLE client's sidebar navigation."""
 
-from datetime import datetime
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
@@ -10,13 +8,10 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QProgressBar,
     QPushButton,
     QSizePolicy,
-    QTableWidget,
-    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -29,6 +24,7 @@ from widgets import (
     BluetoothIcon,
     ChevronIcon,
     CircularKeyButton,
+    DocumentIcon,
     HeroPanel,
     PieIcon,
     RoundIconButton,
@@ -210,9 +206,23 @@ class KeyerPage(QWidget):
             pills_row.addWidget(pill)
         root.addLayout(pills_row)
 
-        transcript_card = card("Live Transcript")
+        transcript_card = QWidget()
+        transcript_card.setObjectName("plainPanel")
+        tshadow = QGraphicsDropShadowEffect(transcript_card)
+        tshadow.setBlurRadius(28)
+        tshadow.setOffset(0, 6)
+        tshadow.setColor(QColor(0, 0, 0, 90))
+        transcript_card.setGraphicsEffect(tshadow)
         tlayout = QVBoxLayout(transcript_card)
+        tlayout.setContentsMargins(20, 16, 20, 20)
+        tlayout.setSpacing(12)
+
         header = QHBoxLayout()
+        header.setSpacing(10)
+        header.addWidget(DocumentIcon(16, QColor("#9096ab")))
+        title = QLabel("Live Transcript")
+        title.setObjectName("panelTitle")
+        header.addWidget(title)
         header.addStretch(1)
         self.font_btn = QPushButton("Aa")
         self.font_btn.setObjectName("compactButton")
@@ -225,27 +235,12 @@ class KeyerPage(QWidget):
         clear_btn.clicked.connect(self._on_clear)
         header.addWidget(clear_btn)
         tlayout.addLayout(header)
+
         self.transcript = QTextEdit()
         self.transcript.setReadOnly(True)
         self.transcript.setMinimumHeight(140)
         tlayout.addWidget(self.transcript)
         root.addWidget(transcript_card)
-
-        log_card = card("Word Log")
-        llayout = QVBoxLayout(log_card)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Time", "Word", "WPM", "Mode"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.setAlternatingRowColors(True)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setMaximumHeight(220)
-        llayout.addWidget(self.table)
-        root.addWidget(log_card)
 
         self._apply_transcript_font()
 
@@ -400,7 +395,6 @@ class KeyerPage(QWidget):
 
     def _on_clear(self):
         self.transcript.clear()
-        self.table.setRowCount(0)
         self._word_count = 0
         self.count_value.setText("0")
         self.last_word_value.setText("--")
@@ -415,16 +409,6 @@ class KeyerPage(QWidget):
         self.mode_value.setText(mode)
         self.last_word_value.setText(word or "--")
         self.wpm_dial.set_value(wpm)
-
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem(datetime.now().strftime("%H:%M:%S")))
-        word_item = QTableWidgetItem(word)
-        word_item.setFont(QFont("Courier New", 11, QFont.Bold))
-        self.table.setItem(row, 1, word_item)
-        self.table.setItem(row, 2, QTableWidgetItem(str(wpm)))
-        self.table.setItem(row, 3, QTableWidgetItem(mode))
-        self.table.scrollToBottom()
 
         self.transcript.moveCursor(QTextCursor.MoveOperation.End)
         self.transcript.insertPlainText(word + " ")

@@ -29,6 +29,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
@@ -50,7 +51,9 @@ import protocol as proto
 from widgets import (
     ACCENT,
     BarsIcon,
+    BatteryIcon,
     BluetoothIcon,
+    ClickablePanel,
     GearIcon,
     HomeIcon,
     LetterBadge,
@@ -58,6 +61,7 @@ from widgets import (
     LogoMark,
     MUTED,
     PieIcon,
+    SignalBarsIcon,
     WHITE,
 )
 
@@ -463,8 +467,16 @@ class MainWindow(QMainWindow):
 
         row.addStretch(1)
 
-        device_pill = QWidget()
+        # The reference template shows only a device pill + battery/signal
+        # + gear in the top bar - no visible Connect/Pair controls, since
+        # its mockup depicts an already-connected state. Those controls
+        # are still essential (there has to be a way to actually connect),
+        # so they live in a small dialog opened by clicking the pill,
+        # rather than permanently occupying top-bar space.
+        device_pill = ClickablePanel()
         device_pill.setObjectName("devicePill")
+        device_pill.setToolTip("Click to connect, disconnect, or pair a device")
+        device_pill.clicked.connect(self._on_device_pill_clicked)
         pill_row = QHBoxLayout(device_pill)
         pill_row.setContentsMargins(14, 8, 18, 8)
         pill_row.setSpacing(10)
@@ -490,31 +502,18 @@ class MainWindow(QMainWindow):
         pill_row.addLayout(pill_text)
         row.addWidget(device_pill)
 
-        self.pair_btn = QPushButton("Pair New Device")
-        self.pair_btn.clicked.connect(self._on_pair_clicked)
-        if not PAIRING_AVAILABLE:
-            self.pair_btn.setEnabled(False)
-            self.pair_btn.setToolTip(
-                "In-app pairing needs dbus-next and is Linux-only. "
-                "Pair once via your OS's Bluetooth settings instead."
-            )
-        row.addWidget(self.pair_btn)
+        # Static glyphs, not live readings: the firmware exposes no BLE
+        # battery service or RSSI, so there is no real percentage/signal
+        # strength to show - these match the template's layout without
+        # inventing numbers.
+        battery_icon = BatteryIcon(20, MUTED)
+        battery_icon.setToolTip("Not available - firmware doesn't report battery level over BLE")
+        row.addWidget(battery_icon)
+        signal_icon = SignalBarsIcon(18, MUTED)
+        signal_icon.setToolTip("Not available - firmware doesn't report signal strength over BLE")
+        row.addWidget(signal_icon)
 
-        row.addWidget(QLabel("Address:"))
-        self.address_edit = QLineEdit()
-        self.address_edit.setPlaceholderText(f"blank = scan for \"{proto.DEVICE_NAME}\"")
-        self.address_edit.setFixedWidth(200)
-        row.addWidget(self.address_edit)
-
-        self.connect_btn = QPushButton("Connect")
-        self.connect_btn.clicked.connect(self._on_connect_clicked)
-        row.addWidget(self.connect_btn)
-
-        self.disconnect_btn = QPushButton("Disconnect")
-        self.disconnect_btn.setObjectName("dangerButton")
-        self.disconnect_btn.setEnabled(False)
-        self.disconnect_btn.clicked.connect(self._on_disconnect_clicked)
-        row.addWidget(self.disconnect_btn)
+        self._build_connection_dialog()
 
         gear_btn = QPushButton()
         gear_btn.setObjectName("gearButton")
@@ -533,7 +532,50 @@ class MainWindow(QMainWindow):
 
         return bar
 
+    def _build_connection_dialog(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Connect to MORPHEUS")
+        dialog.setModal(False)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(14)
+
+        self.pair_btn = QPushButton("Pair New Device")
+        self.pair_btn.clicked.connect(self._on_pair_clicked)
+        if not PAIRING_AVAILABLE:
+            self.pair_btn.setEnabled(False)
+            self.pair_btn.setToolTip(
+                "In-app pairing needs dbus-next and is Linux-only. "
+                "Pair once via your OS's Bluetooth settings instead."
+            )
+        layout.addWidget(self.pair_btn)
+
+        addr_row = QHBoxLayout()
+        addr_row.addWidget(QLabel("Address:"))
+        self.address_edit = QLineEdit()
+        self.address_edit.setPlaceholderText(f"blank = scan for \"{proto.DEVICE_NAME}\"")
+        addr_row.addWidget(self.address_edit, 1)
+        layout.addLayout(addr_row)
+
+        btn_row = QHBoxLayout()
+        self.connect_btn = QPushButton("Connect")
+        self.connect_btn.clicked.connect(self._on_connect_clicked)
+        btn_row.addWidget(self.connect_btn)
+        self.disconnect_btn = QPushButton("Disconnect")
+        self.disconnect_btn.setObjectName("dangerButton")
+        self.disconnect_btn.setEnabled(False)
+        self.disconnect_btn.clicked.connect(self._on_disconnect_clicked)
+        btn_row.addWidget(self.disconnect_btn)
+        layout.addLayout(btn_row)
+
+        self.connection_dialog = dialog
+
     # ------------------------------------------------------------------
+    def _on_device_pill_clicked(self):
+        self.connection_dialog.show()
+        self.connection_dialog.raise_()
+        self.connection_dialog.activateWindow()
+
     def _on_connect_clicked(self):
         self.connect_btn.setEnabled(False)
         self.address_edit.setEnabled(False)

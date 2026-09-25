@@ -37,7 +37,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -47,6 +46,19 @@ from PySide6.QtWidgets import (
 from ble_client_core import BleWorker
 from pages import GamesPage, KeyerPage, PlaceholderPage, TrainingPage
 import protocol as proto
+from widgets import (
+    ACCENT,
+    BarsIcon,
+    BluetoothIcon,
+    GearIcon,
+    HomeIcon,
+    LetterBadge,
+    LinkIcon,
+    LogoMark,
+    MUTED,
+    PieIcon,
+    WHITE,
+)
 
 try:
     from pairing_dialog import PairingDialog
@@ -63,6 +75,7 @@ except ImportError:
 # paddings are sized for a maximized window, not a small fixed dialog.
 DARK_STYLESHEET = """
 QMainWindow, QWidget { background-color: #0f1117; color: #e8e9ee; font-size: 11pt; }
+QLabel { background-color: transparent; }
 
 QWidget#connectionBar {
     background-color: #161825; border-bottom: 1px solid #262939;
@@ -75,13 +88,14 @@ QListWidget#sidebar {
     background-color: transparent; border: none; padding: 6px 10px; outline: none;
 }
 QListWidget#sidebar::item {
-    padding: 13px 14px; margin: 2px 0px; border-radius: 10px; color: #9096ab;
+    padding: 0px; margin: 2px 10px; border-radius: 10px; color: #9096ab;
     font-size: 11pt; font-weight: 500;
 }
 QListWidget#sidebar::item:selected {
     background-color: #5b7cfa; color: #ffffff; font-weight: 700;
 }
 QListWidget#sidebar::item:hover:!selected { background-color: #1c1f2e; color: #e8e9ee; }
+QListWidget#sidebar::item:focus { border: none; outline: none; }
 
 QLineEdit {
     background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 8px;
@@ -114,6 +128,13 @@ QPushButton#virtualKey {
 }
 QPushButton#virtualKey:hover { border-color: #5b7cfa; color: #ffffff; }
 QPushButton#virtualKey:pressed { background-color: #5b7cfa; color: #ffffff; border-color: #5b7cfa; }
+QPushButton#compactButton { padding: 10px 6px; }
+QPushButton#roundIconButton {
+    padding: 0px; border-radius: 22px; font-size: 16pt; font-weight: 800;
+    background-color: #1c1f2e; color: #c7cbdb; border: 1px solid #2c2f42;
+}
+QPushButton#roundIconButton:hover:!disabled { background-color: #262a3d; }
+QPushButton#roundIconButton:disabled { background-color: #171a26; color: #3a3e52; border-color: #232636; }
 
 QGroupBox {
     background-color: #161825; border: 1px solid #232636; border-radius: 14px;
@@ -156,6 +177,39 @@ QLabel#placeholderIcon { font-size: 40pt; }
 QLabel#placeholderTitle { font-size: 24pt; font-weight: 800; color: #ffffff; }
 QLabel#placeholderNote { color: #8a8fa3; font-size: 11pt; margin-top: 8px; }
 QStatusBar { background-color: #12141d; color: #6c7086; border-top: 1px solid #232636; }
+
+QLabel#brandWordmark { font-size: 15pt; font-weight: 800; color: #ffffff; letter-spacing: 1px; }
+QLabel#brandTagline { font-size: 8pt; color: #6c7086; font-weight: 600; letter-spacing: 0.5px; }
+
+QWidget#devicePill {
+    background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 22px;
+}
+QLabel#deviceNameSmall { font-weight: 700; font-size: 10.5pt; color: #e8e9ee; }
+QLabel#deviceStatusSmall { font-size: 8.5pt; font-weight: 600; }
+
+QPushButton#gearButton {
+    background-color: #1c1f2e; border: 1px solid #2c2f42; border-radius: 20px;
+    padding: 0px; min-width: 40px; max-width: 40px; min-height: 40px; max-height: 40px;
+}
+QPushButton#gearButton:hover { background-color: #262a3d; }
+
+QWidget#sidebarRow { background: transparent; }
+QLabel#sidebarLabel { font-size: 11pt; font-weight: 600; color: #9096ab; }
+QLabel#sidebarLabelActive { font-size: 11pt; font-weight: 700; color: #ffffff; }
+QLabel#sidebarFooterBrand { font-size: 9.5pt; font-weight: 700; color: #c7cbdb; }
+QLabel#sidebarFooterVersion { font-size: 8pt; color: #6c7086; }
+
+QGroupBox#statPill { padding: 14px 16px 16px 16px; margin-top: 4px; }
+QLabel#pillValue { font-size: 15pt; font-weight: 800; color: #ffffff; }
+
+QLabel#heroTitle { font-size: 26pt; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
+QLabel#heroSubtitle { font-size: 10pt; font-weight: 700; color: #cdd3ea; letter-spacing: 1px; }
+QLabel#heroTagline { font-size: 9.5pt; color: #9aa1bd; }
+
+QLabel#deviceName { font-size: 12.5pt; font-weight: 700; color: #ffffff; }
+QLabel#keyStatus { font-size: 13pt; font-weight: 800; color: #ffffff; margin-top: 6px; }
+
+QWidget#heroCard { background: transparent; }
 """
 
 def _centered(widget: QWidget, max_width: int) -> QWidget:
@@ -176,13 +230,25 @@ SIDEBAR_SECTIONS = [
     "Settings", "Diagnostics", "Tools", "Games", "Help",
 ]
 
-# Emoji-style icon glyphs risk rendering as broken/missing tofu boxes on
-# systems without a color-emoji font - verified this actually happens
-# here rather than assuming it wouldn't. Plain text-only sidebar is more
-# reliably "clean and modern" than an icon that might not render for
-# every user, so no icon set: the selected-row highlight already carries
-# the visual hierarchy.
-PLACEHOLDER_ICONS = {}
+# Emoji-style icon glyphs were tried first and verified (via real
+# screenshots) to render as broken/missing tofu boxes on this system's
+# fonts. widgets.py draws real vector icons instead for the five
+# sections the reference template shows explicitly; everything else
+# falls back to a plain-letter badge (ASCII always renders safely).
+SIDEBAR_ICON_FACTORY = {
+    "CW Keyer": lambda: HomeIcon(19, MUTED),
+    "Training": lambda: BarsIcon(19, MUTED),
+    "Statistics": lambda: PieIcon(19, MUTED),
+    "Connectivity": lambda: LinkIcon(19, MUTED),
+    "Settings": lambda: GearIcon(19, MUTED),
+}
+
+
+def _make_sidebar_icon(name: str):
+    factory = SIDEBAR_ICON_FACTORY.get(name)
+    if factory:
+        return factory()
+    return LetterBadge(name[0], 19)
 
 PLACEHOLDER_NOTES = {
     "Statistics": "Session/lifetime statistics are tracked on-device but not yet "
@@ -216,6 +282,7 @@ class MainWindow(QMainWindow):
         self.worker = BleWorker()
         self.worker.status_changed.connect(self._on_status_changed)
         self.worker.connected_changed.connect(self._on_connected_changed)
+        self.worker.device_info.connect(self._on_device_info)
         self.worker.error.connect(self._on_error)
 
         self._build_ui()
@@ -227,6 +294,7 @@ class MainWindow(QMainWindow):
         self.worker.train_state_received.connect(self.training_page.on_train_state)
         self.worker.game_state_received.connect(self.games_page.on_game_state)
         self.worker.command_error.connect(lambda msg: self.statusBar().showMessage(f"Device error: {msg}", 6000))
+        self.keyer_page.command_requested.connect(self.worker.send_command)
         self.training_page.command_requested.connect(self.worker.send_command)
         self.games_page.command_requested.connect(self.worker.send_command)
 
@@ -270,7 +338,7 @@ class MainWindow(QMainWindow):
                 page = pages[name]
             else:
                 placeholder = PlaceholderPage(
-                    name, PLACEHOLDER_NOTES.get(name, "Not yet implemented."), PLACEHOLDER_ICONS.get(name, "")
+                    name, PLACEHOLDER_NOTES.get(name, "Not yet implemented."), ""
                 )
                 page = _centered(placeholder, 620)
             self.stack.addWidget(page)
@@ -289,43 +357,115 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        brand = QWidget()
-        brand_layout = QVBoxLayout(brand)
-        brand_layout.setContentsMargins(24, 28, 24, 20)
-        brand_layout.setSpacing(2)
-        title = QLabel("MORPHEUS")
-        title.setObjectName("brandTitle")
-        subtitle = QLabel("BLE Control Center")
-        subtitle.setObjectName("brandSubtitle")
-        brand_layout.addWidget(title)
-        brand_layout.addWidget(subtitle)
-        layout.addWidget(brand)
-
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("sidebar")
+        self.sidebar.setFocusPolicy(Qt.NoFocus)
+        self._sidebar_rows = []
         for name in SIDEBAR_SECTIONS:
-            QListWidgetItem(name, self.sidebar)
-        self.sidebar.currentRowChanged.connect(lambda i: self.stack.setCurrentIndex(i))
+            item = QListWidgetItem()
+            row_widget, icon, label = self._make_sidebar_row(name)
+            item.setSizeHint(row_widget.sizeHint())
+            self.sidebar.addItem(item)
+            self.sidebar.setItemWidget(item, row_widget)
+            self._sidebar_rows.append((icon, label))
+        self.sidebar.currentRowChanged.connect(self._on_sidebar_row_changed)
         layout.addWidget(self.sidebar, 1)
 
+        footer = QWidget()
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(22, 14, 22, 18)
+        footer_layout.setSpacing(10)
+        text_col = QVBoxLayout()
+        text_col.setSpacing(1)
+        brand_lbl = QLabel("MORPHEUS")
+        brand_lbl.setObjectName("sidebarFooterBrand")
+        version_lbl = QLabel("v1.1.0")
+        version_lbl.setObjectName("sidebarFooterVersion")
+        text_col.addWidget(brand_lbl)
+        text_col.addWidget(version_lbl)
+        footer_layout.addLayout(text_col)
+        footer_layout.addStretch(1)
+        self.footer_status_dot = QLabel("●")
+        self.footer_status_dot.setStyleSheet("color: #ff5c7a; font-size: 12pt;")
+        footer_layout.addWidget(self.footer_status_dot)
+        layout.addWidget(footer)
+
         return panel
+
+    def _make_sidebar_row(self, name: str):
+        row = QWidget()
+        row.setObjectName("sidebarRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(14, 11, 14, 11)
+        layout.setSpacing(12)
+        icon = _make_sidebar_icon(name)
+        layout.addWidget(icon)
+        label = QLabel(name)
+        label.setObjectName("sidebarLabel")
+        layout.addWidget(label, 1)
+        return row, icon, label
+
+    def _on_sidebar_row_changed(self, index: int):
+        self.stack.setCurrentIndex(index)
+        for i, (icon, label) in enumerate(self._sidebar_rows):
+            active = i == index
+            icon.set_color(WHITE if active else MUTED)
+            label.setObjectName("sidebarLabelActive" if active else "sidebarLabel")
+            label.setStyleSheet("")
+            label.style().unpolish(label)
+            label.style().polish(label)
 
     def _build_connection_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("connectionBar")
         row = QHBoxLayout(bar)
-        row.setContentsMargins(28, 16, 28, 16)
-        row.setSpacing(14)
+        row.setContentsMargins(24, 14, 24, 14)
+        row.setSpacing(16)
 
+        brand = QWidget()
+        brand_row = QHBoxLayout(brand)
+        brand_row.setContentsMargins(0, 0, 0, 0)
+        brand_row.setSpacing(10)
+        brand_row.addWidget(LogoMark(36))
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(0)
+        wordmark = QLabel("MORPHEUS")
+        wordmark.setObjectName("brandWordmark")
+        tagline = QLabel("CW KEYER · BLE CLIENT")
+        tagline.setObjectName("brandTagline")
+        brand_text.addWidget(wordmark)
+        brand_text.addWidget(tagline)
+        brand_row.addLayout(brand_text)
+        row.addWidget(brand)
+
+        row.addStretch(1)
+
+        device_pill = QWidget()
+        device_pill.setObjectName("devicePill")
+        pill_row = QHBoxLayout(device_pill)
+        pill_row.setContentsMargins(14, 8, 18, 8)
+        pill_row.setSpacing(10)
+        self.pill_bt_icon = BluetoothIcon(18, ACCENT)
+        pill_row.addWidget(self.pill_bt_icon)
+        pill_text = QVBoxLayout()
+        pill_text.setSpacing(0)
+        self.device_pill_name = QLabel(proto.DEVICE_NAME)
+        self.device_pill_name.setObjectName("deviceNameSmall")
+        status_row = QHBoxLayout()
+        status_row.setSpacing(5)
+        status_row.setContentsMargins(0, 0, 0, 0)
         self.status_dot = QLabel("●")
-        self.status_dot.setObjectName("statusDot")
-        self.status_dot.setStyleSheet("color: #ff5c7a;")
-        row.addWidget(self.status_dot)
-
+        self.status_dot.setStyleSheet("color: #ff5c7a; font-size: 8pt;")
         self.status_label = QLabel("Disconnected")
-        self.status_label.setObjectName("connStatusText")
-        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        row.addWidget(self.status_label, 1)
+        self.status_label.setObjectName("deviceStatusSmall")
+        self.status_label.setStyleSheet("color: #ff5c7a;")
+        status_row.addWidget(self.status_dot)
+        status_row.addWidget(self.status_label)
+        status_row.addStretch(1)
+        pill_text.addWidget(self.device_pill_name)
+        pill_text.addLayout(status_row)
+        pill_row.addLayout(pill_text)
+        row.addWidget(device_pill)
 
         self.pair_btn = QPushButton("Pair New Device")
         self.pair_btn.clicked.connect(self._on_pair_clicked)
@@ -340,7 +480,7 @@ class MainWindow(QMainWindow):
         row.addWidget(QLabel("Address:"))
         self.address_edit = QLineEdit()
         self.address_edit.setPlaceholderText(f"blank = scan for \"{proto.DEVICE_NAME}\"")
-        self.address_edit.setFixedWidth(240)
+        self.address_edit.setFixedWidth(200)
         row.addWidget(self.address_edit)
 
         self.connect_btn = QPushButton("Connect")
@@ -352,6 +492,15 @@ class MainWindow(QMainWindow):
         self.disconnect_btn.setEnabled(False)
         self.disconnect_btn.clicked.connect(self._on_disconnect_clicked)
         row.addWidget(self.disconnect_btn)
+
+        gear_btn = QPushButton()
+        gear_btn.setObjectName("gearButton")
+        gear_layout = QHBoxLayout(gear_btn)
+        gear_layout.setContentsMargins(0, 0, 0, 0)
+        gear_layout.addWidget(GearIcon(18, MUTED), 0, Qt.AlignCenter)
+        gear_btn.setToolTip("Settings")
+        gear_btn.clicked.connect(lambda: self.sidebar.setCurrentRow(SIDEBAR_SECTIONS.index("Settings")))
+        row.addWidget(gear_btn)
 
         shadow = QGraphicsDropShadowEffect(bar)
         shadow.setBlurRadius(24)
@@ -378,17 +527,32 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Paired - click Connect to link up.", 6000)
 
     def _on_status_changed(self, text: str):
-        self.status_label.setText(text)
+        # The device pill is small by design (matches the reference
+        # template's compact status pill), so it gets a short word while
+        # the full detail (e.g. "Connected: MORPHEUS-CW (AA:BB:...)")
+        # goes to the status bar where there's room for it.
+        short = text.split(":", 1)[0] if ":" in text else text
+        self.status_label.setText(short)
+        self.statusBar().showMessage(text, 6000)
 
     def _on_connected_changed(self, connected: bool):
+        color = "#3ddc84" if connected else "#ff5c7a"
+        self.status_dot.setStyleSheet(f"color: {color}; font-size: 8pt;")
+        self.status_label.setStyleSheet(f"color: {color};")
+        self.footer_status_dot.setStyleSheet(f"color: {color}; font-size: 12pt;")
+        self.pill_bt_icon.set_color(ACCENT if connected else MUTED)
+        self.keyer_page.set_connected(connected)
         if connected:
-            self.status_dot.setStyleSheet("color: #3ddc84;")
             self.disconnect_btn.setEnabled(True)
         else:
-            self.status_dot.setStyleSheet("color: #ff5c7a;")
             self.connect_btn.setEnabled(True)
             self.disconnect_btn.setEnabled(False)
             self.address_edit.setEnabled(True)
+            self.device_pill_name.setText(proto.DEVICE_NAME)
+
+    def _on_device_info(self, name: str, address: str):
+        self.device_pill_name.setText(name)
+        self.keyer_page.set_device_info(name, address)
 
     def _on_error(self, message: str):
         self.statusBar().showMessage(f"Error: {message}", 8000)

@@ -20,6 +20,7 @@ import protocol as proto
 class BleWorker(QObject):
     status_changed = Signal(str)
     connected_changed = Signal(bool)
+    device_info = Signal(str, str)
     word_received = Signal(dict)
     train_state_received = Signal(dict)
     game_state_received = Signal(dict)
@@ -145,6 +146,7 @@ class BleWorker(QObject):
             async with BleakClient(device) as client:
                 self._client = client
                 self.connected_changed.emit(True)
+                self.device_info.emit(device.name or proto.DEVICE_NAME, device.address)
                 self.status_changed.emit(f"Connected: {device.name} ({device.address})")
                 await client.start_notify(proto.WORD_CHAR_UUID, self._on_word_notify)
                 await client.start_notify(proto.CONTROL_EVT_UUID, self._on_control_notify)

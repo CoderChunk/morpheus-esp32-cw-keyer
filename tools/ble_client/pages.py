@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 import protocol as proto
+from widgets import CircularKeyButton, HeroPanel, RoundIconButton, WpmDial
 
 
 def section_label(text: str) -> QLabel:
@@ -41,6 +42,26 @@ def card(title: str) -> QGroupBox:
     shadow.setColor(QColor(0, 0, 0, 90))
     box.setGraphicsEffect(shadow)
     return box
+
+
+def stat_pill(label: str) -> tuple[QGroupBox, QLabel]:
+    """A small rounded card holding one label + one big value, used for
+    the row of live-stat pills under the Keyer hero panel."""
+    box = card("")
+    box.setObjectName("statPill")
+    shadow = box.graphicsEffect()
+    if shadow is not None:
+        shadow.setBlurRadius(20)
+    layout = QVBoxLayout(box)
+    layout.setContentsMargins(16, 10, 16, 14)
+    layout.setSpacing(2)
+    caption = QLabel(label)
+    caption.setObjectName("sectionLabel")
+    value = QLabel("--")
+    value.setObjectName("pillValue")
+    layout.addWidget(caption)
+    layout.addWidget(value)
+    return box, value
 
 
 def big_label(text: str = "--") -> QLabel:
@@ -123,26 +144,65 @@ class PlaceholderPage(QWidget):
 
 # ----------------------------------------------------------------------------
 class KeyerPage(QWidget):
-    """Word telemetry - the original always-on BLE_WORD_CHAR_UUID feed."""
+    """Word telemetry - the original always-on BLE_WORD_CHAR_UUID feed -
+    plus a real virtual straight key (key_down/key_up, the same command
+    Training/Games use). The WPM dial is a live readout, not a remote
+    speed control: the firmware's BLE protocol has no command to set
+    keying speed outside Training's adaptive mode, so there is nothing
+    honest for +/- buttons here to do.
+    """
+
+    command_requested = Signal(dict)
+
+    _TRANSCRIPT_SIZES = (12, 15, 19)
 
     def __init__(self):
         super().__init__()
         self._word_count = 0
+        self._transcript_size_idx = 1
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(12)
+        root.setSpacing(18)
 
-        stats_row = QHBoxLayout()
-        self.wpm_label = QLabel("WPM: --")
-        self.mode_label = QLabel("Mode: --")
-        self.count_label = QLabel("Words received: 0")
-        for lbl in (self.wpm_label, self.mode_label, self.count_label):
-            lbl.setObjectName("sectionLabel")
-            stats_row.addWidget(lbl)
-        stats_row.addStretch(1)
-        root.addLayout(stats_row)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(18)
+        top_row.addWidget(self._build_hero(), 2)
+        top_row.addWidget(self._build_side_column(), 1)
+        root.addLayout(top_row)
 
-        root.addWidget(section_label("Word Log"))
+        pills_row = QHBoxLayout()
+        pills_row.setSpacing(14)
+        mode_pill, self.mode_value = stat_pill("MODE")
+        words_pill, self.count_value = stat_pill("WORDS RECEIVED")
+        last_pill, self.last_word_value = stat_pill("LAST WORD")
+        self.count_value.setText("0")
+        for pill in (mode_pill, words_pill, last_pill):
+            pills_row.addWidget(pill)
+        root.addLayout(pills_row)
+
+        transcript_card = card("Live Transcript")
+        tlayout = QVBoxLayout(transcript_card)
+        header = QHBoxLayout()
+        header.addStretch(1)
+        self.font_btn = QPushButton("Aa")
+        self.font_btn.setObjectName("compactButton")
+        self.font_btn.setFixedWidth(56)
+        self.font_btn.setToolTip("Cycle transcript text size")
+        self.font_btn.clicked.connect(self._on_cycle_font_size)
+        header.addWidget(self.font_btn)
+        clear_btn = QPushButton("Clear")
+        clear_btn.setObjectName("dangerButton")
+        clear_btn.clicked.connect(self._on_clear)
+        header.addWidget(clear_btn)
+        tlayout.addLayout(header)
+        self.transcript = QTextEdit()
+        self.transcript.setReadOnly(True)
+        self.transcript.setMinimumHeight(140)
+        tlayout.addWidget(self.transcript)
+        root.addWidget(transcript_card)
+
+        log_card = card("Word Log")
+        llayout = QVBoxLayout(log_card)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Time", "Word", "WPM", "Mode"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -153,12 +213,117 @@ class KeyerPage(QWidget):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        root.addWidget(self.table, 2)
+        self.table.setMaximumHeight(220)
+        llayout.addWidget(self.table)
+        root.addWidget(log_card)
 
-        root.addWidget(section_label("Live Transcript"))
-        self.transcript = QTextEdit()
-        self.transcript.setReadOnly(True)
-        root.addWidget(self.transcript, 1)
+        self._apply_transcript_font()
+
+    # ------------------------------------------------------------------
+    def _build_hero(self) -> QWidget:
+        hero = HeroPanel()
+        layout = QVBoxLayout(hero)
+        layout.setContentsMargins(36, 30, 36, 30)
+        layout.setSpacing(4)
+
+        title = QLabel("MORPHEUS")
+        title.setObjectName("heroTitle")
+        subtitle = QLabel("CW KEYER  ·  BLE TELEMETRY")
+        subtitle.setObjectName("heroSubtitle")
+        tagline = QLabel("Hear  ·  Practice  ·  Connect")
+        tagline.setObjectName("heroTagline")
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(tagline)
+        layout.addSpacing(8)
+
+        dial_row = QHBoxLayout()
+        dial_row.addStretch(1)
+        minus_btn = RoundIconButton("−")
+        minus_btn.setEnabled(False)
+        minus_btn.setToolTip(
+            "Keying speed isn't remotely settable outside Training - this "
+            "dial shows the live WPM reported with each received word."
+        )
+        dial_row.addWidget(minus_btn, 0, Qt.AlignVCenter)
+        self.wpm_dial = WpmDial()
+        dial_row.addWidget(self.wpm_dial)
+        plus_btn = RoundIconButton("+")
+        plus_btn.setEnabled(False)
+        plus_btn.setToolTip(minus_btn.toolTip())
+        dial_row.addWidget(plus_btn, 0, Qt.AlignVCenter)
+        dial_row.addStretch(1)
+        layout.addLayout(dial_row)
+        layout.addStretch(1)
+        return hero
+
+    def _build_side_column(self) -> QWidget:
+        col = QWidget()
+        layout = QVBoxLayout(col)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+
+        device_card = card("Device")
+        dlayout = QVBoxLayout(device_card)
+        self.device_name_label = QLabel("Not connected")
+        self.device_name_label.setObjectName("deviceName")
+        self.device_addr_label = QLabel("--")
+        self.device_addr_label.setObjectName("sectionLabel")
+        dlayout.addWidget(self.device_name_label)
+        dlayout.addWidget(self.device_addr_label)
+        layout.addWidget(device_card)
+
+        key_card = card("Virtual Straight Key")
+        klayout = QVBoxLayout(key_card)
+        klayout.setAlignment(Qt.AlignHCenter)
+        self.key_button = CircularKeyButton()
+        self.key_button.key_down.connect(self._on_key_down)
+        self.key_button.key_up.connect(self._on_key_up)
+        klayout.addWidget(self.key_button, 0, Qt.AlignHCenter)
+        self.key_status_label = QLabel("Ready")
+        self.key_status_label.setObjectName("keyStatus")
+        self.key_status_label.setAlignment(Qt.AlignCenter)
+        self.key_hint_label = QLabel("Hold the button or SPACE to key")
+        self.key_hint_label.setObjectName("sectionLabel")
+        self.key_hint_label.setAlignment(Qt.AlignCenter)
+        klayout.addWidget(self.key_status_label)
+        klayout.addWidget(self.key_hint_label)
+        layout.addWidget(key_card, 1)
+        return col
+
+    # ------------------------------------------------------------------
+    def set_device_info(self, name: str, address: str):
+        self.device_name_label.setText(name)
+        self.device_addr_label.setText(address)
+
+    def set_connected(self, connected: bool):
+        if not connected:
+            self.device_name_label.setText("Not connected")
+            self.device_addr_label.setText("--")
+
+    def _on_key_down(self):
+        self.key_status_label.setText("Keying...")
+        self.command_requested.emit({"cmd": "key_down"})
+
+    def _on_key_up(self):
+        self.key_status_label.setText("Ready")
+        self.command_requested.emit({"cmd": "key_up"})
+
+    def _on_cycle_font_size(self):
+        self._transcript_size_idx = (self._transcript_size_idx + 1) % len(self._TRANSCRIPT_SIZES)
+        self._apply_transcript_font()
+
+    def _apply_transcript_font(self):
+        size = self._TRANSCRIPT_SIZES[self._transcript_size_idx]
+        font = QFont("Courier New", size)
+        self.transcript.setFont(font)
+
+    def _on_clear(self):
+        self.transcript.clear()
+        self.table.setRowCount(0)
+        self._word_count = 0
+        self.count_value.setText("0")
+        self.last_word_value.setText("--")
 
     def on_word_received(self, payload: dict):
         word = str(payload.get("word", ""))
@@ -166,9 +331,10 @@ class KeyerPage(QWidget):
         mode = str(payload.get("mode", "?"))
 
         self._word_count += 1
-        self.count_label.setText(f"Words received: {self._word_count}")
-        self.wpm_label.setText(f"WPM: {wpm}")
-        self.mode_label.setText(f"Mode: {mode}")
+        self.count_value.setText(str(self._word_count))
+        self.mode_value.setText(mode)
+        self.last_word_value.setText(word or "--")
+        self.wpm_dial.set_value(wpm)
 
         row = self.table.rowCount()
         self.table.insertRow(row)

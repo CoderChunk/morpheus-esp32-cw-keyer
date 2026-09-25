@@ -25,7 +25,7 @@ Requires: PySide6, bleak, and (Linux only) dbus-next - see requirements.txt
 
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -199,8 +200,12 @@ QLabel#sidebarLabelActive { font-size: 11pt; font-weight: 700; color: #ffffff; }
 QLabel#sidebarFooterBrand { font-size: 9.5pt; font-weight: 700; color: #c7cbdb; }
 QLabel#sidebarFooterVersion { font-size: 8pt; color: #6c7086; }
 
-QGroupBox#statPill { padding: 14px 16px 16px 16px; margin-top: 4px; }
-QLabel#pillValue { font-size: 15pt; font-weight: 800; color: #ffffff; }
+QWidget#statPill { background-color: #161825; border: 1px solid #232636; border-radius: 14px; }
+QWidget#pillBadge { background-color: #1c1f2e; border-radius: 10px; }
+QLabel#pillValue { font-size: 14pt; font-weight: 800; color: #ffffff; }
+
+QWidget#plainPanel { background-color: #161825; border: 1px solid #232636; border-radius: 16px; }
+QLabel#panelTitle { font-size: 10pt; font-weight: 700; color: #c7cbdb; letter-spacing: 0.5px; }
 
 QLabel#heroTitle { font-size: 26pt; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
 QLabel#heroSubtitle { font-size: 10pt; font-weight: 700; color: #cdd3ea; letter-spacing: 1px; }
@@ -210,6 +215,12 @@ QLabel#deviceName { font-size: 12.5pt; font-weight: 700; color: #ffffff; }
 QLabel#keyStatus { font-size: 13pt; font-weight: 800; color: #ffffff; margin-top: 6px; }
 
 QWidget#heroCard { background: transparent; }
+QScrollArea#pageScroll { background: transparent; border: none; }
+QScrollArea#pageScroll > QWidget > QWidget { background: transparent; }
+QScrollBar:vertical { background: #0f1117; width: 12px; margin: 0; }
+QScrollBar::handle:vertical { background: #2c2f42; border-radius: 6px; min-height: 24px; }
+QScrollBar::handle:vertical:hover { background: #3a3e55; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
 """
 
 def _centered(widget: QWidget, max_width: int) -> QWidget:
@@ -278,6 +289,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("MORPHEUS BLE Test Client")
         self.resize(1440, 900)
+        self.setMinimumSize(1000, 640)
 
         self.worker = BleWorker()
         self.worker.status_changed.connect(self._on_status_changed)
@@ -318,7 +330,18 @@ class MainWindow(QMainWindow):
         stack_layout = QVBoxLayout(stack_container)
         stack_layout.setContentsMargins(32, 28, 32, 28)
         stack_layout.addWidget(self.stack)
-        body.addWidget(stack_container, 1)
+
+        # A page's natural content height can exceed the visible window
+        # (e.g. on a smaller/tiled screen, or if a compositor hands us a
+        # smaller-than-expected maximized size) - without this, the
+        # bottom of the page silently clips with no way to reach it.
+        scroll = QScrollArea()
+        scroll.setObjectName("pageScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(stack_container)
+        body.addWidget(scroll, 1)
 
         self.keyer_page = KeyerPage()
         self.training_page = TrainingPage()
@@ -565,7 +588,15 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     win = MainWindow()
-    win.showMaximized()
+    # Requesting the maximized window state before the window has ever
+    # been shown races the xdg-shell handshake on some Wayland
+    # compositors, which then reports a bogus 0x0 configure event
+    # ("qt.qpa.wayland: Configure event ... invalid width/height: 0")
+    # and can leave the window laid out at that bogus size - showing
+    # the window at its normal geometry first, then requesting maximize
+    # on the next event-loop iteration, avoids the race entirely.
+    win.show()
+    QTimer.singleShot(0, win.showMaximized)
     sys.exit(app.exec())
 
 

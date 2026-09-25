@@ -155,6 +155,35 @@ class LinkIcon(IconWidget):
         p.drawRoundedRect(QRectF(w * 0.41, h * 0.3, w * 0.55, h * 0.4), h * 0.2, h * 0.2)
 
 
+class TextLinesIcon(IconWidget):
+    """Three short horizontal strokes - used for a "last word" stat."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        self._pen(p, 0.13)
+        w, h = self.width(), self.height()
+        for i, frac in enumerate((0.3, 0.52, 0.74)):
+            y = h * frac
+            x2 = w * 0.82 if i < 2 else w * 0.58
+            p.drawLine(QPointF(w * 0.16, y), QPointF(x2, y))
+
+
+class ChevronIcon(IconWidget):
+    """Small right-pointing chevron, used as a row affordance."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        self._pen(p, 0.16)
+        w, h = self.width(), self.height()
+        path = QPainterPath()
+        path.moveTo(w * 0.35, h * 0.2)
+        path.lineTo(w * 0.68, h * 0.5)
+        path.lineTo(w * 0.35, h * 0.8)
+        p.drawPath(path)
+
+
 class LetterBadge(IconWidget):
     """Fallback icon: a plain letter in a ring, for sections that don't
     have a bespoke vector icon yet - plain ASCII always renders safely,

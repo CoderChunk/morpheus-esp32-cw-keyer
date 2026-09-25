@@ -23,7 +23,18 @@ from PySide6.QtWidgets import (
 )
 
 import protocol as proto
-from widgets import CircularKeyButton, HeroPanel, RoundIconButton, WpmDial
+from widgets import (
+    ACCENT,
+    BarsIcon,
+    BluetoothIcon,
+    ChevronIcon,
+    CircularKeyButton,
+    HeroPanel,
+    PieIcon,
+    RoundIconButton,
+    TextLinesIcon,
+    WpmDial,
+)
 
 
 def section_label(text: str) -> QLabel:
@@ -44,23 +55,42 @@ def card(title: str) -> QGroupBox:
     return box
 
 
-def stat_pill(label: str) -> tuple[QGroupBox, QLabel]:
-    """A small rounded card holding one label + one big value, used for
-    the row of live-stat pills under the Keyer hero panel."""
-    box = card("")
+def stat_pill(icon_widget: QWidget, label: str) -> tuple[QWidget, QLabel]:
+    """Icon + caption/value + trailing chevron row, styled like the
+    Tone/Mode/Spacing pills in the reference template - used for the row
+    of live-stat pills under the Keyer hero panel."""
+    box = QWidget()
     box.setObjectName("statPill")
-    shadow = box.graphicsEffect()
-    if shadow is not None:
-        shadow.setBlurRadius(20)
-    layout = QVBoxLayout(box)
-    layout.setContentsMargins(16, 10, 16, 14)
-    layout.setSpacing(2)
+    shadow = QGraphicsDropShadowEffect(box)
+    shadow.setBlurRadius(20)
+    shadow.setOffset(0, 5)
+    shadow.setColor(QColor(0, 0, 0, 90))
+    box.setGraphicsEffect(shadow)
+
+    layout = QHBoxLayout(box)
+    layout.setContentsMargins(16, 12, 16, 12)
+    layout.setSpacing(14)
+
+    badge = QWidget()
+    badge.setObjectName("pillBadge")
+    badge.setFixedSize(40, 40)
+    badge_layout = QHBoxLayout(badge)
+    badge_layout.setContentsMargins(0, 0, 0, 0)
+    badge_layout.addWidget(icon_widget, 0, Qt.AlignCenter)
+    layout.addWidget(badge)
+
+    text_col = QVBoxLayout()
+    text_col.setSpacing(2)
     caption = QLabel(label)
     caption.setObjectName("sectionLabel")
     value = QLabel("--")
     value.setObjectName("pillValue")
-    layout.addWidget(caption)
-    layout.addWidget(value)
+    text_col.addWidget(caption)
+    text_col.addWidget(value)
+    layout.addLayout(text_col, 1)
+
+    chevron = ChevronIcon(14, QColor("#4a4e5e"))
+    layout.addWidget(chevron, 0, Qt.AlignVCenter)
     return box, value
 
 
@@ -172,9 +202,9 @@ class KeyerPage(QWidget):
 
         pills_row = QHBoxLayout()
         pills_row.setSpacing(14)
-        mode_pill, self.mode_value = stat_pill("MODE")
-        words_pill, self.count_value = stat_pill("WORDS RECEIVED")
-        last_pill, self.last_word_value = stat_pill("LAST WORD")
+        mode_pill, self.mode_value = stat_pill(BarsIcon(18, ACCENT), "MODE")
+        words_pill, self.count_value = stat_pill(PieIcon(18, ACCENT), "WORDS RECEIVED")
+        last_pill, self.last_word_value = stat_pill(TextLinesIcon(18, ACCENT), "LAST WORD")
         self.count_value.setText("0")
         for pill in (mode_pill, words_pill, last_pill):
             pills_row.addWidget(pill)
@@ -263,23 +293,69 @@ class KeyerPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
 
-        device_card = card("Device")
+        device_card = QWidget()
+        device_card.setObjectName("plainPanel")
+        dshadow = QGraphicsDropShadowEffect(device_card)
+        dshadow.setBlurRadius(28)
+        dshadow.setOffset(0, 6)
+        dshadow.setColor(QColor(0, 0, 0, 90))
+        device_card.setGraphicsEffect(dshadow)
         dlayout = QVBoxLayout(device_card)
+        dlayout.setContentsMargins(18, 16, 18, 18)
+        dlayout.setSpacing(14)
+
+        dheader = QHBoxLayout()
+        dtitle = QLabel("Device")
+        dtitle.setObjectName("panelTitle")
+        dheader.addWidget(dtitle)
+        dheader.addStretch(1)
+        self.device_status_dot = QLabel("●")
+        self.device_status_dot.setStyleSheet("color: #ff5c7a; font-size: 8pt;")
+        self.device_status_text = QLabel("Disconnected")
+        self.device_status_text.setObjectName("deviceStatusSmall")
+        self.device_status_text.setStyleSheet("color: #ff5c7a;")
+        dheader.addWidget(self.device_status_dot)
+        dheader.addWidget(self.device_status_text)
+        dlayout.addLayout(dheader)
+
+        drow = QHBoxLayout()
+        drow.setSpacing(12)
+        dbadge = QWidget()
+        dbadge.setObjectName("pillBadge")
+        dbadge.setFixedSize(40, 40)
+        dbadge_layout = QHBoxLayout(dbadge)
+        dbadge_layout.setContentsMargins(0, 0, 0, 0)
+        dbadge_layout.addWidget(BluetoothIcon(18, ACCENT), 0, Qt.AlignCenter)
+        drow.addWidget(dbadge)
+
+        dtext = QVBoxLayout()
+        dtext.setSpacing(2)
         self.device_name_label = QLabel("Not connected")
         self.device_name_label.setObjectName("deviceName")
         self.device_addr_label = QLabel("--")
         self.device_addr_label.setObjectName("sectionLabel")
-        dlayout.addWidget(self.device_name_label)
-        dlayout.addWidget(self.device_addr_label)
+        dtext.addWidget(self.device_name_label)
+        dtext.addWidget(self.device_addr_label)
+        drow.addLayout(dtext, 1)
+        drow.addWidget(ChevronIcon(14, QColor("#4a4e5e")), 0, Qt.AlignVCenter)
+        dlayout.addLayout(drow)
         layout.addWidget(device_card)
 
-        key_card = card("Virtual Straight Key")
+        key_card = QWidget()
+        key_card.setObjectName("plainPanel")
+        kshadow = QGraphicsDropShadowEffect(key_card)
+        kshadow.setBlurRadius(28)
+        kshadow.setOffset(0, 6)
+        kshadow.setColor(QColor(0, 0, 0, 90))
+        key_card.setGraphicsEffect(kshadow)
         klayout = QVBoxLayout(key_card)
         klayout.setAlignment(Qt.AlignHCenter)
+        klayout.setContentsMargins(18, 30, 18, 30)
         self.key_button = CircularKeyButton()
         self.key_button.key_down.connect(self._on_key_down)
         self.key_button.key_up.connect(self._on_key_up)
         klayout.addWidget(self.key_button, 0, Qt.AlignHCenter)
+        klayout.addSpacing(14)
         self.key_status_label = QLabel("Ready")
         self.key_status_label.setObjectName("keyStatus")
         self.key_status_label.setAlignment(Qt.AlignCenter)
@@ -297,6 +373,10 @@ class KeyerPage(QWidget):
         self.device_addr_label.setText(address)
 
     def set_connected(self, connected: bool):
+        color = "#3ddc84" if connected else "#ff5c7a"
+        self.device_status_dot.setStyleSheet(f"color: {color}; font-size: 8pt;")
+        self.device_status_text.setStyleSheet(f"color: {color};")
+        self.device_status_text.setText("Connected" if connected else "Disconnected")
         if not connected:
             self.device_name_label.setText("Not connected")
             self.device_addr_label.setText("--")

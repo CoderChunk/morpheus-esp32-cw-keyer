@@ -16,11 +16,11 @@ why, with the specific technical blocker for each.
   connect over the documented WebSocket/JSON protocol. Nothing in
   `WS_PROTOCOL.md`/`BACKEND_API.md` changes for these three platforms.
 - **Mobile (Android/iOS): a native Dart implementation of the identical
-  protocol contract**, using a maintained Flutter BLE plugin
-  (`flutter_blue_plus` or `flutter_reactive_ble` — final pick is the
-  Flutter team's call, both are actively maintained as of this
-  writing) instead of a WebSocket connection to a Python process. No
-  Python runs on mobile at all.
+  protocol contract**, using **`flutter_reactive_ble`** (BSD 3-Clause —
+  standardized on for license compatibility with a free, commercial-
+  friendly app) instead of a WebSocket connection to a Python process.
+  No Python runs on mobile at all. See `MOBILE_BLE_PROTOCOL.md` for the
+  exact GATT-level wire format this plugin must implement against.
 
 This is option 3 from the three you listed, precisely because option 1
 fails outright on iOS (and buys nothing on Android), and option 2 —
@@ -92,14 +92,14 @@ anything.
                                  │  same methods/events as WS_PROTOCOL.md §4-§6)
                      ┌───────────┴───────────┐
                      │                       │
-     ┌───────────────▼──────────┐  ┌─────────▼────────────────┐
-     │ WebSocketMorpheusClient   │  │ NativeBleMorpheusClient   │
-     │ (Windows/Linux/macOS)     │  │ (Android/iOS)             │
-     │                           │  │                           │
-     │ spawns ws_server.py,      │  │ flutter_blue_plus /       │
-     │ connects to               │  │ flutter_reactive_ble,     │
-     │ ws://127.0.0.1:8765       │  │ talks GATT directly        │
-     └───────────────┬──────────┘  └─────────┬────────────────┘
+     ┌───────────────▼──────────┐  ┌────────────▼───────────────┐
+     │ WebSocketMorpheusClient   │  │ NativeBleMorpheusClient     │
+     │ (Windows/Linux/macOS)     │  │ (Android/iOS)               │
+     │                           │  │                             │
+     │ spawns ws_server.py,      │  │ flutter_reactive_ble,       │
+     │ connects to               │  │ talks GATT directly         │
+     │ ws://127.0.0.1:8765       │  │ (see MOBILE_BLE_PROTOCOL.md)│
+     └───────────────┬──────────┘  └─────────────┬───────────────┘
                       │                       │
               ┌───────▼───────┐      ┌────────▼────────┐
               │ backend.py     │      │ MORPHEUS device   │

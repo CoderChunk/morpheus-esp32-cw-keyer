@@ -94,8 +94,9 @@ corresponding page in `pages.py`.
   client on Windows/Linux/macOS - see `WS_PROTOCOL.md`; Android/iOS use
   a native `flutter_reactive_ble` driver instead, see
   `MOBILE_ARCHITECTURE.md` and `MOBILE_BLE_PROTOCOL.md` for the
-  GATT-level wire format it implements); not needed to run the Qt
-  desktop app
+  GATT-level wire format it implements, and `MOBILE_BLE_VALIDATION.md`
+  for the real-hardware test plan); not needed to run the Qt desktop
+  app
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
   `MorpheusBackend`

@@ -219,8 +219,25 @@ class MorpheusWebSocketServer:
         self._clients[ws] = session
         logger.info("Client connected (%d total)", len(self._clients))
         try:
-            async for raw in ws:
-                await self._handle_message(session, raw)
+            try:
+                async for raw in ws:
+                    await self._handle_message(session, raw)
+            except websockets.exceptions.ConnectionClosed:
+                # `websockets`'s own async-for loop already absorbs a
+                # clean close (ConnectionClosedOK) as normal iteration
+                # end - verified empirically, not just per the docs -
+                # so in practice this only ever fires for the abrupt
+                # case (e.g. the OS killing the client process, no
+                # close frame exchanged at all). That's still an
+                # ordinary end-of-session event for a local IPC socket,
+                # not a server error. Without this handler, the
+                # exception propagates out of this coroutine and
+                # `websockets` logs it as "connection handler failed"
+                # with a full traceback.
+                logger.info(
+                    "Client connection closed (code=%s, reason=%r)",
+                    ws.close_code, ws.close_reason,
+                )
         finally:
             self._clients.pop(ws, None)
             logger.info("Client disconnected (%d total)", len(self._clients))

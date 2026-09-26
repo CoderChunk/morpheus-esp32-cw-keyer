@@ -1,20 +1,19 @@
 """
-BLE worker: runs bleak (asyncio) on a background thread, talks to the
-GUI thread only through Qt signals. Qt auto-queues signal delivery
-across threads as long as this QObject stays on the main thread (it
-does; only the async work runs elsewhere), so no locking is needed on
-the GUI side.
-"""
+Qt-signal adapter over backend.MorpheusBackend.
 
-import asyncio
-import json
-import threading
+All the actual BLE/asyncio logic now lives in backend.py, which has no
+Qt dependency (see MORPHEUS_BACKEND_API_REQUIREMENTS.md /
+BACKEND_API.md - it's meant to be usable by any frontend, not just this
+one). BleWorker's only job is translating the backend's plain-callback
+events into Qt signals so the rest of this app doesn't have to change:
+Qt auto-queues signal delivery across threads as long as this QObject
+stays on the main thread (it does; only the backend's own background
+threads run the async work), so no locking is needed on the GUI side.
+"""
 
 from PySide6.QtCore import QObject, Signal
 
-from bleak import BleakClient, BleakScanner
-
-import protocol as proto
+import backend
 
 
 class BleWorker(QObject):
@@ -23,137 +22,82 @@ class BleWorker(QObject):
     device_info = Signal(str, str)
     word_received = Signal(dict)
     train_state_received = Signal(dict)
-    game_state_received = Signal(dict)
-    command_ack = Signal(str, bool)
     command_error = Signal(str)
     error = Signal(str)
 
     def __init__(self):
         super().__init__()
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._thread: threading.Thread | None = None
-        self._client: BleakClient | None = None
-        self._stop_requested = False
+        self._backend = backend.MorpheusBackend()
+        self._backend.on_connection_changed(self._on_connection_changed)
+        self._backend.on_keyer_word(self._on_keyer_word)
+        self._backend.on_training_state(self._on_training_state)
+        self._backend.on_error(self._on_backend_error)
 
     # ------------------------------------------------------------------
     def start(self, address: str = ""):
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop_requested = False
-        self._thread = threading.Thread(
-            target=self._run, args=(address.strip() or None,), daemon=True
-        )
-        self._thread.start()
+        self._backend.connect(address.strip() or None)
 
     def stop(self):
-        self._stop_requested = True
-        if self._loop is not None:
-            asyncio.run_coroutine_threadsafe(self._async_stop(), self._loop)
+        self._backend.disconnect()
 
     def send_command(self, command: dict):
-        """Fire-and-forget: writes JSON to the control-cmd characteristic.
-        Safe to call from the GUI thread; the actual write happens on the
-        worker's own event loop.
+        """Fire-and-forget: dispatches to the matching backend command.
+        Safe to call from the GUI thread; the backend marshals the
+        actual write onto its own background loop.
         """
-        if self._loop is None or self._client is None:
-            self.error.emit("Not connected")
-            return
-        asyncio.run_coroutine_threadsafe(self._async_send_command(command), self._loop)
+        cmd = command.get("cmd")
+        if cmd == "key_down":
+            self._backend.key_down()
+        elif cmd == "key_up":
+            self._backend.key_up()
+        elif cmd == "train_start":
+            self._backend.start_training(command.get("mode", ""))
+        elif cmd == "train_stop":
+            self._backend.stop_training()
+        elif cmd == "train_confirm":
+            self._backend.confirm_training()
+        else:
+            self.error.emit(f"Unknown command: {cmd}")
 
     # ------------------------------------------------------------------
-    async def _async_stop(self):
-        if self._client is not None and self._client.is_connected:
-            await self._client.disconnect()
-
-    async def _async_send_command(self, command: dict):
-        if self._client is None or not self._client.is_connected:
-            self.error.emit("Not connected")
-            return
-        try:
-            # Firmware's jsonGetString() (ble_control.cpp) matches the
-            # literal pattern "key":" with no space after the colon -
-            # json.dumps()'s default ": " separator would silently fail
-            # to match, so every command's "cmd" field would come back
-            # as "missing cmd". Compact separators avoid that.
-            payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
-            await self._client.write_gatt_char(proto.CONTROL_CMD_UUID, payload, response=True)
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(f"Command send failed: {exc}")
-
-    def _run(self, address: str | None):
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        try:
-            self._loop.run_until_complete(self._async_main(address))
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(str(exc))
-        finally:
-            self.connected_changed.emit(False)
-            self._loop.close()
-            self._loop = None
-
-    def _on_word_notify(self, _characteristic, data: bytearray):
-        self._dispatch_json(data, self.word_received, expect_evt=None)
-
-    def _on_control_notify(self, _characteristic, data: bytearray):
-        try:
-            payload = json.loads(bytes(data).decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(f"Malformed control payload: {exc}")
-            return
-        evt = payload.get("evt")
-        if evt == "train_state":
-            self.train_state_received.emit(payload)
-        elif evt == "game_state":
-            self.game_state_received.emit(payload)
-        elif evt == "ack":
-            self.command_ack.emit(payload.get("cmd", ""), bool(payload.get("ok")))
-        elif evt == "error":
-            self.command_error.emit(payload.get("message", "unknown error"))
-
-    def _dispatch_json(self, data: bytearray, signal, expect_evt):
-        try:
-            payload = json.loads(bytes(data).decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(f"Malformed payload: {exc}")
-            return
-        if expect_evt is None or payload.get("evt") == expect_evt:
-            signal.emit(payload)
-
-    async def _async_main(self, address: str | None):
-        self.status_changed.emit("Scanning...")
-        device = None
-        if address:
-            device = await BleakScanner.find_device_by_address(address, timeout=proto.SCAN_TIMEOUT_S)
-        else:
-            device = await BleakScanner.find_device_by_filter(
-                lambda d, _adv: d.name == proto.DEVICE_NAME, timeout=proto.SCAN_TIMEOUT_S
-            )
-
-        if self._stop_requested:
-            return
-        if device is None:
-            self.error.emit(
-                f"{proto.DEVICE_NAME} not found in {proto.SCAN_TIMEOUT_S:.0f}s. "
-                "Is BLE enabled and advertising on the device "
-                "(Connectivity > Bluetooth > BLE toggle)?"
-            )
+    # backend.MorpheusBackend callbacks (invoked from a backend
+    # background thread) - Qt signal emission below is what marshals
+    # each event onto the GUI thread.
+    # ------------------------------------------------------------------
+    def _on_connection_changed(self, info: "backend.ConnectionInfo"):
+        state = info.state.value
+        if state == backend.ConnectionState.CONNECTED.value:
+            self.connected_changed.emit(True)
+            if info.deviceName and info.deviceAddress:
+                self.device_info.emit(info.deviceName, info.deviceAddress)
+            self.status_changed.emit(f"Connected: {info.deviceName} ({info.deviceAddress})")
+        elif state == backend.ConnectionState.SCANNING.value:
+            self.status_changed.emit("Scanning...")
+        elif state == backend.ConnectionState.CONNECTING.value:
+            self.status_changed.emit("Connecting...")
+        elif state == backend.ConnectionState.NOT_FOUND.value:
             self.status_changed.emit("Not found")
-            return
+        elif state == backend.ConnectionState.DISCONNECTED.value:
+            self.connected_changed.emit(False)
+            self.status_changed.emit(info.statusMessage or "Disconnected")
 
-        self.status_changed.emit(f"Connecting to {device.address}...")
-        try:
-            async with BleakClient(device) as client:
-                self._client = client
-                self.connected_changed.emit(True)
-                self.device_info.emit(device.name or proto.DEVICE_NAME, device.address)
-                self.status_changed.emit(f"Connected: {device.name} ({device.address})")
-                await client.start_notify(proto.WORD_CHAR_UUID, self._on_word_notify)
-                await client.start_notify(proto.CONTROL_EVT_UUID, self._on_control_notify)
-                while client.is_connected and not self._stop_requested:
-                    await asyncio.sleep(0.5)
-        except Exception as exc:  # noqa: BLE001
-            self.error.emit(str(exc))
-        finally:
-            self._client = None
-            self.status_changed.emit("Disconnected")
+    def _on_keyer_word(self, evt: "backend.KeyerWordEvent"):
+        self.word_received.emit({
+            "word": evt.word, "wpm": evt.wpm, "mode": evt.mode, "timestamp": evt.timestamp,
+        })
+
+    def _on_training_state(self, state: "backend.TrainingState"):
+        payload = {
+            "active": state.active, "mode": state.mode, "phase": state.phase,
+            "target": state.target, "correct": state.correct, "attempts": state.attempts,
+            "kochLevel": state.kochLevel, "adaptiveWpm": state.adaptiveWpm,
+            "examScorePercent": state.examScorePercent, "examPassed": state.examPassed,
+            "examCorrect": state.examCorrectCount, "examTotal": state.examTotalCount,
+        }
+        self.train_state_received.emit(payload)
+
+    def _on_backend_error(self, err: "backend.BackendError"):
+        if err.operation in ("startTraining", "stopTraining", "confirmTraining"):
+            self.command_error.emit(err.message)
+        else:
+            self.error.emit(err.message)

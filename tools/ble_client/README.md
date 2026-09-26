@@ -82,12 +82,21 @@ corresponding page in `pages.py`.
 
 ## Files
 
+- `backend.py` — `MorpheusBackend`: the transport-agnostic backend (no
+  Qt import at all) implementing `BACKEND_API.md` / `MORPHEUS_BACKEND_API_REQUIREMENTS.md` -
+  connection, keyer telemetry, virtual key, training, pairing,
+  capabilities, structured errors
+- `pairing_backend.py` — the BlueZ Agent1 D-Bus implementation, lazily
+  imported by `backend.py` so a missing `dbus-next` only disables
+  pairing, not the rest of the backend
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
-- `ble_client_core.py` — `BleWorker`: runs `bleak` on a background
-  thread, exposes Qt signals to the GUI thread
-- `ble_pairing.py` — `PairingWorker`: registers a BlueZ Agent1 D-Bus
-  service (Linux) and bridges its passkey/confirmation callbacks to Qt
-  signals, on its own background thread and asyncio loop
+- `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
+  `MorpheusBackend`
+- `ble_pairing.py` — `PairingWorker`: a thin Qt-signal adapter over
+  `MorpheusBackend`'s pairing operations
 - `pairing_dialog.py` — the in-app "Pair New Device" dialog
-- `pages.py` — the CW Keyer / Training / Games / Placeholder page widgets
-- `protocol.py` — UUID and command-vocabulary constants
+- `pages.py` — the CW Keyer / Training / Placeholder page widgets
+- `arcade.py` — the Games tab: six client-side Morse typing/arcade
+  games (no BLE involvement - see `UI_SPECIFICATION.md` §4)
+- `protocol.py` — UUID/command-vocabulary constants plus the exact
+  Koch order and Morse table (copied from firmware source)

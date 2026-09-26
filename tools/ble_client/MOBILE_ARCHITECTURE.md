@@ -1,5 +1,20 @@
 # MORPHEUS Mobile (Android/iOS) Architecture Decision
 
+## Architecture at a glance
+
+```
+Windows/Linux/macOS  →  Flutter  →  WebSocket (ws_server.py)  →  Python backend (MorpheusBackend/bleak)  →  MORPHEUS
+Android/iOS           →  Flutter  →  flutter_reactive_ble       →  MORPHEUS BLE directly (no WebSocket, no Python)
+```
+
+**There is no Python process, no WebSocket, and no `ws_server.py`
+anywhere in the Android/iOS path.** On mobile, Flutter talks straight
+to the MORPHEUS device's GATT characteristics via
+`flutter_reactive_ble` — see `MOBILE_BLE_PROTOCOL.md` for that wire
+format. Every other mention of "Python" or "WebSocket" below is either
+describing the desktop-only path, or explaining why that path
+specifically cannot be reused on mobile.
+
 ## The question
 
 `WS_PROTOCOL.md` documents a local `ws://127.0.0.1:8765` WebSocket server

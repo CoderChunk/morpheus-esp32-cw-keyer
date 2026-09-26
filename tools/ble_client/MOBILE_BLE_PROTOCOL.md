@@ -140,7 +140,7 @@ essentially everything.
 
 ## 6. Command payloads (write to the control-command characteristic)
 
-Only these three commands are relevant to the mobile client. `game_*`
+Only these five commands are relevant to the mobile client. `game_*`
 commands exist in the firmware's vocabulary but are **out of scope for
 mobile** — Flutter implements all six games entirely client-side (per
 requirement 4), never talking to the device's own 3-game protocol, the

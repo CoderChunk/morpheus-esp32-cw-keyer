@@ -1,10 +1,17 @@
-# MORPHEUS Backend WebSocket/JSON Protocol
+# MORPHEUS Backend WebSocket/JSON Protocol (Windows/Linux/macOS only)
 
-The language-neutral IPC boundary for non-Python frontends (built for
-the Flutter/Dart client, usable by anything that speaks WebSocket +
-JSON). Implemented by `ws_server.py`, which wraps `backend.py`'s
-`MorpheusBackend` - **all BLE/device logic stays in Python**; this
-server only translates it to/from JSON over a local socket.
+**This document describes the desktop transport only.** Android and
+iOS do not use a WebSocket or a Python process at all — see
+`MOBILE_BLE_PROTOCOL.md` for the mobile transport, and
+`MOBILE_ARCHITECTURE.md` for why the two platforms need different
+transports.
+
+The language-neutral IPC boundary for non-Python **desktop** frontends
+(built for the Flutter/Dart client on Windows/Linux/macOS, usable by
+anything that speaks WebSocket + JSON). Implemented by `ws_server.py`,
+which wraps `backend.py`'s `MorpheusBackend` - **all BLE/device logic
+stays in Python**; this server only translates it to/from JSON over a
+local socket.
 
 ```
 python3 ws_server.py --host 127.0.0.1 --port 8765

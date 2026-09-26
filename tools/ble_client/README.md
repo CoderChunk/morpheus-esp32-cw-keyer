@@ -91,7 +91,9 @@ corresponding page in `pages.py`.
   pairing, not the rest of the backend
 - `ws_server.py` — local WebSocket/JSON IPC server exposing
   `MorpheusBackend` to non-Python frontends (built for the Flutter/Dart
-  client - see `WS_PROTOCOL.md`); not needed to run the Qt desktop app
+  client on Windows/Linux/macOS - see `WS_PROTOCOL.md`; Android/iOS use
+  a native driver instead, see `MOBILE_ARCHITECTURE.md`); not needed to
+  run the Qt desktop app
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
   `MorpheusBackend`

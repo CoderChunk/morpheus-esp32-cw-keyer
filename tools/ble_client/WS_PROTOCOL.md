@@ -13,6 +13,16 @@ python3 ws_server.py --host 127.0.0.1 --port 8765
 A Flutter app may bundle and spawn this as a subprocess, or connect to
 an already-running instance — this protocol doesn't care which.
 
+**Platform scope:** this WebSocket transport is for **Windows, Linux,
+and macOS only**. Android and iOS cannot host this Python process at
+all (no iOS `bleak` backend, no D-Bus/BlueZ on either mobile OS, and
+iOS cannot spawn a persistent separate process in the first place) —
+see `MOBILE_ARCHITECTURE.md` for the mobile decision. The method/event/
+data-shape definitions below (§4-§6) are still the authoritative
+protocol spec on mobile; a native Dart driver implements them directly
+over GATT instead of over this WebSocket. Only §1 (Transport) and §10
+(Dart client sketch, which assumes this WebSocket) are desktop-specific.
+
 ---
 
 ## 1. Transport

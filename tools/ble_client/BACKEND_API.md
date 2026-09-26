@@ -17,7 +17,7 @@ a thin RPC/IPC wrapper around — its methods and events already map
 
 **Module:** `tools/ble_client/backend.py` — class `MorpheusBackend`.
 **Pairing internals:** `tools/ble_client/pairing_backend.py` (imported
-lazily by `backend.py`; see §6).
+lazily by `backend.py`; see §5's pairing commands).
 
 ---
 
@@ -56,8 +56,9 @@ be.disconnect()
   `connect()`/`start_pairing()`/etc, and never on a dedicated "event
   thread". A UI framework with thread affinity (Qt, most GUI
   toolkits) **must** marshal these calls onto its own UI thread. See
-  §7 for how the Qt frontend in this repo does it (Qt signals, which
-  auto-queue across threads for free).
+  §10 for how the Qt frontend in this repo does it (Qt signals, which
+  auto-queue across threads for free), and `WS_PROTOCOL.md` for how the
+  WebSocket server (§10) does the equivalent hop for a Flutter client.
 
 ## 3. Data contracts
 

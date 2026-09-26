@@ -173,6 +173,7 @@ class MorpheusBackend:
 
     def __init__(self):
         self._connection = ConnectionInfo(state=ConnectionState.DISCONNECTED)
+        self._training_state = TrainingState(active=False)
 
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
         self._keyer_listeners: List[Callable[[KeyerWordEvent], None]] = []
@@ -220,6 +221,7 @@ class MorpheusBackend:
             cb(evt)
 
     def _emit_training(self, state: TrainingState) -> None:
+        self._training_state = state
         for cb in list(self._training_listeners):
             cb(state)
 
@@ -248,6 +250,21 @@ class MorpheusBackend:
     def connection(self) -> ConnectionInfo:
         return self._connection
 
+    @property
+    def training(self) -> TrainingState:
+        return self._training_state
+
+    def get_snapshot(self) -> dict:
+        """Everything a fresh consumer (e.g. a newly-connected IPC
+        client - see ws_server.py) needs to reconstruct current state
+        without having raced any events emitted before it subscribed."""
+        return {
+            "connection": self._connection,
+            "training": self._training_state,
+            "capabilities": self.get_capabilities(),
+            "metadata": self.get_metadata(),
+        }
+
     # ------------------------------------------------------------------
     # Reference data (§9)
     # ------------------------------------------------------------------
@@ -258,6 +275,12 @@ class MorpheusBackend:
     @staticmethod
     def get_morse_table() -> dict:
         return dict(proto.MORSE_TABLE)
+
+    @staticmethod
+    def get_reverse_morse_table() -> dict:
+        """Morse pattern -> character, the other lookup direction a
+        client needs to build a "decode" style game/UI."""
+        return {pattern: char for char, pattern in proto.MORSE_TABLE.items()}
 
     # ------------------------------------------------------------------
     # Connection operations (§4.2)

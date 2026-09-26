@@ -170,12 +170,21 @@ per the requirements doc's "commands must not silently fail" —
 `start_training("BOGUS")` emits an `INVALID_PARAMETER` error via
 `on_error` rather than raising or doing nothing.
 
-## 6. Capabilities and metadata
+## 6. Capabilities, metadata, and snapshot
 
 ```python
 be.get_capabilities() -> Capabilities
 be.get_metadata() -> dict   # {"applicationVersion", "deviceName", "deviceFirmwareVersion"}
+be.get_snapshot() -> dict   # {"connection", "training", "capabilities", "metadata"}
+be.connection -> ConnectionInfo   # cached, no BLE round trip
+be.training -> TrainingState       # cached, no BLE round trip
 ```
+
+`get_snapshot()` exists specifically for a newly-connecting IPC client
+(§10, `ws_server.py`'s `getSnapshot` method): `MorpheusBackend` caches
+the latest `ConnectionInfo` and `TrainingState` internally so a client
+that subscribes *after* some events already fired can still reconstruct
+current state immediately, with no BLE round trip.
 
 `Capabilities.pairing` is computed by actually attempting the lazy
 import of `pairing_backend.py` (which itself only imports `dbus-next`
@@ -190,8 +199,9 @@ not hidden."
 ## 7. Reference data
 
 ```python
-MorpheusBackend.get_koch_sequence() -> str      # the 40-char Koch order
-MorpheusBackend.get_morse_table() -> dict       # {char: ".-" pattern, ...}
+MorpheusBackend.get_koch_sequence() -> str            # the 40-char Koch order
+MorpheusBackend.get_morse_table() -> dict             # {char: ".-" pattern, ...}
+MorpheusBackend.get_reverse_morse_table() -> dict     # {".-" pattern: char, ...}
 ```
 
 Both are exact copies of firmware source (`core_trainer.cpp`'s
@@ -235,7 +245,8 @@ thread). A frontend built by an external tool can either:
 - **reuse `MorpheusBackend` directly** (if it's also Python) and write
   an equally thin adapter for its own framework's event/threading
   model, or
-- **treat `backend.py` as the spec** and reimplement an equivalent
-  class against its own language/runtime, using this document plus
-  `MORPHEUS_BACKEND_API_REQUIREMENTS.md` as the two source-of-truth
-  references.
+- **connect over the WebSocket/JSON IPC boundary** (`ws_server.py`) -
+  this is the path the Flutter/Dart client (targeting Windows, Linux,
+  macOS, Android, iOS) uses, since it can't import a Python class
+  directly. See `WS_PROTOCOL.md` for the full wire protocol; the BLE
+  domain logic is unchanged, only the transport differs.

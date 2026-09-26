@@ -89,6 +89,9 @@ corresponding page in `pages.py`.
 - `pairing_backend.py` — the BlueZ Agent1 D-Bus implementation, lazily
   imported by `backend.py` so a missing `dbus-next` only disables
   pairing, not the rest of the backend
+- `ws_server.py` — local WebSocket/JSON IPC server exposing
+  `MorpheusBackend` to non-Python frontends (built for the Flutter/Dart
+  client - see `WS_PROTOCOL.md`); not needed to run the Qt desktop app
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
   `MorpheusBackend`

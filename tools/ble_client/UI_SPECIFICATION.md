@@ -80,7 +80,7 @@ below — this is not a visual menu spec, just the list of destinations:
 
 ### 1.5 Settings entry point
 One global action (e.g. a gear/settings affordance available from
-anywhere) that navigates to the Settings section (§7).
+anywhere) that navigates to the Settings section (§8).
 
 ---
 
@@ -204,7 +204,7 @@ target character — using real reference tables, not live device output.
 | Set training speed remotely | speed is a device-side setting today |
 | Select a specific "lesson" beyond the mode itself | no such device-side concept exists beyond Koch level |
 | Switch an audio-only "Listen" vs. typed "Type" answer input | the device always expects a keyed answer; there is no typed-letter answer mode |
-| Reset training statistics | no reset command exists; these numbers are lifetime device state (§6) |
+| Reset training statistics | no reset command exists; these numbers are lifetime device state (§5) |
 | Farnsworth spacing drill | a distinct device-side drill (fixed phrase "PARIS PARIS CQ DE TEST" at full character speed with stretched letter/word spacing); not exposed over BLE |
 
 ---

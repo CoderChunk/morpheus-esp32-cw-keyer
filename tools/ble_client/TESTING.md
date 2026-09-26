@@ -62,7 +62,7 @@ python3 morpheus_ble_client.py
 
 1. Click the device pill (top bar, next to the MORPHEUS logo) to open
    the connection dialog, then click **Pair New Device**. If it's greyed
-   out, `dbus-next` isn't installed or you're not on Linux — see §1.
+   out, `dbus-next` isn't installed or you're not on Linux — see §2.
 2. Click **Start Pairing** in the dialog that opens.
 3. **Expected:** the dialog shows *"Looking for MORPHEUS-CW..."*, then
    either:
@@ -84,7 +84,7 @@ python3 morpheus_ble_client.py
 | *"MORPHEUS-CW not found"* | BLE toggle is off on the device, or it's already connected elsewhere (only one connection at a time) |
 | Dialog hangs on *"Looking for..."* past ~15s | Same as above — discovery timeout |
 | *"Pairing failed: ..."* with a DBus error | Wrong code entered, or you clicked **No** — click **Start Pairing** again |
-| **Pair New Device** button disabled/greyed | `dbus-next` missing or non-Linux — expected, not a bug (see §1) |
+| **Pair New Device** button disabled/greyed | `dbus-next` missing or non-Linux — expected, not a bug (see §2) |
 
 ---
 

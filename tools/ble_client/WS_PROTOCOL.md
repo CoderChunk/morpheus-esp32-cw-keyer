@@ -55,7 +55,7 @@ Failure:
 ```json
 {
   "type": "response", "id": "<same id>", "ok": false,
-  "error": { "code": "<ErrorCode, §6>", "message": "<human-readable>" }
+  "error": { "code": "<ErrorCode, §8>", "message": "<human-readable>" }
 }
 ```
 

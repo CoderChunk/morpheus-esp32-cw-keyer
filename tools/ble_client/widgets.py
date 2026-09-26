@@ -252,6 +252,160 @@ class DocumentIcon(IconWidget):
             p.drawLine(QPointF(w * 0.3, h * frac), QPointF(w * 0.7, h * frac))
 
 
+class SpaceshipIcon(IconWidget):
+    """Simple rocket silhouette - used for the Space War game card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        body = QPainterPath()
+        body.moveTo(w * 0.5, h * 0.05)
+        body.lineTo(w * 0.68, h * 0.55)
+        body.lineTo(w * 0.5, h * 0.46)
+        body.lineTo(w * 0.32, h * 0.55)
+        body.closeSubpath()
+        p.drawPath(body)
+        fin = QPainterPath()
+        fin.moveTo(w * 0.32, h * 0.55)
+        fin.lineTo(w * 0.16, h * 0.8)
+        fin.lineTo(w * 0.38, h * 0.65)
+        fin.closeSubpath()
+        p.drawPath(fin)
+        fin2 = QPainterPath()
+        fin2.moveTo(w * 0.68, h * 0.55)
+        fin2.lineTo(w * 0.84, h * 0.8)
+        fin2.lineTo(w * 0.62, h * 0.65)
+        fin2.closeSubpath()
+        p.drawPath(fin2)
+        p.setBrush(QColor("#0f1117"))
+        p.drawEllipse(QPointF(w * 0.5, h * 0.28), w * 0.08, w * 0.08)
+
+
+class FruitIcon(IconWidget):
+    """Simple citrus-slice silhouette - used for the Fruit Ninja card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        rect = QRectF(w * 0.14, h * 0.2, w * 0.72, h * 0.72)
+        p.drawEllipse(rect)
+        p.setPen(QPen(QColor("#0f1117"), w * 0.05))
+        for i in range(-2, 3):
+            p.drawLine(QPointF(rect.center().x() + i * w * 0.1, rect.top() + h * 0.05),
+                       QPointF(rect.center().x() + i * w * 0.1, rect.bottom() - h * 0.05))
+        p.setPen(Qt.NoPen)
+        leaf = QPainterPath()
+        leaf.moveTo(w * 0.55, h * 0.18)
+        leaf.quadTo(w * 0.75, h * 0.02, w * 0.82, h * 0.16)
+        leaf.quadTo(w * 0.65, h * 0.22, w * 0.55, h * 0.18)
+        p.drawPath(leaf)
+
+
+class MeteorIcon(IconWidget):
+    """Cratered asteroid silhouette - used for the Meteor Catch card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        path = QPainterPath()
+        pts = [(0.2, 0.35), (0.4, 0.12), (0.68, 0.15), (0.88, 0.4),
+               (0.8, 0.7), (0.55, 0.9), (0.28, 0.82), (0.1, 0.58)]
+        path.moveTo(w * pts[0][0], h * pts[0][1])
+        for fx, fy in pts[1:]:
+            path.lineTo(w * fx, h * fy)
+        path.closeSubpath()
+        p.drawPath(path)
+        p.setBrush(QColor(0, 0, 0, 70))
+        for cx, cy, r in ((0.4, 0.45, 0.09), (0.62, 0.35, 0.06), (0.5, 0.65, 0.07)):
+            p.drawEllipse(QPointF(w * cx, h * cy), w * r, w * r)
+
+
+class BeaconIcon(IconWidget):
+    """Small radio tower with a signal ring - used for the Signal Rescue card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        pen = QPen(self._color, max(1.6, w * 0.05))
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        cx = w * 0.5
+        p.drawLine(QPointF(cx, h * 0.15), QPointF(w * 0.25, h * 0.92))
+        p.drawLine(QPointF(cx, h * 0.15), QPointF(w * 0.75, h * 0.92))
+        for frac in (0.45, 0.65, 0.82):
+            spread = w * 0.22 * frac
+            p.drawLine(QPointF(cx - spread, h * (0.15 + 0.77 * frac)),
+                       QPointF(cx + spread, h * (0.15 + 0.77 * frac)))
+        p.setBrush(self._color)
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(cx, h * 0.15), w * 0.06, w * 0.06)
+        ring_pen = QPen(self._color, max(1.2, w * 0.03))
+        p.setPen(ring_pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawArc(QRectF(cx - w * 0.2, h * 0.15 - w * 0.2, w * 0.4, w * 0.4), 30 * 16, 120 * 16)
+
+
+class InvaderIcon(IconWidget):
+    """Blocky pixel-alien silhouette - used for the Morse Invaders card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        cell = w / 7.0
+        rows = [
+            "..XX X..",
+            "..XXXX.",
+            ".XXXXXX",
+            "XX.XX.XX",
+            "XXXXXXXX",
+            "X.XXXX.X",
+            "X.X..X.X",
+        ]
+        for ry, row in enumerate(rows):
+            for cxi, ch in enumerate(row[:7]):
+                if ch == "X":
+                    p.drawRect(QRectF(cxi * cell, ry * cell * 0.95, cell * 0.95, cell * 0.95))
+
+
+class WordBubbleIcon(IconWidget):
+    """Speech-bubble with dot/dash marks - used for the Word Rush card."""
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        p.setPen(Qt.NoPen)
+        p.setBrush(self._color)
+        bubble = QRectF(w * 0.08, h * 0.1, w * 0.84, h * 0.62)
+        p.drawRoundedRect(bubble, h * 0.14, h * 0.14)
+        tail = QPainterPath()
+        tail.moveTo(w * 0.3, h * 0.7)
+        tail.lineTo(w * 0.24, h * 0.92)
+        tail.lineTo(w * 0.46, h * 0.72)
+        tail.closeSubpath()
+        p.drawPath(tail)
+        p.setBrush(QColor("#0f1117"))
+        marks = [("dot", 0.28), ("dash", 0.45), ("dot", 0.68), ("dash", 0.83)]
+        for kind, fx in marks:
+            if kind == "dot":
+                p.drawEllipse(QPointF(w * fx, h * 0.4), w * 0.035, w * 0.035)
+            else:
+                p.drawRoundedRect(QRectF(w * fx - w * 0.06, h * 0.37, w * 0.12, h * 0.06), 2, 2)
+
+
 class LetterBadge(IconWidget):
     """Fallback icon: a plain letter in a ring, for sections that don't
     have a bespoke vector icon yet - plain ASCII always renders safely,

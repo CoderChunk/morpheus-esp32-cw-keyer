@@ -4,13 +4,10 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QTextCursor
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QComboBox,
     QGraphicsDropShadowEffect,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QTextEdit,
@@ -41,18 +38,6 @@ def section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setObjectName("sectionLabel")
     return lbl
-
-
-def card(title: str) -> QGroupBox:
-    """A QGroupBox with a subtle drop shadow, used as the card container
-    for every section on the Training/Games pages."""
-    box = QGroupBox(title)
-    shadow = QGraphicsDropShadowEffect(box)
-    shadow.setBlurRadius(28)
-    shadow.setOffset(0, 6)
-    shadow.setColor(QColor(0, 0, 0, 90))
-    box.setGraphicsEffect(shadow)
-    return box
 
 
 def stat_pill(icon_widget: QWidget, label: str) -> tuple[QWidget, QLabel]:
@@ -99,53 +84,6 @@ def big_label(text: str = "--") -> QLabel:
     lbl.setObjectName("bigTarget")
     lbl.setAlignment(Qt.AlignCenter)
     return lbl
-
-
-class VirtualKeyButton(QPushButton):
-    """Press-and-hold (mouse) or hold SPACE while focused - sends a
-    virtual straight-key down/up pair over BLE, classified DIT/DAH by
-    the firmware from hold duration exactly like a real straight key.
-    """
-
-    key_down = Signal()
-    key_up = Signal()
-
-    def __init__(self):
-        super().__init__("HOLD TO KEY  (or hold SPACE while focused)")
-        self.setObjectName("virtualKey")
-        self.setFocusPolicy(Qt.StrongFocus)
-        self.setMinimumHeight(64)
-        self._pressed = False
-
-    def mousePressEvent(self, event):
-        self._press()
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        self._release()
-        super().mouseReleaseEvent(event)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
-            self._press()
-            return
-        super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event):
-        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
-            self._release()
-            return
-        super().keyReleaseEvent(event)
-
-    def _press(self):
-        if not self._pressed:
-            self._pressed = True
-            self.key_down.emit()
-
-    def _release(self):
-        if self._pressed:
-            self._pressed = False
-            self.key_up.emit()
 
 
 # ----------------------------------------------------------------------------
@@ -812,123 +750,3 @@ class TrainingPage(QWidget):
         else:
             self.exam_box.setVisible(False)
 
-
-# ----------------------------------------------------------------------------
-class GamesPage(QWidget):
-    command_requested = Signal(dict)
-
-    def __init__(self):
-        super().__init__()
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(14)
-
-        controls = card("Session")
-        crow = QHBoxLayout(controls)
-        crow.addWidget(QLabel("Game:"))
-        self.game_combo = QComboBox()
-        self.game_combo.addItems(proto.GAMES)
-        crow.addWidget(self.game_combo)
-        self.start_btn = QPushButton("Start")
-        self.start_btn.clicked.connect(self._on_start)
-        crow.addWidget(self.start_btn)
-        self.pause_btn = QPushButton("Pause / Resume")
-        self.pause_btn.setEnabled(False)
-        self.pause_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "game_pause"}))
-        crow.addWidget(self.pause_btn)
-        self.restart_btn = QPushButton("Restart")
-        self.restart_btn.setEnabled(False)
-        self.restart_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "game_restart"}))
-        crow.addWidget(self.restart_btn)
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setObjectName("dangerButton")
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "game_stop"}))
-        crow.addWidget(self.stop_btn)
-        crow.addStretch(1)
-        root.addWidget(controls)
-
-        live = card("Live Game")
-        lgrid = QVBoxLayout(live)
-        self.target_label = big_label("--")
-        lgrid.addWidget(self.target_label)
-
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setTextVisible(False)
-        lgrid.addWidget(self.progress)
-
-        info_grid = QGridLayout()
-        info_grid.setHorizontalSpacing(28)
-        info_grid.setVerticalSpacing(6)
-        self.phase_label = QLabel("Phase: --")
-        self.score_label = QLabel("Score: --")
-        self.lives_label = QLabel("Lives: --")
-        self.high_label = QLabel("High Score: --")
-        for lbl in (self.phase_label, self.score_label, self.lives_label, self.high_label):
-            lbl.setObjectName("sectionLabel")
-        info_grid.addWidget(self.phase_label, 0, 0)
-        info_grid.addWidget(self.score_label, 0, 1)
-        info_grid.addWidget(self.lives_label, 1, 0)
-        info_grid.addWidget(self.high_label, 1, 1)
-        lgrid.addLayout(info_grid)
-        root.addWidget(live)
-
-        key_box = card("Answer (virtual straight key)")
-        kbox = QVBoxLayout(key_box)
-        self.key_button = VirtualKeyButton()
-        self.key_button.key_down.connect(lambda: self.command_requested.emit({"cmd": "key_down"}))
-        self.key_button.key_up.connect(lambda: self.command_requested.emit({"cmd": "key_up"}))
-        kbox.addWidget(self.key_button)
-        self.confirm_btn = QPushButton("Confirm (restart from Game Over)")
-        self.confirm_btn.clicked.connect(lambda: self.command_requested.emit({"cmd": "game_confirm"}))
-        kbox.addWidget(self.confirm_btn)
-        root.addWidget(key_box)
-
-        root.addStretch(1)
-
-    def _on_start(self):
-        game = self.game_combo.currentText()
-        self.command_requested.emit({"cmd": "game_start", "game": game})
-
-    def on_game_state(self, state: dict):
-        active = bool(state.get("active"))
-        self.start_btn.setEnabled(not active)
-        self.pause_btn.setEnabled(active)
-        self.restart_btn.setEnabled(active)
-        self.stop_btn.setEnabled(active)
-        self.game_combo.setEnabled(not active)
-
-        if not active:
-            self.target_label.setText("--")
-            self.phase_label.setText("Phase: --")
-            self.score_label.setText("Score: --")
-            self.lives_label.setText("Lives: --")
-            self.high_label.setText("High Score: --")
-            self.progress.setValue(0)
-            return
-
-        game = state.get("game", "?")
-        phase = state.get("phase", "?")
-        paused = state.get("paused", False)
-        phase_text = f"{phase} (PAUSED)" if paused else phase
-        self.phase_label.setText(f"Phase: {phase_text}")
-        self.high_label.setText(f"High Score: {state.get('highScore', '--')}")
-
-        if game == "COPY":
-            self.target_label.setText(state.get("target", "") or "–")
-            self.score_label.setText(f"Score: {state.get('score', 0)}")
-            self.lives_label.setText(f"Lives: {state.get('lives', 0)}")
-            self.progress.setValue(int(state.get("fallProgressPct", 0)))
-        elif game == "MEMORY":
-            self.target_label.setText(str(state.get("chainLength", 0)))
-            self.score_label.setText(f"Input progress: {state.get('inputProgress', 0)}")
-            self.lives_label.setText("")
-            self.progress.setValue(0)
-        elif game == "SPEED":
-            last = state.get("lastChar", "") or "–"
-            correct = state.get("wasLastCorrect", False)
-            self.target_label.setText(f"{last} {'✓' if correct else ''}")
-            self.score_label.setText(f"Combo: {state.get('combo', 0)}")
-            self.lives_label.setText(f"Lives: {state.get('lives', 0)}")
-            self.progress.setValue(0)

@@ -46,7 +46,8 @@ from PySide6.QtWidgets import (
 )
 
 from ble_client_core import BleWorker
-from pages import GamesPage, KeyerPage, PlaceholderPage, TrainingPage
+from arcade import GamesPage
+from pages import KeyerPage, PlaceholderPage, TrainingPage
 import protocol as proto
 from widgets import (
     ACCENT,
@@ -244,6 +245,17 @@ QLabel#kochChar[state="current"] {
     color: #ffffff; background-color: #5b7cfa; border-color: #5b7cfa;
 }
 
+QWidget#gameCard { background-color: #161825; border: 2px solid #232636; border-radius: 14px; }
+QWidget#gameCard[selected="true"] { border-color: #5b7cfa; }
+QLabel#gameTag {
+    background-color: #1c1f2e; color: #9096ab; font-size: 8pt; font-weight: 700;
+    padding: 3px 9px; border-radius: 9px;
+}
+QLabel#bestScoreBadge {
+    background-color: #2a2410; color: #f0c419; font-weight: 700; font-size: 9pt;
+    padding: 6px 12px; border-radius: 12px;
+}
+
 QLabel#heroTitle { font-size: 26pt; font-weight: 800; color: #ffffff; letter-spacing: 2px; }
 QLabel#heroSubtitle { font-size: 10pt; font-weight: 700; color: #cdd3ea; letter-spacing: 1px; }
 QLabel#heroTagline { font-size: 9.5pt; color: #9aa1bd; }
@@ -341,11 +353,12 @@ class MainWindow(QMainWindow):
         # handlers exist before any event can arrive.
         self.worker.word_received.connect(self.keyer_page.on_word_received)
         self.worker.train_state_received.connect(self.training_page.on_train_state)
-        self.worker.game_state_received.connect(self.games_page.on_game_state)
         self.worker.command_error.connect(lambda msg: self.statusBar().showMessage(f"Device error: {msg}", 6000))
         self.keyer_page.command_requested.connect(self.worker.send_command)
         self.training_page.command_requested.connect(self.worker.send_command)
-        self.games_page.command_requested.connect(self.worker.send_command)
+        # Games is fully local/client-side now (see arcade.py) - no BLE
+        # wiring, since the firmware has no protocol support for these
+        # six arcade concepts.
 
     # ------------------------------------------------------------------
     def _build_ui(self):
@@ -391,7 +404,7 @@ class MainWindow(QMainWindow):
         pages = {
             "CW Keyer": self.keyer_page,
             "Training": self.training_page,
-            "Games": _centered(self.games_page, 900),
+            "Games": self.games_page,
         }
         for name in SIDEBAR_SECTIONS:
             if name in pages:

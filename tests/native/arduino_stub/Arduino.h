@@ -15,3 +15,8 @@
 // Test binaries provide the real definition so each test controls its
 // own fake clock (see tests/native/test_core_decoder.cpp).
 unsigned long millis();
+
+// Test binaries provide these too (see tests/native/test_core_trainer.cpp) -
+// deterministic by default so target-character selection is repeatable.
+long random(long min, long max);
+void randomSeed(unsigned long seed);

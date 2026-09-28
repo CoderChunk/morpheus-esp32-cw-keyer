@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds and runs the native decoder test against the REAL
-# firmware/MORPHEUS/core_decoder.cpp (host g++, not the ESP32 toolchain).
-# Run from anywhere - paths below are resolved relative to this script.
+# Builds and runs the native tests against the REAL firmware/MORPHEUS/*.cpp
+# modules they cover (host g++, not the ESP32 toolchain). Run from
+# anywhere - paths below are resolved relative to this script.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,3 +17,12 @@ g++ -std=c++17 -Wall -Wextra \
   -o "$OUT_DIR/test_core_decoder"
 
 "$OUT_DIR/test_core_decoder"
+
+g++ -std=c++17 -Wall -Wextra \
+  -I "$SCRIPT_DIR/arduino_stub" \
+  -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_core_trainer.cpp" \
+  "$REPO_ROOT/firmware/MORPHEUS/core_trainer.cpp" \
+  -o "$OUT_DIR/test_core_trainer"
+
+"$OUT_DIR/test_core_trainer"

@@ -228,7 +228,19 @@ static void trainPhaseStr(DrillPhase p, char *out, size_t n) {
 }
 
 static void buildTrainStateJson(char *out, size_t outSize) {
-  if (!core_trainer_isSessionActive()) {
+  // An unconfirmed EXAM result must still be reported even though
+  // sessionActive already went false in the same transition that set
+  // phase=DRILL_EXAM_DONE (core_trainer.cpp's EXAM branch of
+  // onTrainingCharDecoded()) - this is the only train_state push for
+  // that transition (deduped/rate-limited pushes mean no earlier frame
+  // carries the result either), so without this check
+  // examScorePercent/examPassed/examCorrect/examTotal and
+  // phase="EXAM_DONE" could never reach any BLE/WebSocket client, even
+  // though the exam getters below still hold the correct values.
+  // core_trainer_confirmPressed() clears the exam result and resets
+  // phase to DRILL_IDLE, at which point this correctly falls back to
+  // the bare {"active":false} shape.
+  if (!core_trainer_isSessionActive() && !core_trainer_isExamResultReady()) {
     snprintf(out, outSize, "{\"evt\":\"train_state\",\"active\":false}");
     return;
   }

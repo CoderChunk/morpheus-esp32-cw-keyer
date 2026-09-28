@@ -14,10 +14,56 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 The virtual-key fix below was confirmed over a real BLE connection
 (not just native host tests): `..` -> "I", `.-` -> "A", `-...` -> "B",
 all received as `KeyerWordEvent`s from the physical device via
-`backend.py`. The Keyer Mode menu move was flashed and hash-verified;
-on-device OLED confirmation of its new location is still pending.
+`backend.py`. The EXAM-results fix below was confirmed with a full
+25-round EXAM session run to completion over real BLE. The Keyer Mode
+menu move was flashed and hash-verified; on-device OLED confirmation
+of its new location is still pending.
 
 ### Fixed
+- **EXAM training results never reached any BLE/WebSocket client, and
+  `train_confirm` silently did nothing once they were ready** — both
+  bugs shared one root cause: `sessionActive` and
+  `phase=DRILL_EXAM_DONE` flip together, atomically, in the same
+  transition (`core_trainer.cpp`'s exam-completion branch). Once that
+  happens, `buildTrainStateJson()` (`ble_control.cpp`) saw
+  `!core_trainer_isSessionActive()` and emitted the bare
+  `{"evt":"train_state","active":false}` shape with no `phase`,
+  `examScorePercent`, `examPassed`, `examCorrect`, or `examTotal` —
+  and since this push is rate-limited/deduped with no earlier frame
+  carrying the result, that was the *only* push for the whole
+  transition. The exam getters still held the correct values
+  internally; they just never got serialized. Separately,
+  `core_trainer_confirmPressed()` (called from BLE's `train_confirm`)
+  opened with `if (!sessionActive) return;`, which now fired
+  immediately in `DRILL_EXAM_DONE` — the OLED never hit this because
+  its own exam-result screen dismisses via
+  `ui_backend_trainClearExamResult()` directly
+  (`ui_state.cpp`'s `handleTrainExamResult()`), bypassing
+  `confirmPressed()` entirely, so only the BLE/WebSocket/mobile path
+  was ever affected.
+  Fixed by checking `core_trainer_isExamResultReady()` (not
+  `sessionActive`) at the two points that mattered:
+  `buildTrainStateJson()` now still emits the full `active:true`-shaped
+  payload (mode/phase/target/exam fields) while an exam result is
+  unconfirmed, and `confirmPressed()` now clears the result and resets
+  to `DRILL_IDLE` *before* the `sessionActive` guard, instead of being
+  silently swallowed by it. A related gap found via the new test
+  suite's own state-isolation failing: `core_trainer_stopSession()`
+  (the `train_stop` command) didn't clear the exam result either —
+  stopping instead of confirming while an exam result was showing left
+  it stuck under a `phase="IDLE"` payload no client shape expects; now
+  fixed alongside the primary bug.
+  - Files: `firmware/MORPHEUS/core_trainer.cpp`, `ble_control.cpp`
+  - Tests: new `tests/native/test_core_trainer.cpp` (6 tests, first
+    native coverage for `core_trainer.cpp`), each fix verified to
+    actually fail against the pre-fix logic before confirming it
+    passes against the fix. Real hardware: a full 25-round EXAM session
+    driven over live BLE, confirming the terminal push carries
+    `phase="EXAM_DONE"`, `examScorePercent=100`, `examPassed=true`,
+    `examCorrectCount=25`, `examTotalCount=25`, and that
+    `confirmTraining()` afterward resets to a clean `active:false`
+    state instead of no-op'ing.
+
 - **BLE virtual straight key could split one character into several**
   — e.g. ".." (should decode "I") sometimes decoded as "E" then "E".
   Root cause: both the physical and virtual key paths already fed the

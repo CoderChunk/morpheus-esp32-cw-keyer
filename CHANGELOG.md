@@ -10,10 +10,12 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ## [Unreleased]
 
-**Status:** Compiles clean for `esp32:esp32:esp32` and passes the full
-native + Python host test suite; **not yet flashed/tested on a device
-this session for the fixes below** (the Keyer Mode move was flashed and
-hash-verified, but on-device OLED confirmation is still pending).
+**Status:** Flashed and hash-verified on real hardware this session.
+The virtual-key fix below was confirmed over a real BLE connection
+(not just native host tests): `..` -> "I", `.-` -> "A", `-...` -> "B",
+all received as `KeyerWordEvent`s from the physical device via
+`backend.py`. The Keyer Mode menu move was flashed and hash-verified;
+on-device OLED confirmation of its new location is still pending.
 
 ### Fixed
 - **BLE virtual straight key could split one character into several**

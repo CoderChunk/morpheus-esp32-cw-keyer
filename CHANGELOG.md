@@ -8,6 +8,21 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
+## [Unreleased]
+
+**Status:** Not hardware-verified (menu-tree change only, not flashed/tested on a device this session)
+
+### Changed
+- **Keyer Mode moved from `CW Keyer` to `Settings → Keyer`** — it was the
+  one keying-behavior setting living outside the group its siblings
+  (WPM, Paddle Reverse, Iambic Mode, Weighting) already occupied. New
+  path: **Menu → Settings → Keyer → Keyer Mode**. `PARAM_MODE` is
+  dispatched by enum value everywhere it's read/written, not by menu
+  position, so this is a pure menu-tree relocation with no change to
+  keying behavior, persistence, or the settings schema.
+
+---
+
 ## [v2.3.0] — LED Fixes & Diagnostics
 
 **Status:** Hardware Verified

@@ -39,13 +39,14 @@ From the **Home** screen, keying works immediately.
   dahs from hold duration.
 - **Paddle (iambic) mode**: Tip = DIT, Ring = DAH, Iambic Mode B by default
   (squeeze both paddles for alternating dit-dah memory).
-- Switch keying mode: **Menu → CW Keyer → Keyer Mode**.
+- Switch keying mode: **Menu → Settings → Keyer → Keyer Mode**.
 - Decoded text appears live on the Home screen as you key.
 
 ### Adjustable keying parameters (Menu → Settings → Keyer)
 
 | Setting | Range | Default |
 |---|---|---|
+| Keyer Mode | Straight / Paddle | Straight |
 | WPM | 5–40 | 18 |
 | Paddle Reverse | on/off | off |
 | Iambic Mode | A / B | B |

@@ -35,12 +35,12 @@ void events_onKeyDown(unsigned long now) {
   core_led_pulseTx();
 }
 
-void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now) {
+void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now, bool fromVirtualKey) {
 #if FEATURE_SERIAL
   services_logKeyUp(type, durMs, thresholdMs, now);
 #endif
   core_stats_notifyElementKeyed();
-  core_decoder_addElement(type, now);
+  core_decoder_addElement(type, now, fromVirtualKey);
 }
 
 void events_onCharacterComplete(char decodedChar, const char *pattern) {

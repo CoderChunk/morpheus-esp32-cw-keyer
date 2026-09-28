@@ -30,7 +30,13 @@
 
 void core_decoder_init();
 void core_decoder_service(unsigned long now);
-void core_decoder_addElement(ElementType type, unsigned long now);
+// fromVirtualKey: true when this element came from the BLE virtual
+// straight key (ble_control.cpp) rather than the physical key. The
+// decoder applies extra character/word-gap tolerance after a virtual
+// element to absorb BLE round-trip latency between the key_down/key_up
+// writes of the *next* element - see BLE_KEY_GAP_COMPENSATION_MS in
+// config.h. Defaults to false so the physical call site is unchanged.
+void core_decoder_addElement(ElementType type, unsigned long now, bool fromVirtualKey = false);
 
 const char *core_decoder_getWordBuffer();
 uint8_t     core_decoder_getWordLen();

@@ -10,7 +10,40 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ## [Unreleased]
 
-**Status:** Not hardware-verified (menu-tree change only, not flashed/tested on a device this session)
+**Status:** Compiles clean for `esp32:esp32:esp32` and passes the full
+native + Python host test suite; **not yet flashed/tested on a device
+this session for the fixes below** (the Keyer Mode move was flashed and
+hash-verified, but on-device OLED confirmation is still pending).
+
+### Fixed
+- **BLE virtual straight key could split one character into several**
+  — e.g. ".." (should decode "I") sometimes decoded as "E" then "E".
+  Root cause: both the physical and virtual key paths already fed the
+  *same* single decoder (`core_decoder_addElement()`, via the shared
+  `events_onKeyUp()` fan-out in `MORPHEUS.ino` — there was never a
+  second decoder for BLE input), but the decoder's character/word-gap
+  timeout is stamped from BLE-command-*arrival* time, not the
+  operator's true release moment. A perfectly normal short pause
+  between two virtual elements could exceed the gap threshold once BLE
+  round-trip latency (connection interval + write-with-response ACK,
+  for both writes of the *next* element) was added on top of it -
+  especially at moderate/high WPM, where the gap window is only a few
+  hundred milliseconds. Fixed by threading a `fromVirtualKey` flag
+  (default `false`, physical call sites unchanged) through
+  `events_onKeyUp()` into `core_decoder_addElement()`, and applying a
+  new flat `BLE_KEY_GAP_COMPENSATION_MS` (250 ms, `config.h`) allowance
+  to the gap check only when the pending character's/word's most
+  recent element came from the virtual key. DIT/DAH classification
+  itself, physical-key timing, and the BLE/WebSocket protocol contract
+  are all unchanged.
+  - Files: `firmware/MORPHEUS/config.h`, `core_decoder.h`,
+    `core_decoder.cpp`, `core_keyer.h`, `MORPHEUS.ino`, `ble_control.cpp`
+  - Tests: two new native regression tests in
+    `tests/native/test_core_decoder.cpp`
+    (`test_virtual_key_gap_compensation_prevents_premature_split`,
+    `test_physical_key_gap_is_not_widened_by_compensation`), verified
+    to actually fail against the pre-fix logic before confirming they
+    pass against the fix.
 
 ### Changed
 - **Keyer Mode moved from `CW Keyer` to `Settings → Keyer`** — it was the

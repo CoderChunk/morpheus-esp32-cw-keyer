@@ -50,6 +50,13 @@ static const unsigned long DISPLAY_INTERVAL_MS       = 100;
 static const unsigned long SERIAL_STATUS_INTERVAL_MS = 1000;
 static const float         CHAR_GAP_MULT             = 3.0f;
 static const float         WORD_GAP_MULT             = 7.0f;
+// Extra flat allowance added to the char/word gap check (core_decoder.cpp)
+// after a BLE virtual-key element, to absorb round-trip latency (connection
+// interval + write-with-response ACK) for the *next* element's key_down/
+// key_up writes - unlike CHAR_GAP_MULT/WORD_GAP_MULT this is a fixed
+// millisecond budget, not WPM-scaled, since BLE latency doesn't track dit
+// length. Physical keying is unaffected (0 added).
+static const unsigned long BLE_KEY_GAP_COMPENSATION_MS = 250;
 static const uint8_t       MAX_PATTERN_LEN           = 8;
 static const uint8_t       MAX_WORD_LEN              = 64;
 static const uint8_t       LINE_CHARS                = 18;

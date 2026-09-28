@@ -36,7 +36,10 @@ void core_keyer_diagToneStop();
 bool core_keyer_isDiagToneActive();
 
 void events_onKeyDown(unsigned long now);
-void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now);
+// fromVirtualKey: forwarded to core_decoder_addElement() - see its
+// declaration in core_decoder.h. Defaults to false so the physical
+// keyer's existing call site (core_keyer.cpp) needs no change.
+void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now, bool fromVirtualKey = false);
 
 uint8_t core_keyer_getVolume();
 void    core_keyer_setVolume(uint8_t percent);

@@ -17,7 +17,16 @@
  *     physical straight-key path uses, then fed into events_onKeyDown()/
  *     events_onKeyUp() - the same fan-out real keying uses, so stats/
  *     decoder/training/games all see a virtual key exactly like a real
- *     one. Ignored while a real physical key is already down.
+ *     one, through the same single core_decoder - there is no second
+ *     decoder for BLE input. events_onKeyUp() is called with
+ *     fromVirtualKey=true, which makes core_decoder_service() apply
+ *     BLE_KEY_GAP_COMPENSATION_MS of extra char/word-gap tolerance
+ *     (config.h) after this element: the key_down/key_up writes for a
+ *     BLE client's *next* element still have to cross the BLE link
+ *     before this decoder ever sees them, and without that allowance a
+ *     perfectly normal inter-element pause can read as a full character
+ *     gap and split e.g. "I" (". .") into "E" + "E". Ignored while a
+ *     real physical key is already down.
  *   {"cmd":"train_start","mode":"KOCH|CHARACTERS|WORDS|CALLSIGNS|ADAPTIVE|EXAM"}
  *   {"cmd":"train_stop"} / {"cmd":"train_confirm"}
  *   {"cmd":"game_start","game":"COPY|MEMORY|SPEED"}
@@ -86,7 +95,7 @@ static void handleKeyUp() {
   unsigned long ditLenMs = core_keyer_getDitLengthMs();
   unsigned long thresholdMs = (unsigned long)(ditLenMs * STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT);
   ElementType type = (durMs < thresholdMs) ? ELEM_DIT : ELEM_DAH;
-  events_onKeyUp(type, durMs, thresholdMs, now);
+  events_onKeyUp(type, durMs, thresholdMs, now, /*fromVirtualKey=*/true);
 }
 
 // ----------------------------------------------------------------------------

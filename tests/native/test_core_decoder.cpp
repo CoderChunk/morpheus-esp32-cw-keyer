@@ -204,6 +204,57 @@ static void test_setEnabled_false_clears_in_progress_state() {
   CHECK(g_chars.empty());
 }
 
+static void test_virtual_key_gap_compensation_prevents_premature_split() {
+  resetForTest("virtual_key_gap_compensation_prevents_premature_split");
+
+  // Simulates the reported bug: two dits ("I") sent as separate BLE
+  // key_down/key_up round trips, with a gap between them that exceeds
+  // the plain char-gap window (as real BLE latency easily can) but is
+  // still within charGapMs() + BLE_KEY_GAP_COMPENSATION_MS. Before the
+  // fix this finalized "E" here instead of waiting for the second dit.
+  unsigned long bleLikeGap = charGapMs() + BLE_KEY_GAP_COMPENSATION_MS - 10;
+
+  core_decoder_addElement(ELEM_DIT, g_millis, /*fromVirtualKey=*/true);
+  g_millis += bleLikeGap;
+  core_decoder_service(g_millis);
+  CHECK(g_chars.empty());
+  CHECK(core_decoder_getCharPatternLen() == 1);
+
+  core_decoder_addElement(ELEM_DIT, g_millis, /*fromVirtualKey=*/true);
+  g_millis += charGapMs() + BLE_KEY_GAP_COMPENSATION_MS + 10;
+  core_decoder_service(g_millis);
+
+  CHECK(g_chars.size() == 1);
+  if (g_chars.size() == 1) {
+    CHECK(g_chars[0].decoded == 'I');
+    CHECK(g_chars[0].pattern == "..");
+  }
+}
+
+static void test_physical_key_gap_is_not_widened_by_compensation() {
+  resetForTest("physical_key_gap_is_not_widened_by_compensation");
+
+  // Same gap as the virtual-key test above, but fromVirtualKey defaults
+  // to false (the real core_keyer.cpp call site never passes it) - must
+  // still split into two characters, proving the BLE compensation is
+  // virtual-key-only and physical keying's existing tight timing is
+  // unchanged.
+  unsigned long bleLikeGap = charGapMs() + BLE_KEY_GAP_COMPENSATION_MS - 10;
+
+  core_decoder_addElement(ELEM_DIT, g_millis);
+  g_millis += bleLikeGap;
+  core_decoder_service(g_millis);
+  CHECK(g_chars.size() == 1);
+  if (g_chars.size() == 1) CHECK(g_chars[0].decoded == 'E');
+
+  core_decoder_addElement(ELEM_DIT, g_millis);
+  g_millis += charGapMs();
+  core_decoder_service(g_millis);
+
+  CHECK(g_chars.size() == 2);
+  if (g_chars.size() == 2) CHECK(g_chars[1].decoded == 'E');
+}
+
 static void test_training_sink_routes_chars_and_bypasses_normal_events() {
   resetForTest("training_sink_routes_chars_and_bypasses_normal_events");
 
@@ -237,6 +288,8 @@ int main() {
   test_unknown_pattern_decodes_as_question_mark();
   test_reverse_lookup_matches_forward_table_and_is_case_insensitive();
   test_setEnabled_false_clears_in_progress_state();
+  test_virtual_key_gap_compensation_prevents_premature_split();
+  test_physical_key_gap_is_not_widened_by_compensation();
   test_training_sink_routes_chars_and_bypasses_normal_events();
 
   if (g_failures == 0) {

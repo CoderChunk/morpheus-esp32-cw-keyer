@@ -104,6 +104,19 @@ static char charPattern[MAX_PATTERN_LEN];
 static uint8_t charPatternLen = 0;
 static bool charPending = false;
 static unsigned long lastElementEndMs = 0;
+// True when the most recently added element came from the BLE virtual
+// key. lastElementEndMs is stamped at BLE-command-arrival time, which
+// already lags the operator's true release by however long the write
+// took to arrive - and the *next* element's key_down/key_up writes add
+// further round-trip latency before this decoder ever sees them. At
+// typical WPM the character-gap window (a few hundred ms) is easily
+// smaller than that stacked latency, so a real short pause between two
+// virtual elements can look like a full character gap and split "I"
+// (". .") into "E" + "E". Physical keying has no such transport delay
+// and must keep its existing tight timing, so this only widens the gap
+// check - never the dit/dah classification itself - and only when the
+// pending character's tail element was virtual.
+static bool lastElementWasVirtual = false;
 
 static char wordBuffer[MAX_WORD_LEN];
 static uint8_t wordLen = 0;
@@ -117,6 +130,7 @@ void core_decoder_setEnabled(bool enabled) {
     charPattern[0] = '\0';
     charPatternLen = 0;
     charPending = false;
+    lastElementWasVirtual = false;
     wordBuffer[0] = '\0';
     wordLen = 0;
   }
@@ -161,13 +175,14 @@ static void finalizeWord() {
   wordLen = 0;
 }
 
-void core_decoder_addElement(ElementType type, unsigned long now) {
+void core_decoder_addElement(ElementType type, unsigned long now, bool fromVirtualKey) {
   if (!decoderEnabled) return;
   if (charPatternLen < (uint8_t)(MAX_PATTERN_LEN - 1)) {
     charPattern[charPatternLen++] = (type == ELEM_DIT) ? '.' : '-';
     charPattern[charPatternLen] = '\0';
   }
   lastElementEndMs = now;
+  lastElementWasVirtual = fromVirtualKey;
   charPending = true;
 }
 
@@ -177,11 +192,12 @@ void core_decoder_service(unsigned long now) {
 
   unsigned long ditLengthMs = core_keyer_getDitLengthMs();
   unsigned long silence = now - lastElementEndMs;
+  unsigned long gapCompensationMs = lastElementWasVirtual ? BLE_KEY_GAP_COMPENSATION_MS : 0;
 
-  if (charPending && silence >= (unsigned long)(ditLengthMs * CHAR_GAP_MULT)) {
+  if (charPending && silence >= (unsigned long)(ditLengthMs * CHAR_GAP_MULT) + gapCompensationMs) {
     finalizeCharacter();
   }
-  if (!charPending && wordLen > 0 && silence >= (unsigned long)(ditLengthMs * WORD_GAP_MULT)) {
+  if (!charPending && wordLen > 0 && silence >= (unsigned long)(ditLengthMs * WORD_GAP_MULT) + gapCompensationMs) {
     finalizeWord();
   }
 }
@@ -190,6 +206,7 @@ void core_decoder_init() {
   charPattern[0] = '\0';
   charPatternLen = 0;
   charPending = false;
+  lastElementWasVirtual = false;
   wordBuffer[0] = '\0';
   wordLen = 0;
   lastElementEndMs = millis();

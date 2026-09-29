@@ -32,10 +32,23 @@
  *   {"cmd":"game_start","game":"COPY|MEMORY|SPEED"}
  *   {"cmd":"game_stop"} / {"cmd":"game_pause"} / {"cmd":"game_confirm"} / {"cmd":"game_restart"}
  *
+ *   Bench-diagnostic only, FEATURE_DEBUG_SERIAL_COMMANDS-gated (off by
+ *   default, not part of the stable vocabulary above - see
+ *   tools/oled_screencap/screencap_ble.py). One request per chunk, not a
+ *   push burst: BlueZ's D-Bus notification delivery coalesces same-
+ *   characteristic updates sent faster than the client processes them
+ *   (confirmed by hand - a server-push design silently lost every
+ *   notification but the last, even though every transport_sendControlEvent()
+ *   call itself returned true), so the client drives the pacing instead.
+ *   {"cmd":"dump_screen_start"} -> one {"evt":"screen_dump_start",...}
+ *   {"cmd":"dump_screen_chunk","i":<0..n-1>} -> one {"evt":"screen_dump_chunk",...}
+ *
  * Event JSON (device -> client, BLE_CONTROL_EVT_UUID, notify):
  *   {"evt":"train_state", ...} / {"evt":"game_state", ...} - pushed on
  *   change (rate-limited), see buildTrainStateJson()/buildGameStateJson().
  *   {"evt":"ack","cmd":"...","ok":bool} / {"evt":"error","message":"..."}
+ *   {"evt":"screen_dump_start","w":128,"h":64,"bytes":1024,"n":16}
+ *   {"evt":"screen_dump_chunk","i":<0..n-1>,"hex":"<up to 128 hex chars>"}
  *
  * Copyright (C) 2026 Coder Chunk
  * ============================================================================
@@ -48,6 +61,11 @@
 #include "transport.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+#include "ui_renderer.h"
+#endif
 
 // ----------------------------------------------------------------------------
 // Minimal JSON field extraction - the command vocabulary is small and
@@ -72,6 +90,22 @@ static bool jsonGetString(const char *json, const char *key, char *out, size_t o
   out[i] = '\0';
   return true;
 }
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+// Bare non-negative integer field - only "i" (chunk index) needs this,
+// so no sign/float handling.
+static bool jsonGetInt(const char *json, const char *key, int *out) {
+  char pattern[24];
+  snprintf(pattern, sizeof(pattern), "\"%s\":", key);
+  const char *p = strstr(json, pattern);
+  if (p == nullptr) return false;
+  p += strlen(pattern);
+  while (*p == ' ' || *p == '\t') p++;
+  if (*p < '0' || *p > '9') return false;
+  *out = atoi(p);
+  return true;
+}
+#endif
 
 // ----------------------------------------------------------------------------
 // Virtual keying - see file header. Guarded against overlapping with a
@@ -112,6 +146,55 @@ static void sendError(const char *message) {
   snprintf(buf, sizeof(buf), "{\"evt\":\"error\",\"message\":\"%s\"}", message);
   transport_sendControlEvent(buf);
 }
+
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+// Bench-diagnostic commands, same flag/spirit as transport_debugDumpState()
+// and ui_renderer_debugDumpScreen() - not part of the stable command
+// vocabulary documented at the top of this file.
+//
+// One request per chunk, not a push burst: an earlier server-push design
+// (one command triggering 16 back-to-back notify() calls) reliably lost
+// every notification except the last. Confirmed by hand this isn't a
+// firmware bug - transport_sendControlEvent() returned ok=true for
+// every single call - it's BlueZ's D-Bus GATT notification delivery
+// (org.bluez.GattCharacteristic1's Value property + PropertiesChanged)
+// coalescing same-characteristic updates that arrive faster than the
+// client's event loop processes them; there is no queue guarantee at
+// that layer. Making the client explicitly request each chunk and wait
+// for its own response removes any possibility of that: at most one
+// notification is ever in flight.
+static void handleDumpScreenStart() {
+  int width = 0, height = 0;
+  ui_renderer_debugGetBuffer(width, height);
+  int totalBytes = (width * height) / 8;
+  const int chunkBytes = 64;   // matches handleDumpScreenChunk() below
+  int chunkCount = (totalBytes + chunkBytes - 1) / chunkBytes;
+
+  char msg[64];
+  snprintf(msg, sizeof(msg), "{\"evt\":\"screen_dump_start\",\"w\":%d,\"h\":%d,\"bytes\":%d,\"n\":%d}",
+           width, height, totalBytes, chunkCount);
+  transport_sendControlEvent(msg);
+}
+
+static void handleDumpScreenChunk(int i) {
+  int width = 0, height = 0;
+  const uint8_t *buf = ui_renderer_debugGetBuffer(width, height);
+  int totalBytes = (width * height) / 8;
+  const int chunkBytes = 64;
+
+  int off = i * chunkBytes;
+  if (i < 0 || off >= totalBytes) { sendError("chunk index out of range"); return; }
+  int len = (chunkBytes < totalBytes - off) ? chunkBytes : (totalBytes - off);
+
+  char hex[chunkBytes * 2 + 1];
+  for (int j = 0; j < len; j++) snprintf(hex + j * 2, 3, "%02X", buf[off + j]);
+  hex[len * 2] = '\0';
+
+  char msg[196];
+  snprintf(msg, sizeof(msg), "{\"evt\":\"screen_dump_chunk\",\"i\":%d,\"hex\":\"%s\"}", i, hex);
+  transport_sendControlEvent(msg);
+}
+#endif
 
 static bool parseTrainMode(const char *s, TrainMode *out) {
   if      (!strcmp(s, "KOCH"))       *out = TRAIN_MODE_KOCH;
@@ -186,6 +269,14 @@ void ble_control_handleCommand(const char *json) {
   } else if (!strcmp(cmd, "game_restart")) {
     core_games_restart();
     sendAck("game_restart", true);
+#if FEATURE_DEBUG_SERIAL_COMMANDS
+  } else if (!strcmp(cmd, "dump_screen_start")) {
+    handleDumpScreenStart();
+  } else if (!strcmp(cmd, "dump_screen_chunk")) {
+    int i;
+    if (jsonGetInt(json, "i", &i)) handleDumpScreenChunk(i);
+    else sendError("missing i");
+#endif
   } else {
     sendError("unknown cmd");
   }

@@ -1981,3 +1981,7 @@ uint16_t      ui_state_gameSpeedHighScore()       { return ui_backend_gameSpeedH
 bool          ui_state_isGamePaused()             { return ui_backend_isGamePaused(); }
 uint8_t       ui_state_getPauseReturnScreen()     { return (uint8_t)pauseReturnScreen; }
 uint8_t       ui_state_getGamePauseFocus()        { return gamePauseFocusIdx; }
+
+#ifdef MORPHEUS_HOST_RENDER
+int ui_state_debugGetStackDepth() { return (int)stackTop; }
+#endif

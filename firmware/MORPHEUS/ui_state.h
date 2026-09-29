@@ -176,4 +176,12 @@ uint8_t ui_state_getClockEditFieldIndex();
 const char *ui_state_getDateFormatLabel();
 const char *ui_state_getTimeFormatLabel();
 
+#ifdef MORPHEUS_HOST_RENDER
+// Host-render-only accessor (see ui_renderer.h's MORPHEUS_HOST_RENDER
+// accessor for the same pattern/rationale). UI_SCREEN_LIST is reused for
+// every nesting level, so the enum alone can't tell a walker whether
+// SELECT pushed a new submenu - the nav stack depth can.
+int ui_state_debugGetStackDepth();
+#endif
+
 #endif

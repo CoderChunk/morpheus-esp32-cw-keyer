@@ -14,6 +14,7 @@
  */
 
 #include "ui_renderer.h"
+#include "config.h"
 #include "ui_config.h"
 #include "ui_layout.h"
 #include "ui_state.h"
@@ -150,3 +151,11 @@ void ui_renderer_service(unsigned long now) {
 
   u8g2.sendBuffer();
 }
+
+#if defined(MORPHEUS_HOST_RENDER) || FEATURE_DEBUG_SERIAL_COMMANDS
+const uint8_t *ui_renderer_debugGetBuffer(int &width, int &height) {
+  width  = u8g2.getBufferTileWidth() * 8;
+  height = u8g2.getBufferTileHeight() * 8;
+  return u8g2.getBufferPtr();
+}
+#endif

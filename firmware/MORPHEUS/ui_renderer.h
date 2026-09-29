@@ -35,4 +35,15 @@ bool ui_renderer_isSleeping();
 void ui_renderer_setInverted(bool inverted);
 bool ui_renderer_getInverted();
 
+#if defined(MORPHEUS_HOST_RENDER) || FEATURE_DEBUG_SERIAL_COMMANDS
+// Accessor into the file-local u8g2 buffer - the same bytes already
+// pushed to the real SH1106, not a simulation. Two callers: the host
+// renderer (tools/oled_render/, MORPHEUS_HOST_RENDER, never defined in a
+// real build) and ble_control.cpp's "dump_screen_start"/"dump_screen_chunk"
+// commands (see tools/oled_screencap/screencap_ble.py), gated by
+// FEATURE_DEBUG_SERIAL_COMMANDS (off by default - compiles out of a
+// normal build either way).
+const uint8_t *ui_renderer_debugGetBuffer(int &width, int &height);
+#endif
+
 #endif // UI_RENDERER_H

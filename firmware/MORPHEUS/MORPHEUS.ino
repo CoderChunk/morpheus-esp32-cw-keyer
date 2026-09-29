@@ -26,6 +26,7 @@
 #include "display.h"
 #include "transport.h"
 #include "services.h"
+#include "ble_control.h"
 
 void events_onKeyDown(unsigned long now) {
 #if FEATURE_SERIAL
@@ -34,12 +35,12 @@ void events_onKeyDown(unsigned long now) {
   core_led_pulseTx();
 }
 
-void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now) {
+void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long now, bool fromVirtualKey) {
 #if FEATURE_SERIAL
   services_logKeyUp(type, durMs, thresholdMs, now);
 #endif
   core_stats_notifyElementKeyed();
-  core_decoder_addElement(type, now);
+  core_decoder_addElement(type, now, fromVirtualKey);
 }
 
 void events_onCharacterComplete(char decodedChar, const char *pattern) {
@@ -93,6 +94,14 @@ static void handleDebugSerialCommand() {
   } else if (line == "LED BLINK") {
     core_led_startBlinkTest();
     Serial.println(F("EVT DEBUG_LED_BLINK"));
+  } else if (line == "BLE ON") {
+    services_setBleEnabled(true);
+    Serial.println(F("EVT DEBUG_BLE_ON"));
+  } else if (line == "BLE OFF") {
+    services_setBleEnabled(false);
+    Serial.println(F("EVT DEBUG_BLE_OFF"));
+  } else if (line == "BLE STATUS") {
+    transport_debugDumpState();
   }
 }
 #endif
@@ -114,6 +123,20 @@ void setup() {
   core_clock_init();
   core_led_init();
 
+  // transport_init() MUST run before services_loadSettings(): loading a
+  // persisted bleEnabled=true triggers an immediate advertising start
+  // (transport_setBleEnabled -> beginAdvertisingIfEnabled), which needs
+  // NimBLEDevice::init()/createServer()/etc. (done inside transport_init)
+  // to already exist. Getting this backwards doesn't crash or even log
+  // an error by default - it just silently fails to advertise, so BLE
+  // never comes back up on a reboot even though every setting says it
+  // should be on. Confirmed on real hardware: NimBLEAdvertising::start()
+  // returned false at this exact call site before this fix.
+#if FEATURE_BLE
+  transport_init();
+#endif
+  ble_control_init();
+
   services_loadSettings();
   core_stats_recordSessionStart();
 
@@ -122,10 +145,6 @@ void setup() {
 #endif
 
   services_init();
-
-#if FEATURE_BLE
-  transport_init();
-#endif
 
 #if FEATURE_SERIAL
   Serial.println(F("Keyer ready. PJ311 jack: Tip=GPIO25, Ring=GPIO26."));
@@ -155,6 +174,7 @@ void loop() {
 #if FEATURE_BLE
   transport_service(now);
 #endif
+  ble_control_service(now);
 
 #if FEATURE_OLED
   display_service(now);

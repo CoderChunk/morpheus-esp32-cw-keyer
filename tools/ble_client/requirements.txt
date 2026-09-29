@@ -1,0 +1,9 @@
+PySide6>=6.6
+bleak>=0.21
+# In-app pairing (ble_pairing.py) talks to BlueZ over D-Bus directly -
+# Linux-only, used by the "Pair New Device" button.
+dbus-next>=0.2.3; sys_platform == "linux"
+# ws_server.py: local WebSocket/JSON IPC boundary for non-Python
+# frontends (e.g. the Flutter/Dart client) - see WS_PROTOCOL.md.
+# Not required to run the Qt desktop app itself.
+websockets>=12

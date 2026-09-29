@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.1.0";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.4.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -50,13 +50,20 @@ static const unsigned long DISPLAY_INTERVAL_MS       = 100;
 static const unsigned long SERIAL_STATUS_INTERVAL_MS = 1000;
 static const float         CHAR_GAP_MULT             = 3.0f;
 static const float         WORD_GAP_MULT             = 7.0f;
+// Extra flat allowance added to the char/word gap check (core_decoder.cpp)
+// after a BLE virtual-key element, to absorb round-trip latency (connection
+// interval + write-with-response ACK) for the *next* element's key_down/
+// key_up writes - unlike CHAR_GAP_MULT/WORD_GAP_MULT this is a fixed
+// millisecond budget, not WPM-scaled, since BLE latency doesn't track dit
+// length. Physical keying is unaffected (0 added).
+static const unsigned long BLE_KEY_GAP_COMPENSATION_MS = 250;
 static const uint8_t       MAX_PATTERN_LEN           = 8;
 static const uint8_t       MAX_WORD_LEN              = 64;
 static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 8;   // bumped: +bleEnabled, +bleLedEnabled
+static const uint16_t      SETTINGS_VERSION          = 9;   // bumped: +livePatternEnabled
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 // ----------------------------------------------------------------------------
@@ -74,11 +81,28 @@ static const float STRAIGHT_KEY_CLASSIFY_THRESHOLD_MULT = 2.0f;
 static const char     BLE_DEVICE_NAME[]        = "MORPHEUS-CW";
 static const char     BLE_SERVICE_UUID[]       = "7a48a2b0-0001-4ad4-9f1a-1c2d3e4f5a6b";
 static const char     BLE_WORD_CHAR_UUID[]     = "7a48a2b0-0002-4ad4-9f1a-1c2d3e4f5a6b";
-static const uint16_t BLE_REQUESTED_MTU        = 128;
+// Remote-control channel (Training/Games/virtual keying) - separate from
+// the word-telemetry characteristic above so existing word-only clients
+// are unaffected. CMD is client->device (write), EVT is device->client
+// (notify): live training/game state pushes plus command acks/errors.
+static const char     BLE_CONTROL_CMD_UUID[]   = "7a48a2b0-0003-4ad4-9f1a-1c2d3e4f5a6b";
+static const char     BLE_CONTROL_EVT_UUID[]   = "7a48a2b0-0004-4ad4-9f1a-1c2d3e4f5a6b";
+// Bumped from 128: control-event JSON (training/game state) carries more
+// fields than the word payload and needs more headroom. Still well
+// within what NimBLE/BlueZ negotiate down to on either side.
+static const uint16_t BLE_REQUESTED_MTU        = 247;
+static const uint16_t BLE_CONTROL_CMD_CAP      = 96;    // max incoming command JSON length
+static const uint16_t BLE_CONTROL_EVT_CAP      = 220;   // max outgoing state JSON length
 static const uint8_t  BLE_WORD_FIELD_CAP       = 24;
 static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;
 static const uint16_t BLE_CONN_HANDLE_INVALID  = 0xFFFF;
+
+// Multi-device pairing: MORPHEUS remembers up to this many bonded
+// devices (e.g. a phone AND a laptop) and any of them may reconnect,
+// but still only ONE active connection at a time - the trusted-device
+// list controls who is ALLOWED to connect, not how many simultaneously.
+static const uint8_t  BLE_TRUSTED_DEVICE_CAP   = 3;
 
 // ----------------------------------------------------------------------------
 // Training module tunables
@@ -143,6 +167,7 @@ static const uint8_t  DISPLAY_TIMEOUT_OPTION_COUNT 	= 9;
 static const uint8_t  DEFAULT_DISPLAY_TIMEOUT_INDEX = 8;   // "Never"
 
 static const bool DEFAULT_DISPLAY_INVERT = false;
+static const bool DEFAULT_LIVE_PATTERN_ENABLED = true;
 
 // ----------------------------------------------------------------------------
 // Date/Time display format - fixed picklists, same pattern as Display
@@ -161,7 +186,6 @@ static const uint8_t DEFAULT_TIME_FORMAT = 0;
 // deliberately kept single/minimal to preserve future ESP32-C3 port
 // viability (GPIO budget concern already on record).
 // ----------------------------------------------------------------------------
-static const unsigned long LED_BLINK_SLOW_MS = 600;   // BLE advertising
 static const unsigned long LED_BLINK_FAST_MS = 150;   // BLE pairing in progress
 static const unsigned long LED_TX_PULSE_MS   = 40;    // minimum visible pulse on a real keydown
 

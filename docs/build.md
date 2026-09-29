@@ -22,7 +22,7 @@ Firmware feature switches and hardware constants live in
 #define FEATURE_OLED      1
 #define FEATURE_BLE       1
 #define FEATURE_SIDETONE  1
-#define FEATURE_SERIAL    1
+#define FEATURE_SERIAL    0
 ```
 
 Disable features by setting the corresponding value to `0` before compiling.
@@ -31,21 +31,31 @@ and leaves transport functions as no-op stubs.
 
 ## Host-side tests
 
-The repository includes a small Python `unittest` suite for decoder timing
-behavior that can run without ESP32 hardware:
+Two independent test suites run without ESP32 hardware:
 
 ```sh
 python -m unittest discover -s tests
+tests/native/run.sh
 ```
 
-The host tests model element accumulation, character-gap finalization,
-word-gap finalization, TX-active gating, pattern-length bounds, and BLE JSON
-payload budget constants. They do not replace an Arduino/ESP32 compile or
-hardware validation for GPIO, LEDC, OLED, NimBLE, NVS, or pairing behavior.
+The Python `unittest` suite models decoder timing behavior (element
+accumulation, character/word-gap finalization, TX-active gating,
+pattern-length bounds) and BLE JSON payload budget constants - a parallel
+model, not the real firmware source.
+
+`tests/native/run.sh` compiles and links the actual firmware `.cpp` files
+(host g++, an `Arduino.h` stub in `tests/native/arduino_stub/`, no ESP32
+toolchain) and exercises them directly - currently the decoder, trainer,
+and keyer. This is the stronger signal of the two: it catches regressions
+in the real source, not a reimplementation. Requires only a host C++17
+compiler (`g++`).
+
+Neither suite replaces an Arduino/ESP32 compile or hardware validation for
+GPIO, LEDC, OLED, NimBLE, NVS, or pairing behavior.
 
 ## Suggested validation before a pull request
 
-Run the host tests and perform at least one firmware compile with the feature
-set you changed. For BLE, display, sidetone, settings persistence, or wiring
-changes, also validate on hardware because those paths depend on ESP32
+Run both host test suites and perform at least one firmware compile with the
+feature set you changed. For BLE, display, sidetone, settings persistence, or
+wiring changes, also validate on hardware because those paths depend on ESP32
 peripherals and attached devices.

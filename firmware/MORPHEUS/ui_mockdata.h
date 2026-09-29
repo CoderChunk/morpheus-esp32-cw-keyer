@@ -4,12 +4,11 @@
  * ============================================================================
  * File: ui_mockdata.h | Author: Coder Chunk | License: GPLv3
  *
- * INTEGRATION NOTE: transcriptA/B, liveWord, and livePattern are now
- * writable char buffers instead of string literal pointers - they hold
- * real, live data synced from MORPHEUS by display.cpp/ui_backend, not
- * mock content. wpm/mode/bleStatus/bleConnected/isReceiving are likewise
- * kept fresh by display.cpp's polling loop. callsign/date/time remain
- * genuine placeholders - no NVS/RTC backend exists for them yet.
+ * Despite the file name, every field here holds real, live data synced
+ * from MORPHEUS by display.cpp's polling loop (pollLiveData()) - none of
+ * it is mock content. callsign/date/time come from services.cpp (NVS)
+ * and core_clock.cpp's no-RTC software clock, not a real-time clock chip,
+ * but that's a genuine backend, not a placeholder.
  *
  * Copyright (C) 2026 Coder Chunk
  * ============================================================================
@@ -31,7 +30,8 @@ struct UiStatusData {
   const char *bleStatus;
   bool        bleConnected;
   bool        isReceiving;
-  bool        decoderEnabled;   // new - real state, polled by display.cpp
+  bool        decoderEnabled;     // CW Keyer > Decoder toggle
+  bool        livePatternEnabled; // Settings > Display > Live Pattern toggle
 
   char transcriptA[UI_LINE_CHARS + 1];
   char transcriptB[UI_LINE_CHARS + 1];

@@ -47,7 +47,6 @@ static const UiMenuNode MENU_MEM[] = {
 };
 
 static const UiMenuNode MENU_KEYER[] = {
-  N_TGL("KEYER MODE",   PARAM_MODE),
   N_SUB("MEMORY MSGS",  MENU_MEM),
   N_TGL("DECODER",      PARAM_DECODER_EN),
   N_MON("LIVE MONITOR"),
@@ -70,6 +69,7 @@ static const UiMenuNode MENU_STATS[] = {
   N_STATS("PROGRESS",   STATS_PROGRESS),
   N_STATS("ACCURACY",   STATS_ACCURACY),
   N_STATS("SPEED HIST", STATS_SPEED),
+  N_ACT  ("RESET LIFETIME", ACTION_STATS_RESET),
 };
 
 static const UiMenuNode MENU_BLUETOOTH[] = {
@@ -127,6 +127,7 @@ static const UiMenuNode MENU_PROFILES[] = {
 };
 
 static const UiMenuNode MENU_SET_KEYER[] = {
+  N_TGL("KEYER MODE",   PARAM_MODE),
   N_VAL("WPM",          PARAM_WPM),
   N_TGL("PADDLE REV",   PARAM_PADDLE_REV),
   N_TGL("IAMBIC MODE",  PARAM_IAMBIC_MODE),
@@ -141,6 +142,7 @@ static const UiMenuNode MENU_SET_DISPLAY[] = {
   N_VAL("CONTRAST", PARAM_CONTRAST),
   N_TGL("INVERT",   PARAM_DISPLAY_INVERT),
   { "TIMEOUT", NODE_TIMEOUT, nullptr, 0, 0 },
+  N_TGL("LIVE PATTERN", PARAM_LIVE_PATTERN_EN),
 };
 static const UiMenuNode MENU_CALLSIGN[] = {
   { "EDIT", NODE_CALLSIGN_EDIT, nullptr, 0, 0 },

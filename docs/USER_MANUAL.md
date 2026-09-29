@@ -39,13 +39,14 @@ From the **Home** screen, keying works immediately.
   dahs from hold duration.
 - **Paddle (iambic) mode**: Tip = DIT, Ring = DAH, Iambic Mode B by default
   (squeeze both paddles for alternating dit-dah memory).
-- Switch keying mode: **Menu → CW Keyer → Keyer Mode**.
+- Switch keying mode: **Menu → Settings → Keyer → Keyer Mode**.
 - Decoded text appears live on the Home screen as you key.
 
 ### Adjustable keying parameters (Menu → Settings → Keyer)
 
 | Setting | Range | Default |
 |---|---|---|
+| Keyer Mode | Straight / Paddle | Straight |
 | WPM | 5–40 | 18 |
 | Paddle Reverse | on/off | off |
 | Iambic Mode | A / B | B |
@@ -91,6 +92,12 @@ Full-screen live decode view, larger text than the Home screen.
 Decodes A–Z, 0–9, and basic punctuation (`. , ? / = + -`) from your keying,
 finalizing a character after a 3-dit silence and a word after a 7-dit
 silence. Unrecognized patterns show as `?`.
+
+Each character appears on the Home screen the instant it's decoded — not
+only once the whole word finishes; only a word-gap starts a new word.
+While actively keying, the top-right of the Home screen also shows the
+live dit/dah pattern (`.`/`-`) of whichever character is still mid-key.
+Hide this readout: **Menu → Settings → Display → Live Pattern**.
 
 Toggle on/off: **Menu → CW Keyer → Decoder**.
 
@@ -189,6 +196,8 @@ reset your live settings by mistake.
 - Invert on/off
 - Screen timeout: 15s / 30s / 60s / 120s / 5min / 10min / 15min / 30min /
   Never (default: Never)
+- Live Pattern on/off (default: on) — shows/hides the live dit/dah readout
+  described in the Real-Time Decoder section below
 
 **Menu → Settings → System**
 
@@ -215,24 +224,39 @@ reset your live settings by mistake.
 **Menu → Connectivity → Bluetooth**
 
 Bluetooth is **off by default**. When enabled, MORPHEUS broadcasts each
-completed word (text, current WPM, keying mode, timestamp) to one paired
-device.
+completed word (text, current WPM, keying mode, timestamp) to whichever
+paired device is currently connected — only **one active connection at
+a time**, even though multiple devices can be remembered (see below).
 
-### Pairing
+### Pairing multiple devices
+
+MORPHEUS remembers up to **3 paired devices** (e.g. your phone and a
+laptop) and any of them may reconnect later — but still only one at a
+time can actually be connected and receiving data.
 
 1. Turn Bluetooth on (**Bluetooth → BLE toggle**).
 2. Select **Pair Now** — the device becomes discoverable for 60 seconds
    (auto-closes if nothing connects).
 3. On your phone/computer, connect and confirm the 6-digit passkey shown
    on the MORPHEUS display.
-4. Once paired, that device is remembered ("bonded") as the single trusted
-   device. Any other device attempting to connect is refused.
+4. Once paired, that device is added to the trusted list and can
+   reconnect on its own from then on (no passkey needed again).
+5. Repeat with up to 2 more devices whenever you like — pairing a new
+   one doesn't remove an existing one.
+
+Once all 3 slots are used, a brand-new (never-paired) device cannot pair
+until you free a slot — see Bond Reset below. Any of your 3 already-
+trusted devices can still reconnect at any time, slots full or not.
+
+**Menu → Diagnostics → BLE Status** (or Connectivity → Bluetooth →
+Status) shows how many devices are currently paired, e.g. `Paired: 2/3`.
 
 ### Bond Reset
 
-**Bluetooth → Bond Reset** clears the remembered device, allowing a new
-device to pair. There is currently no physical button for this — it must
-be done through the menu.
+**Bluetooth → Bond Reset** forgets **all** paired devices at once (there
+is no per-device "forget this one" option yet), letting new devices pair
+from a clean slate. There is currently no physical button for this — it
+must be done through the menu.
 
 ### Status LED
 

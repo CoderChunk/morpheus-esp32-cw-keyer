@@ -32,7 +32,7 @@
 
 UiStatusData uiStatus = {
   18, 750, false, UI_MODE_PADDLE,
-  "SECR", true, false, true,
+  "SECR", true, false, true, true,
   "CQ CQ DE MORPHEUS", "TNX FER QSO", "73", ".--",
   "", false,
   "2026-07-12", "21:35"
@@ -166,6 +166,7 @@ static bool getToggleValue(uint8_t paramId) {
     case PARAM_TIME_FORMAT:    return ui_backend_getTimeFormat() == 1;
     case PARAM_BLE_ENABLED:    return ui_backend_getBleEnabled();
     case PARAM_BLE_LED_ENABLED:return ui_backend_getBleLedEnabled();
+    case PARAM_LIVE_PATTERN_EN:return ui_backend_getLivePatternEnabled();
     default: return false;
   }
 }
@@ -181,6 +182,7 @@ static void setToggleValue(uint8_t paramId, bool v) {
     case PARAM_TIME_FORMAT:    ui_backend_setTimeFormat(v ? 1 : 0); break;
     case PARAM_BLE_ENABLED:    ui_backend_setBleEnabled(v);         break;
     case PARAM_BLE_LED_ENABLED:ui_backend_setBleLedEnabled(v);      break;
+    case PARAM_LIVE_PATTERN_EN:ui_backend_setLivePatternEnabled(v); break;
     default: break;
   }
 }
@@ -196,6 +198,7 @@ static const char *getToggleLabel(uint8_t paramId) {
     case PARAM_TIME_FORMAT:    return "TIME FORMAT";
     case PARAM_BLE_ENABLED:    return "BLE";
     case PARAM_BLE_LED_ENABLED:return "STATUS LED";
+    case PARAM_LIVE_PATTERN_EN:return "LIVE PATTERN";
     default: return "";
   }
 }
@@ -266,7 +269,7 @@ static void buildInfoContent(uint8_t infoId) {
     case INFO_BLE_STATUS:
       snprintf(infoLine1, sizeof(infoLine1), "Link: %s", ui_backend_bleIsConnected() ? "Connected" : "Advertising");
       snprintf(infoLine2, sizeof(infoLine2), "Secure: %s", ui_backend_bleIsSecure() ? "Yes" : "No");
-      snprintf(infoLine3, sizeof(infoLine3), "Bonded: %s", ui_backend_bleHasTrustedDevice() ? "Yes" : "No");
+      snprintf(infoLine3, sizeof(infoLine3), "Paired: %u/%u", (unsigned)ui_backend_bleTrustedDeviceCount(), (unsigned)ui_backend_bleTrustedDeviceCap());
       break;
     case INFO_DEVICE_INFO:
       snprintf(infoLine1, sizeof(infoLine1), "%s", ui_backend_getDeviceName());
@@ -446,10 +449,11 @@ static void buildDialogContent(uint8_t actionId, const char *rowLabel) {
   strncpy(dialogTitle, rowLabel, sizeof(dialogTitle) - 1);
   dialogTitle[sizeof(dialogTitle) - 1] = '\0';
   switch (actionId) {
-    case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Clear BLE bond?"); break;
+    case ACTION_BOND_RESET:    snprintf(dialogMessage, sizeof(dialogMessage), "Forget ALL devices?"); break;
     case ACTION_FACTORY_RESET: snprintf(dialogMessage, sizeof(dialogMessage), "Reset all settings?"); break;
     case ACTION_RESTART:       snprintf(dialogMessage, sizeof(dialogMessage), "Restart device now?"); break;
     case ACTION_PROFILE_SAVE:  snprintf(dialogMessage, sizeof(dialogMessage), "Overwrite this profile?"); break;
+    case ACTION_STATS_RESET:   snprintf(dialogMessage, sizeof(dialogMessage), "Erase lifetime stats?"); break;
     default:                   snprintf(dialogMessage, sizeof(dialogMessage), "Confirm action?"); break;
   }
 }
@@ -484,6 +488,10 @@ static void executeDialogAction() {
     case ACTION_PROFILE_SAVE:
       ui_backend_profileSave(pendingProfileId);
       showActionToast("PROFILE SAVED");
+      break;
+    case ACTION_STATS_RESET:
+      ui_backend_statsResetLifetime();
+      showActionToast("STATS RESET");
       break;
     default: break;
   }
@@ -701,7 +709,7 @@ static void refreshDiagLiveContent(unsigned long now) {
       setInfoTitleFrom("BLE STATUS");
       snprintf(diagLiveLines[0], 24, "Link: %s", ui_backend_bleIsConnected() ? "Connected" : "Advertising");
       snprintf(diagLiveLines[1], 24, "Secure: %s", ui_backend_bleIsSecure() ? "Yes" : "No");
-      snprintf(diagLiveLines[2], 24, "Bonded: %s", ui_backend_bleHasTrustedDevice() ? "Yes" : "No");
+      snprintf(diagLiveLines[2], 24, "Paired: %u/%u", (unsigned)ui_backend_bleTrustedDeviceCount(), (unsigned)ui_backend_bleTrustedDeviceCap());
       uint16_t mtu = ui_backend_getBleMtu();
       if (mtu > 0) snprintf(diagLiveLines[3], 24, "MTU: %u bytes", (unsigned)mtu);
       else         snprintf(diagLiveLines[3], 24, "MTU: --");
@@ -793,10 +801,6 @@ static void pushLiveMonitor() {
   refreshLiveMonitorContent();
   currentScreen = UI_SCREEN_LIVE_MONITOR;
   markDirty();
-}
-
-static void handleLiveMonitor(const UiEvent &ev) {
-  if (ev.type == UI_EV_BACK) popList_forward_declared: ;   // placeholder, replaced below
 }
 
 static uint8_t currentTrainDrillId = TRAIN_DRILL_NONE;
@@ -1277,8 +1281,8 @@ static void handleDiagAudio(const UiEvent &ev) {
   }
 }
 
-// --- Live Monitor: correct handler (replaces the placeholder stub above) -----
-static void handleLiveMonitorReal(const UiEvent &ev) {
+// --- Live Monitor ---------------------------------------------------------------
+static void handleLiveMonitor(const UiEvent &ev) {
   if (ev.type == UI_EV_BACK) { currentScreen = UI_SCREEN_LIST; markDirty(); }
 }
 
@@ -1748,7 +1752,7 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_DIAG_AUDIO:        handleDiagAudio(ev);        break;
     case UI_SCREEN_DIAG_GPIO:         handleDiagGpio(ev);         break;
     case UI_SCREEN_DIAG_LIVE:         handleDiagLive(ev);         break;
-    case UI_SCREEN_LIVE_MONITOR:      handleLiveMonitorReal(ev);  break;
+    case UI_SCREEN_LIVE_MONITOR:      handleLiveMonitor(ev);      break;
     case UI_SCREEN_TUNE:              handleTune(ev);             break;
     case UI_SCREEN_TRAIN_DRILL:       handleTrainDrill(ev);       break;
     case UI_SCREEN_TRAIN_FARNSWORTH:  handleTrainFarnsworth(ev);  break;
@@ -1976,3 +1980,7 @@ uint16_t      ui_state_gameSpeedHighScore()       { return ui_backend_gameSpeedH
 bool          ui_state_isGamePaused()             { return ui_backend_isGamePaused(); }
 uint8_t       ui_state_getPauseReturnScreen()     { return (uint8_t)pauseReturnScreen; }
 uint8_t       ui_state_getGamePauseFocus()        { return gamePauseFocusIdx; }
+
+#ifdef MORPHEUS_HOST_RENDER
+int ui_state_debugGetStackDepth() { return (int)stackTop; }
+#endif

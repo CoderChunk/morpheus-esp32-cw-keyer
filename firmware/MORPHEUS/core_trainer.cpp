@@ -226,6 +226,14 @@ void core_trainer_startSession(TrainMode mode) {
 void core_trainer_stopSession() {
   sessionActive = false;
   phase = DRILL_IDLE;
+  examResultReady = false;   // a stop while an exam result is showing (phase
+                              // == DRILL_EXAM_DONE, e.g. train_stop sent
+                              // instead of train_confirm) must dismiss it
+                              // too - otherwise buildTrainStateJson()'s
+                              // isExamResultReady() check would keep
+                              // reporting the old exam fields under a
+                              // phase="IDLE" payload, a shape no client
+                              // expects.
   core_morseplayer_stop(player);
   core_decoder_setTrainingSink(nullptr);
 }
@@ -239,6 +247,21 @@ uint32_t core_trainer_getCorrectCount() { return correctCount; }
 uint32_t core_trainer_getTotalCount() { return totalCount; }
 
 void core_trainer_confirmPressed() {
+  // An unconfirmed EXAM result takes priority over the sessionActive
+  // guard below: sessionActive already went false in the same
+  // transition that set phase=DRILL_EXAM_DONE (see the EXAM branch of
+  // onTrainingCharDecoded() above), so without this check, calling
+  // this from BLE's train_confirm would silently no-op forever and the
+  // exam result could never be dismissed remotely. The OLED UI never
+  // hit this: its exam-result screen dismisses via
+  // ui_backend_trainClearExamResult() directly
+  // (ui_state.cpp's handleTrainExamResult()), bypassing this function
+  // entirely. This makes the BLE path reach the same end state.
+  if (examResultReady) {
+    core_trainer_clearExamResult();
+    phase = DRILL_IDLE;
+    return;
+  }
   if (!sessionActive) return;
   switch (phase) {
     case DRILL_PLAYING:

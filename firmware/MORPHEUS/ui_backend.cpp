@@ -81,30 +81,54 @@ void ui_backend_appendWord(const char *word) {
   transcriptFull[TRANSCRIPT_LEN - 1] = '\0';
 }
 
-void ui_backend_getTranscriptLines(char *lineA, size_t aSize, char *lineB, size_t bSize) {
-  size_t fullLen = strlen(transcriptFull);
+// Splits an arbitrary string's tail across two UI_LINE_CHARS-wide lines
+// (lineB = last line, lineA = the one before it) - shared by the
+// committed-only and live views below, which differ only in which
+// string they hand it.
+static void splitTailIntoTwoLines(const char *full, char *lineA, size_t aSize, char *lineB, size_t bSize) {
+  size_t fullLen = strlen(full);
 
   if (fullLen <= UI_LINE_CHARS) {
-    strncpy(lineB, transcriptFull, bSize - 1);
+    strncpy(lineB, full, bSize - 1);
     lineB[bSize - 1] = '\0';
     lineA[0] = '\0';
     return;
   }
 
   size_t bStart = fullLen - UI_LINE_CHARS;
-  strncpy(lineB, transcriptFull + bStart, bSize - 1);
+  strncpy(lineB, full + bStart, bSize - 1);
   lineB[bSize - 1] = '\0';
 
   size_t aLen = (bStart > UI_LINE_CHARS) ? UI_LINE_CHARS : bStart;
   size_t aStart = bStart - aLen;
   size_t copyLen = (aLen < aSize - 1) ? aLen : (aSize - 1);
-  strncpy(lineA, transcriptFull + aStart, copyLen);
+  strncpy(lineA, full + aStart, copyLen);
   lineA[copyLen] = '\0';
+}
+
+void ui_backend_getTranscriptLines(char *lineA, size_t aSize, char *lineB, size_t bSize) {
+  splitTailIntoTwoLines(transcriptFull, lineA, aSize, lineB, bSize);
+}
+
+void ui_backend_getLiveTranscriptLines(char *lineA, size_t aSize, char *lineB, size_t bSize) {
+  const char *liveWord = core_decoder_getWordBuffer();
+
+  char combined[TRANSCRIPT_LEN + MAX_WORD_LEN + 2];
+  if (transcriptFull[0] == '\0') {
+    snprintf(combined, sizeof(combined), "%s", liveWord);
+  } else if (liveWord[0] == '\0') {
+    snprintf(combined, sizeof(combined), "%s", transcriptFull);
+  } else {
+    snprintf(combined, sizeof(combined), "%s %s", transcriptFull, liveWord);
+  }
+  splitTailIntoTwoLines(combined, lineA, aSize, lineB, bSize);
 }
 
 bool ui_backend_bleIsConnected()     { return transport_isConnected(); }
 bool ui_backend_bleIsSecure()        { return transport_isSecure(); }
 bool ui_backend_bleHasTrustedDevice(){ return transport_hasTrustedDevice(); }
+uint8_t ui_backend_bleTrustedDeviceCount(){ return transport_getTrustedDeviceCount(); }
+uint8_t ui_backend_bleTrustedDeviceCap()  { return transport_getTrustedDeviceCap(); }
 const char *ui_backend_getDeviceName() { return BLE_DEVICE_NAME; }
 uint16_t ui_backend_getBleMtu() { return transport_getCurrentMtu(); }
 
@@ -301,6 +325,7 @@ int      ui_backend_statsPeakAdaptiveWpm()       { return core_stats_lifetime_ge
 
 uint8_t  ui_backend_statsHistoryCount()            { return core_stats_history_getCount(); }
 uint16_t ui_backend_statsHistoryEntry(uint8_t idx) { return core_stats_history_getEntry(idx); }
+void     ui_backend_statsResetLifetime()           { core_stats_resetLifetime(); }
 
 // Games
 bool ui_backend_isGameSessionActive() { return core_games_isSessionActive(); }
@@ -400,6 +425,8 @@ void    ui_backend_setWeightPercent(uint8_t p) { core_keyer_setWeightPercent(p);
 
 bool    ui_backend_getDisplayInvert()      { return services_getDisplayInvert(); }
 void    ui_backend_setDisplayInvert(bool v){ services_setDisplayInvert(v); ui_renderer_setInverted(v); }
+bool    ui_backend_getLivePatternEnabled()      { return services_getLivePatternEnabled(); }
+void    ui_backend_setLivePatternEnabled(bool v){ services_setLivePatternEnabled(v); }
 uint8_t ui_backend_getDisplayTimeoutIndex() { return services_getDisplayTimeoutIndex(); }
 void    ui_backend_setDisplayTimeoutIndex(uint8_t i) { services_setDisplayTimeoutIndex(i); }
 

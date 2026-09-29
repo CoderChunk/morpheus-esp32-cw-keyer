@@ -9,7 +9,7 @@ connect otherwise independent subsystems.
 firmware/MORPHEUS/MORPHEUS.ino
 ├── core_keyer      GPIO input, debounce, straight/paddle FSMs, sidetone timing
 ├── core_decoder    DIT/DAH patterns, character lookup, word-gap detection
-├── display         OLED transcript, live pattern footer, BLE status overlays
+├── display         OLED transcript, live dit/dah header readout, BLE status overlays
 ├── transport       secure BLE pairing, bond allowlist, word notifications
 └── services        settings persistence, serial diagnostics, utility services
 ```

@@ -93,6 +93,12 @@ Decodes A–Z, 0–9, and basic punctuation (`. , ? / = + -`) from your keying,
 finalizing a character after a 3-dit silence and a word after a 7-dit
 silence. Unrecognized patterns show as `?`.
 
+Each character appears on the Home screen the instant it's decoded — not
+only once the whole word finishes; only a word-gap starts a new word.
+While actively keying, the top-right of the Home screen also shows the
+live dit/dah pattern (`.`/`-`) of whichever character is still mid-key.
+Hide this readout: **Menu → Settings → Display → Live Pattern**.
+
 Toggle on/off: **Menu → CW Keyer → Decoder**.
 
 ---
@@ -190,6 +196,8 @@ reset your live settings by mistake.
 - Invert on/off
 - Screen timeout: 15s / 30s / 60s / 120s / 5min / 10min / 15min / 30min /
   Never (default: Never)
+- Live Pattern on/off (default: on) — shows/hides the live dit/dah readout
+  described in the Real-Time Decoder section below
 
 **Menu → Settings → System**
 

@@ -8,18 +8,148 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
-## [Unreleased]
+## [v2.4.0] — Live Decode Display, OLED Debug Tooling & Keyer Test Coverage
 
-**Status:** Flashed and hash-verified on real hardware this session.
-The virtual-key fix below was confirmed over a real BLE connection
-(not just native host tests): `..` -> "I", `.-` -> "A", `-...` -> "B",
-all received as `KeyerWordEvent`s from the physical device via
-`backend.py`. The EXAM-results fix below was confirmed with a full
-25-round EXAM session run to completion over real BLE. The Keyer Mode
-menu move was flashed and hash-verified; on-device OLED confirmation
-of its new location is still pending.
+### Added
+- **Home screen now decodes live, character by character** instead of
+  only showing a complete word once it finishes. `core_decoder.cpp`
+  already built the word up one character at a time internally
+  (`wordBuffer`, finalized per-character, flushed to history only on a
+  word-gap) - that data just never reached the Home screen's transcript,
+  which only redrew on the word-complete event. Fixed by adding
+  `ui_backend_getLiveTranscriptLines()` (the committed transcript with
+  the in-progress word appended) and having `display.cpp`'s poll loop
+  diff it every cycle, not just on word-complete.
+  - Files: `ui_backend.h/.cpp`, `display.cpp`
+- **Live dit/dah pattern readout**, header row, top-right, no label -
+  shows whatever character is currently mid-key. New persisted setting,
+  **Settings → Display → Live Pattern** (on by default), to hide it.
+  Settings-schema bump (`SETTINGS_VERSION` 8→9).
+  - Files: `ui_screens.cpp`, `ui_state.cpp/.h`, `ui_menu.cpp/.h`,
+    `ui_backend.h/.cpp`, `services.h/.cpp`, `ui_mockdata.h`, `config.h`
+  - Verified on real hardware over BLE (virtual-key simulation +
+    live screenshots mid-sequence): word grows one character per
+    snapshot, header pattern renders without overlapping the status
+    text, footer correctly still shows Decoder ON/OFF when idle.
+- **`tools/oled_render/`** - renders the real `ui_renderer.cpp`/
+  `ui_screens.cpp` drawing code against the real U8g2 library on the
+  host, no ESP32 or display needed. Walks the entire menu tree
+  (~130 screens) to PNG in about a second.
+- **`tools/oled_screencap/screencap_ble.py`** - live screenshot of the
+  physical device's OLED over BLE (`dump_screen_start`/
+  `dump_screen_chunk` commands, gated by
+  `FEATURE_DEBUG_SERIAL_COMMANDS`, confirmed zero binary-size impact
+  with it off). A USB-serial version was tried first and dropped -
+  opening the serial port resets this board's ESP32 every time
+  (driver-level auto-program circuit behavior, not fixable host-side),
+  making repeated capture useless; BLE connect/disconnect never
+  touches the reset pins. `--session` mode reuses one connection
+  across many captures instead of reconnecting per shot.
+  - Files: `ble_control.cpp`, `ui_renderer.h/.cpp`
+- **`tests/native/test_core_keyer.cpp`** - 11 native regression tests
+  against the real `core_keyer.cpp`: straight-key DIT/DAH
+  classification, WPM/weight/volume/sidetone clamping, mode-change
+  mid-element state reset, and iambic paddle behavior including the
+  actual Mode A vs B distinction (a squeeze released mid-element sends
+  one extra alternating element in Mode B, not in Mode A). Verified to
+  actually catch a regression (flipped classification comparison)
+  before being added.
+  - Files: `tests/native/test_core_keyer.cpp`, `run.sh`,
+    `arduino_stub/Arduino.h`
 
 ### Fixed
+- **Several stale comments and one dead code path**, found during a
+  full firmware audit: a `handleLiveMonitor()` stub left over from an
+  earlier refactor (superseded by, but never replaced with,
+  `handleLiveMonitorReal()` - renamed back to `handleLiveMonitor()` now
+  that the stub is gone) containing an unused placeholder label;
+  `ui_mockdata.h` claiming callsign/date/time had no backend when
+  `services.cpp`/`core_clock.cpp` already provide one;
+  `core_profiles.cpp` saying "four" preset slots (actual: six);
+  `docs/architecture.md` describing a "live pattern footer" this
+  release moved to the header. `docs/FUNCTIONALITY_STATUS.md` had
+  accumulated the most drift - stale version numbers, features it
+  claimed were unreachable that were already wired up
+  (`core_stats_resetLifetime()`, `core_led_trainerFlashOn/Off()`), and
+  a "stale documentation identified" section that was itself stale
+  (claiming `CHANGELOG.md`/`README.md` were out of date when they'd
+  already been fixed in an earlier pass). `docs/build.md` showed
+  `FEATURE_SERIAL` defaulting to `1`; actual default is `0`.
+
+- **EXAM training results never reached any BLE/WebSocket client, and
+  `train_confirm` silently did nothing once they were ready** — both
+  bugs shared one root cause: `sessionActive` and
+  `phase=DRILL_EXAM_DONE` flip together, atomically, in the same
+  transition (`core_trainer.cpp`'s exam-completion branch). Once that
+  happens, `buildTrainStateJson()` (`ble_control.cpp`) saw
+  `!core_trainer_isSessionActive()` and emitted the bare
+  `{"evt":"train_state","active":false}` shape with no `phase`,
+  `examScorePercent`, `examPassed`, `examCorrect`, or `examTotal` —
+  and since this push is rate-limited/deduped with no earlier frame
+  carrying the result, that was the *only* push for the whole
+  transition. The exam getters still held the correct values
+  internally; they just never got serialized. Separately,
+  `core_trainer_confirmPressed()` (called from BLE's `train_confirm`)
+  opened with `if (!sessionActive) return;`, which now fired
+  immediately in `DRILL_EXAM_DONE` — the OLED never hit this because
+  its own exam-result screen dismisses via
+  `ui_backend_trainClearExamResult()` directly
+  (`ui_state.cpp`'s `handleTrainExamResult()`), bypassing
+  `confirmPressed()` entirely, so only the BLE/WebSocket/mobile path
+  was ever affected.
+  Fixed by checking `core_trainer_isExamResultReady()` (not
+  `sessionActive`) at the two points that mattered:
+  `buildTrainStateJson()` now still emits the full `active:true`-shaped
+  payload (mode/phase/target/exam fields) while an exam result is
+  unconfirmed, and `confirmPressed()` now clears the result and resets
+  to `DRILL_IDLE` *before* the `sessionActive` guard, instead of being
+  silently swallowed by it. A related gap found via the new test
+  suite's own state-isolation failing: `core_trainer_stopSession()`
+  (the `train_stop` command) didn't clear the exam result either —
+  stopping instead of confirming while an exam result was showing left
+  it stuck under a `phase="IDLE"` payload no client shape expects; now
+  fixed alongside the primary bug.
+  - Files: `firmware/MORPHEUS/core_trainer.cpp`, `ble_control.cpp`
+  - Tests: new `tests/native/test_core_trainer.cpp` (6 tests, first
+    native coverage for `core_trainer.cpp`), each fix verified to
+    actually fail against the pre-fix logic before confirming it
+    passes against the fix. Real hardware: a full 25-round EXAM session
+    driven over live BLE, confirming the terminal push carries
+    `phase="EXAM_DONE"`, `examScorePercent=100`, `examPassed=true`,
+    `examCorrectCount=25`, `examTotalCount=25`, and that
+    `confirmTraining()` afterward resets to a clean `active:false`
+    state instead of no-op'ing.
+
+- **BLE virtual straight key could split one character into several**
+  — e.g. ".." (should decode "I") sometimes decoded as "E" then "E".
+  Root cause: both the physical and virtual key paths already fed the
+  *same* single decoder (`core_decoder_addElement()`, via the shared
+  `events_onKeyUp()` fan-out in `MORPHEUS.ino` — there was never a
+  second decoder for BLE input), but the decoder's character/word-gap
+  timeout is stamped from BLE-command-*arrival* time, not the
+  operator's true release moment. A perfectly normal short pause
+  between two virtual elements could exceed the gap threshold once BLE
+  round-trip latency (connection interval + write-with-response ACK,
+  for both writes of the *next* element) was added on top of it -
+  especially at moderate/high WPM, where the gap window is only a few
+  hundred milliseconds. Fixed by threading a `fromVirtualKey` flag
+  (default `false`, physical call sites unchanged) through
+  `events_onKeyUp()` into `core_decoder_addElement()`, and applying a
+  new flat `BLE_KEY_GAP_COMPENSATION_MS` (250 ms, `config.h`) allowance
+  to the gap check only when the pending character's/word's most
+  recent element came from the virtual key. DIT/DAH classification
+  itself, physical-key timing, and the BLE/WebSocket protocol contract
+  are all unchanged.
+  - Files: `firmware/MORPHEUS/config.h`, `core_decoder.h`,
+    `core_decoder.cpp`, `core_keyer.h`, `MORPHEUS.ino`, `ble_control.cpp`
+  - Tests: two new native regression tests in
+    `tests/native/test_core_decoder.cpp`
+    (`test_virtual_key_gap_compensation_prevents_premature_split`,
+    `test_physical_key_gap_is_not_widened_by_compensation`), verified
+    to actually fail against the pre-fix logic before confirming they
+    pass against the fix.
+
+### Changed
 - **EXAM training results never reached any BLE/WebSocket client, and
   `train_confirm` silently did nothing once they were ready** — both
   bugs shared one root cause: `sessionActive` and

@@ -89,6 +89,7 @@ static uint8_t lastWpm = 0xFF;
 static UiMockMode lastMode = (UiMockMode)0xFF;
 static bool lastReceiving = false;
 static bool lastDecoderEnabled = true;
+static bool lastLivePatternEnabled = true;
 static char lastLiveWord[UI_LINE_CHARS + 1] = "";
 static char lastLivePattern[UI_PATTERN_CHARS + 1] = "";
 static char lastCallsign[12] = "";
@@ -111,6 +112,9 @@ static void pollLiveData(unsigned long now) {
 
   bool decoderEn = ui_backend_getDecoderEnabled();
   if (decoderEn != lastDecoderEnabled) { uiStatus.decoderEnabled = decoderEn; lastDecoderEnabled = decoderEn; changed = true; }
+
+  bool livePatternEn = ui_backend_getLivePatternEnabled();
+  if (livePatternEn != lastLivePatternEnabled) { uiStatus.livePatternEnabled = livePatternEn; lastLivePatternEnabled = livePatternEn; changed = true; }
 
   char callsign[12];
   ui_backend_getCallsign(callsign, sizeof(callsign));
@@ -163,8 +167,21 @@ static void pollLiveData(unsigned long now) {
     changed = true;
   }
 
-  ui_backend_getTranscriptLines(uiStatus.transcriptA, sizeof(uiStatus.transcriptA),
-                                 uiStatus.transcriptB, sizeof(uiStatus.transcriptB));
+  // Live, not committed-only: includes the word currently being decoded
+  // (core_decoder's wordBuffer), so a character shows up the instant it
+  // decodes rather than waiting for the word-gap that display_appendWord()
+  // reacts to. That event-driven notifyDataChanged() call still covers a
+  // completed word landing in transcriptFull; this poll-driven comparison
+  // is what catches a character being added *within* a word.
+  char transA[UI_LINE_CHARS + 1], transB[UI_LINE_CHARS + 1];
+  ui_backend_getLiveTranscriptLines(transA, sizeof(transA), transB, sizeof(transB));
+  if (strcmp(transA, uiStatus.transcriptA) != 0 || strcmp(transB, uiStatus.transcriptB) != 0) {
+    strncpy(uiStatus.transcriptA, transA, sizeof(uiStatus.transcriptA) - 1);
+    uiStatus.transcriptA[sizeof(uiStatus.transcriptA) - 1] = '\0';
+    strncpy(uiStatus.transcriptB, transB, sizeof(uiStatus.transcriptB) - 1);
+    uiStatus.transcriptB[sizeof(uiStatus.transcriptB) - 1] = '\0';
+    changed = true;
+  }
 
   if (changed) ui_state_notifyDataChanged();
 }

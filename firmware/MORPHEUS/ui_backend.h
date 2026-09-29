@@ -33,6 +33,13 @@ bool ui_backend_isReceiving();
 void ui_backend_appendWord(const char *word);
 void ui_backend_getTranscriptLines(char *lineA, size_t aSize, char *lineB, size_t bSize);
 
+// Same tail-wrapped two-line view as ui_backend_getTranscriptLines(), but
+// with the word currently being decoded (core_decoder's wordBuffer, not
+// yet committed by a word-gap) appended live - so a character appears
+// the instant it decodes, not only once the whole word finishes. Home
+// screen uses this instead of the committed-only version.
+void ui_backend_getLiveTranscriptLines(char *lineA, size_t aSize, char *lineB, size_t bSize);
+
 bool ui_backend_bleIsConnected();
 bool ui_backend_bleIsSecure();
 bool ui_backend_bleHasTrustedDevice();
@@ -195,6 +202,8 @@ void    ui_backend_setWeightPercent(uint8_t percent);
 
 bool    ui_backend_getDisplayInvert();
 void    ui_backend_setDisplayInvert(bool inverted);
+bool    ui_backend_getLivePatternEnabled();
+void    ui_backend_setLivePatternEnabled(bool enabled);
 uint8_t ui_backend_getDisplayTimeoutIndex();
 void    ui_backend_setDisplayTimeoutIndex(uint8_t index);
 unsigned long ui_backend_getDisplayTimeoutActualMs();

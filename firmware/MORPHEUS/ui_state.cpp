@@ -32,7 +32,7 @@
 
 UiStatusData uiStatus = {
   18, 750, false, UI_MODE_PADDLE,
-  "SECR", true, false, true,
+  "SECR", true, false, true, true,
   "CQ CQ DE MORPHEUS", "TNX FER QSO", "73", ".--",
   "", false,
   "2026-07-12", "21:35"
@@ -166,6 +166,7 @@ static bool getToggleValue(uint8_t paramId) {
     case PARAM_TIME_FORMAT:    return ui_backend_getTimeFormat() == 1;
     case PARAM_BLE_ENABLED:    return ui_backend_getBleEnabled();
     case PARAM_BLE_LED_ENABLED:return ui_backend_getBleLedEnabled();
+    case PARAM_LIVE_PATTERN_EN:return ui_backend_getLivePatternEnabled();
     default: return false;
   }
 }
@@ -181,6 +182,7 @@ static void setToggleValue(uint8_t paramId, bool v) {
     case PARAM_TIME_FORMAT:    ui_backend_setTimeFormat(v ? 1 : 0); break;
     case PARAM_BLE_ENABLED:    ui_backend_setBleEnabled(v);         break;
     case PARAM_BLE_LED_ENABLED:ui_backend_setBleLedEnabled(v);      break;
+    case PARAM_LIVE_PATTERN_EN:ui_backend_setLivePatternEnabled(v); break;
     default: break;
   }
 }
@@ -196,6 +198,7 @@ static const char *getToggleLabel(uint8_t paramId) {
     case PARAM_TIME_FORMAT:    return "TIME FORMAT";
     case PARAM_BLE_ENABLED:    return "BLE";
     case PARAM_BLE_LED_ENABLED:return "STATUS LED";
+    case PARAM_LIVE_PATTERN_EN:return "LIVE PATTERN";
     default: return "";
   }
 }
@@ -800,10 +803,6 @@ static void pushLiveMonitor() {
   markDirty();
 }
 
-static void handleLiveMonitor(const UiEvent &ev) {
-  if (ev.type == UI_EV_BACK) popList_forward_declared: ;   // placeholder, replaced below
-}
-
 static uint8_t currentTrainDrillId = TRAIN_DRILL_NONE;
 static uint8_t lastTrainPhaseSeen = 255;
 static uint8_t lastTrainTypedLenSeen = 255;
@@ -1282,8 +1281,8 @@ static void handleDiagAudio(const UiEvent &ev) {
   }
 }
 
-// --- Live Monitor: correct handler (replaces the placeholder stub above) -----
-static void handleLiveMonitorReal(const UiEvent &ev) {
+// --- Live Monitor ---------------------------------------------------------------
+static void handleLiveMonitor(const UiEvent &ev) {
   if (ev.type == UI_EV_BACK) { currentScreen = UI_SCREEN_LIST; markDirty(); }
 }
 
@@ -1753,7 +1752,7 @@ void ui_state_handleEvent(const UiEvent &ev, unsigned long now) {
     case UI_SCREEN_DIAG_AUDIO:        handleDiagAudio(ev);        break;
     case UI_SCREEN_DIAG_GPIO:         handleDiagGpio(ev);         break;
     case UI_SCREEN_DIAG_LIVE:         handleDiagLive(ev);         break;
-    case UI_SCREEN_LIVE_MONITOR:      handleLiveMonitorReal(ev);  break;
+    case UI_SCREEN_LIVE_MONITOR:      handleLiveMonitor(ev);      break;
     case UI_SCREEN_TUNE:              handleTune(ev);             break;
     case UI_SCREEN_TRAIN_DRILL:       handleTrainDrill(ev);       break;
     case UI_SCREEN_TRAIN_FARNSWORTH:  handleTrainFarnsworth(ev);  break;

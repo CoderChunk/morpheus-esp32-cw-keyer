@@ -4,7 +4,7 @@
  * ============================================================================
  * File: core_profiles.cpp | Author: Coder Chunk | License: GPLv3
  *
- * Four fixed, named preset slots bundling the operating parameters a
+ * Six fixed, named preset slots bundling the operating parameters a
  * user switches between together: WPM, sidetone frequency, paddle
  * reverse, keyer mode, volume, sidetone enable. Deliberately excludes
  * decoderEnabled and kochLevel - those are standing preferences /

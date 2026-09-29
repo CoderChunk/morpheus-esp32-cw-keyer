@@ -142,6 +142,7 @@ static const UiMenuNode MENU_SET_DISPLAY[] = {
   N_VAL("CONTRAST", PARAM_CONTRAST),
   N_TGL("INVERT",   PARAM_DISPLAY_INVERT),
   { "TIMEOUT", NODE_TIMEOUT, nullptr, 0, 0 },
+  N_TGL("LIVE PATTERN", PARAM_LIVE_PATTERN_EN),
 };
 static const UiMenuNode MENU_CALLSIGN[] = {
   { "EDIT", NODE_CALLSIGN_EDIT, nullptr, 0, 0 },

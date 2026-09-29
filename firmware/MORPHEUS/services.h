@@ -49,6 +49,8 @@ uint32_t services_getLoopRateHz();
 
 bool    services_getDisplayInvert();
 void    services_setDisplayInvert(bool inverted);
+bool    services_getLivePatternEnabled();
+void    services_setLivePatternEnabled(bool enabled);
 uint8_t services_getDisplayTimeoutIndex();
 void    services_setDisplayTimeoutIndex(uint8_t index);
 

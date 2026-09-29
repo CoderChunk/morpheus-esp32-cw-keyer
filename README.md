@@ -186,11 +186,18 @@ morpheus-esp32-cw-keyer/
 │       │                       # backend, icons, fonts, splash
 │       ├── display.{h,cpp}
 │       ├── services.{h,cpp}
-│       └── transport.{h,cpp}
+│       ├── transport.{h,cpp}
+│       └── ble_control.{h,cpp} # BLE remote-control command/event bridge
 ├── tests
 │   ├── test_ble_json_budget.py
-│   └── test_decoder_logic.py
+│   ├── test_decoder_logic.py
+│   └── native/                 # host g++ tests linking the real firmware .cpp
+├── tools
+│   ├── ble_client/              # PySide6 desktop BLE reference client
+│   ├── oled_render/             # host OLED simulator (no hardware)
+│   └── oled_screencap/          # live OLED screenshot over BLE
 ├── LICENSE
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -219,8 +226,9 @@ Host-side decoder timing-model tests can be run with:
 python -m unittest discover -s tests
 ```
 
-A native test that compiles and exercises the actual `core_decoder.cpp`
-(not a reimplementation) can be run with:
+Native tests that compile and exercise the actual firmware modules (not
+reimplementations) - currently the decoder, trainer, and keyer - can be
+run with:
 
 ```sh
 tests/native/run.sh

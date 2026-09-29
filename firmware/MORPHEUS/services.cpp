@@ -51,6 +51,7 @@ struct OperatorSettings {
   uint8_t       timeFormat;
   bool          bleEnabled;
   bool          bleLedEnabled;
+  bool          livePatternEnabled;
 };
 
 static Preferences settingsPrefs;
@@ -65,6 +66,7 @@ static bool    liveDisplayInvert       = DEFAULT_DISPLAY_INVERT;
 static uint8_t liveDisplayTimeoutIndex = DEFAULT_DISPLAY_TIMEOUT_INDEX;
 static char    liveCallsign[CALLSIGN_MAX_LEN] = "";
 static bool    liveCallsignEnabled     = DEFAULT_CALLSIGN_ENABLED;
+static bool    liveLivePatternEnabled  = DEFAULT_LIVE_PATTERN_ENABLED;
 
 static OperatorSettings currentSettingsSnapshot() {
   OperatorSettings s;
@@ -92,6 +94,7 @@ static OperatorSettings currentSettingsSnapshot() {
   s.timeFormat = core_clock_getTimeFormat();
   s.bleEnabled = transport_getBleEnabled();
   s.bleLedEnabled = core_led_getBleLedEnabled();
+  s.livePatternEnabled = liveLivePatternEnabled;
   return s;
 }
 
@@ -118,6 +121,7 @@ void services_loadSettings() {
   defaults.timeFormat = DEFAULT_TIME_FORMAT;
   defaults.bleEnabled = false;       // radio silent by default
   defaults.bleLedEnabled = false;    // LED silent by default, independent preference
+  defaults.livePatternEnabled = DEFAULT_LIVE_PATTERN_ENABLED;
 
   OperatorSettings loaded = defaults;
   size_t got = settingsPrefs.getBytes(SETTINGS_NVS_KEY, &loaded, sizeof(loaded));
@@ -142,6 +146,7 @@ void services_loadSettings() {
   strncpy(liveCallsign, loaded.callsign, CALLSIGN_MAX_LEN - 1);
   liveCallsign[CALLSIGN_MAX_LEN - 1] = '\0';
   liveCallsignEnabled = loaded.callsignEnabled;
+  liveLivePatternEnabled = loaded.livePatternEnabled;
   core_clock_setDateFormat(loaded.dateFormat);
   core_clock_setTimeFormat(loaded.timeFormat);
 
@@ -187,7 +192,8 @@ void services_serviceSettings(unsigned long now) {
                  (current.dateFormat != lastSavedSettings.dateFormat) ||
                  (current.timeFormat != lastSavedSettings.timeFormat) ||
                  (current.bleEnabled != lastSavedSettings.bleEnabled) ||
-                 (current.bleLedEnabled != lastSavedSettings.bleLedEnabled);
+                 (current.bleLedEnabled != lastSavedSettings.bleLedEnabled) ||
+                 (current.livePatternEnabled != lastSavedSettings.livePatternEnabled);
   if (!changed) return;
 
   settingsPrefs.putBytes(SETTINGS_NVS_KEY, &current, sizeof(current));
@@ -253,6 +259,8 @@ uint32_t services_getLoopRateHz() { return lastLoopRate; }
 
 bool    services_getDisplayInvert()        { return liveDisplayInvert; }
 void    services_setDisplayInvert(bool v)  { liveDisplayInvert = v; }
+bool    services_getLivePatternEnabled()       { return liveLivePatternEnabled; }
+void    services_setLivePatternEnabled(bool v) { liveLivePatternEnabled = v; }
 uint8_t services_getDisplayTimeoutIndex()  { return liveDisplayTimeoutIndex; }
 void    services_setDisplayTimeoutIndex(uint8_t i) { liveDisplayTimeoutIndex = i; }
 

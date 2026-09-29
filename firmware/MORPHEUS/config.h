@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.3.0";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.4.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -63,7 +63,7 @@ static const uint8_t       LINE_CHARS                = 18;
 static const uint8_t       TRANSCRIPT_LEN            = 48;
 static const unsigned long SETTINGS_SAVE_DEBOUNCE_MS = 5000;
 static const bool          DEFAULT_PADDLE_REVERSED   = false;
-static const uint16_t      SETTINGS_VERSION          = 8;   // bumped: +bleEnabled, +bleLedEnabled
+static const uint16_t      SETTINGS_VERSION          = 9;   // bumped: +livePatternEnabled
 static const uint32_t      SIDETONE_FREQ_MIN_HZ      = 200;
 static const uint32_t      SIDETONE_FREQ_MAX_HZ      = 2000;
 // ----------------------------------------------------------------------------
@@ -167,6 +167,7 @@ static const uint8_t  DISPLAY_TIMEOUT_OPTION_COUNT 	= 9;
 static const uint8_t  DEFAULT_DISPLAY_TIMEOUT_INDEX = 8;   // "Never"
 
 static const bool DEFAULT_DISPLAY_INVERT = false;
+static const bool DEFAULT_LIVE_PATTERN_ENABLED = true;
 
 // ----------------------------------------------------------------------------
 // Date/Time display format - fixed picklists, same pattern as Display

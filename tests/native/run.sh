@@ -26,3 +26,12 @@ g++ -std=c++17 -Wall -Wextra \
   -o "$OUT_DIR/test_core_trainer"
 
 "$OUT_DIR/test_core_trainer"
+
+g++ -std=c++17 -Wall -Wextra \
+  -I "$SCRIPT_DIR/arduino_stub" \
+  -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_core_keyer.cpp" \
+  "$REPO_ROOT/firmware/MORPHEUS/core_keyer.cpp" \
+  -o "$OUT_DIR/test_core_keyer"
+
+"$OUT_DIR/test_core_keyer"

@@ -165,6 +165,15 @@ void ui_screens_drawHome(U8G2 &u8g2) {
            (uiStatus.mode == UI_MODE_STRAIGHT) ? "STR" : "PAD",
            uiStatus.bleStatus);
   u8g2.drawStr(UI_CONTENT_X0, UI_HEADER_BASELINE, line);
+  // Live dit/dah of whatever character is mid-key, in the header's own
+  // right-hand space rather than competing with transcript/footer for
+  // room - this is the one place an operator is actually looking while
+  // receiving. No "PAT:" label: the header row's WPM/mode/status text
+  // already establishes context, and space here is tight.
+  if (uiStatus.isReceiving && uiStatus.livePatternEnabled) {
+    int patW = u8g2.getStrWidth(uiStatus.livePattern);
+    u8g2.drawStr(UI_CONTENT_X1 - patW, UI_HEADER_BASELINE, uiStatus.livePattern);
+  }
   drawBarRule(u8g2);
 
   const int infoY = UI_HEADER_RULE_Y + 9;

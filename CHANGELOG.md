@@ -8,6 +8,40 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
+## [v2.5.0] — Live Character Decode Over BLE
+
+### Added
+- **BLE now carries live, in-progress character decode**, closing a gap
+  left by v2.4.0's OLED live-decode work: the OLED redesign only ever
+  touched the local Home screen - BLE, the Python bridge, and the
+  Flutter app still only ever saw a complete word once flushed on a
+  word-gap. `events_onCharacterComplete()` (`MORPHEUS.ino`) now also
+  calls `transport_notifyLiveWord()`, sending the whole in-progress
+  word (not just the new character) over the existing
+  `BLE_WORD_CHAR_UUID` notify characteristic, distinguished from the
+  final-word event by JSON key (`"live"` vs `"word"`) rather than a new
+  UUID - so a coalesced/dropped intermediate notification is harmless,
+  the last one received always reflects full current state.
+  `core_decoder.cpp`'s `finalizeCharacter()` now appends to `wordBuffer`
+  *before* firing the character-complete event, so the live payload
+  already includes the just-decoded character.
+  - Firmware: `transport.h/.cpp`, `core_decoder.cpp`, `MORPHEUS.ino`
+  - Python bridge: `protocol.py` (n/a, same UUID), `backend.py`
+    (`LiveWordEvent`, `on_keyer_live_word`), `ws_server.py`
+    (`keyerLiveWordReceived` event), `WS_PROTOCOL.md`
+  - Flutter: `KeyerWordEvent`-shaped `liveWordEvents` stream on
+    `MorpheusClient`/`WebSocketMorpheusClient`, `MorpheusSession.liveWord`,
+    Home screen's live console display
+  - Not yet implemented in `MOBILE_BLE_PROTOCOL.md`'s direct-GATT path
+    (mobile client doesn't exist yet)
+  - At typical/worst-case keying speed (30-40 WPM), live notifications
+    fire at most every 120-160ms with a <80 byte payload - well within
+    a single BLE connection interval, no coalescing risk (the earlier
+    OLED-dump coalescing bug happened at microsecond-scale bursts,
+    ~1000x faster than character-decode timing).
+
+---
+
 ## [v2.4.0] — Live Decode Display, OLED Debug Tooling & Keyer Test Coverage
 
 ### Added

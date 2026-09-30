@@ -162,6 +162,7 @@ trip.
 |---|---|---|
 | `connectionChanged` | `ConnectionInfo` (§6.1) | connection state changes |
 | `keyerWordReceived` | `KeyerWordEvent` (§6.2) | the device completes a keyed word |
+| `keyerLiveWordReceived` | `LiveWordEvent` (§6.2a) | the device decodes one more character of the in-progress word |
 | `trainingStateChanged` | `TrainingState` (§6.3) | training state changes |
 | `pairingStateChanged` | `PairingEvent` (§6.4) | pairing flow progresses |
 | `backendError` | `BackendError` (§6.5) | any operation fails |
@@ -187,6 +188,27 @@ found — see `ws_server.py`'s `scan` handling).
 
 `timestamp` is device uptime in milliseconds, **not** wall-clock time
 (no RTC on the device).
+
+### 6.2a LiveWordEvent
+
+```json
+{ "word": string, "wpm": 5-40, "mode": "STRAIGHT|PADDLE", "timestamp": integer }
+```
+
+Same shape as `KeyerWordEvent` (§6.2) — `word` here is the **whole
+in-progress word so far**, not yet finalized by a word-gap. Fires once
+per decoded character (firmware `events_onCharacterComplete()`), far
+more often than `keyerWordReceived` and never itself authoritative:
+`keyerWordReceived` remains the one event that means "this word is
+done." A client that only cares about completed words can ignore this
+channel entirely; a client showing live per-character decode (e.g. the
+Home screen's live console) should prefer this event's `word` and fall
+back to the last `keyerWordReceived` value once it stops updating.
+
+At typical/worst-case keying speed (30-40 WPM) this fires at most every
+120-160ms — well within a BLE connection interval, no notification-
+coalescing risk (unlike the much burstier OLED-screenshot dump feature,
+whose chunks were microseconds apart).
 
 ### 6.3 TrainingState
 

@@ -159,8 +159,11 @@ static void finalizeCharacter() {
     trainingSink(decoded, charPattern);
     // Training active: word buffer/normal events deliberately untouched.
   } else {
-    events_onCharacterComplete(decoded, charPattern);
+    // Append before firing the event: events_onCharacterComplete() (and
+    // its BLE live-word notify) reads core_decoder_getWordBuffer(), which
+    // must already include this character.
     if (wordLen < MAX_WORD_LEN - 1) { wordBuffer[wordLen++] = decoded; wordBuffer[wordLen] = '\0'; }
+    events_onCharacterComplete(decoded, charPattern);
   }
 
   charPattern[0] = '\0';

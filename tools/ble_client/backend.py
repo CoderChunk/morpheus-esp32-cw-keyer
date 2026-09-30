@@ -120,6 +120,19 @@ class KeyerWordEvent:
 
 
 @dataclass
+class LiveWordEvent:
+    """The whole in-progress word so far, sent once per decoded
+    character (BLE JSON key "live") - not yet finalized by a word-gap.
+    Same shape as KeyerWordEvent so client-side code can reuse one
+    parser for both; kept as a distinct type/event because it fires far
+    more often and is never itself the authoritative completed word."""
+    word: str
+    wpm: int
+    mode: str
+    timestamp: int
+
+
+@dataclass
 class TrainingState:
     active: bool
     mode: Optional[str] = None
@@ -177,6 +190,7 @@ class MorpheusBackend:
 
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
         self._keyer_listeners: List[Callable[[KeyerWordEvent], None]] = []
+        self._keyer_live_listeners: List[Callable[[LiveWordEvent], None]] = []
         self._training_listeners: List[Callable[[TrainingState], None]] = []
         self._pairing_listeners: List[Callable[[PairingEvent], None]] = []
         self._error_listeners: List[Callable[[BackendError], None]] = []
@@ -202,6 +216,9 @@ class MorpheusBackend:
     def on_keyer_word(self, callback: Callable[[KeyerWordEvent], None]) -> None:
         self._keyer_listeners.append(callback)
 
+    def on_keyer_live_word(self, callback: Callable[[LiveWordEvent], None]) -> None:
+        self._keyer_live_listeners.append(callback)
+
     def on_training_state(self, callback: Callable[[TrainingState], None]) -> None:
         self._training_listeners.append(callback)
 
@@ -218,6 +235,10 @@ class MorpheusBackend:
 
     def _emit_keyer(self, evt: KeyerWordEvent) -> None:
         for cb in list(self._keyer_listeners):
+            cb(evt)
+
+    def _emit_keyer_live(self, evt: LiveWordEvent) -> None:
+        for cb in list(self._keyer_live_listeners):
             cb(evt)
 
     def _emit_training(self, state: TrainingState) -> None:
@@ -492,8 +513,20 @@ class MorpheusBackend:
             self._loop = None
 
     def _on_word_notify(self, _characteristic, data: bytearray) -> None:
+        # Same characteristic carries two payload shapes, told apart by
+        # JSON key: "live" is the whole in-progress word so far (fires
+        # per character, never itself authoritative), "word" is the
+        # word-gap-finalized event (fires once per completed word).
         try:
             payload = json.loads(bytes(data).decode("utf-8"))
+            if "live" in payload:
+                self._emit_keyer_live(LiveWordEvent(
+                    word=str(payload.get("live", "")),
+                    wpm=int(payload.get("wpm", 0)),
+                    mode=str(payload.get("mode", "")),
+                    timestamp=int(payload.get("timestamp", 0)),
+                ))
+                return
             self._emit_keyer(KeyerWordEvent(
                 word=str(payload.get("word", "")),
                 wpm=int(payload.get("wpm", 0)),

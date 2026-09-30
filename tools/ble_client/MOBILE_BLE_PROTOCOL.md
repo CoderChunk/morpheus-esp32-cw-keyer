@@ -231,9 +231,27 @@ Mirror it exactly: any `{"evt":"error",...}` → `BackendError(code:
 {"word":"CQ","wpm":18,"mode":"STRAIGHT","timestamp":1234567}
 ```
 
-No `"evt"` wrapper on this characteristic — it only ever carries this
-one shape. `mode` is exactly `"STRAIGHT"` or `"PADDLE"`. `timestamp` is
-device uptime in milliseconds, not wall-clock time (no RTC on-device).
+No `"evt"` wrapper on this characteristic — it only ever carries one of
+two shapes, told apart by which key is present:
+
+- `"word"` — a **completed** word, sent once when a word-gap silence
+  finalizes it. This is the shape above.
+- `"live"` — the **whole in-progress word so far**, sent once per
+  decoded character, before any word-gap:
+  ```json
+  {"live":"C","wpm":18,"mode":"STRAIGHT","timestamp":1234567}
+  ```
+  Same `wpm`/`mode`/`timestamp` fields, same characteristic. Never
+  itself authoritative — only the `"word"` shape means "this word is
+  done." A mobile client that only wants completed words can check for
+  `"word"` and ignore anything with `"live"` instead. **Not yet
+  consumed by any Flutter code** — this direct-GATT mobile path isn't
+  implemented yet at all (see `MOBILE_ARCHITECTURE.md`); when it is,
+  parse this the same way the desktop bridge's `backend.py` does
+  (`_on_word_notify`: check `"live"` first, fall through to `"word"`).
+
+`mode` is exactly `"STRAIGHT"` or `"PADDLE"`. `timestamp` is device
+uptime in milliseconds, not wall-clock time (no RTC on-device).
 
 ## 8. Notification subscription
 

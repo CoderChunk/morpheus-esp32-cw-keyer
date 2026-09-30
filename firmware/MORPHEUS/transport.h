@@ -37,6 +37,15 @@ void transport_service(unsigned long now);
 // Called from MORPHEUS.ino's events_onWordComplete() fan-out.
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now);
 
+// Called from MORPHEUS.ino's events_onCharacterComplete() fan-out - one
+// notification per decoded character, carrying the whole in-progress
+// word so far (not just the new character), so a coalesced/dropped
+// intermediate BLE notification never loses information: the last one
+// received always reflects full current state. Same characteristic as
+// transport_notifyWordCompleted(), distinguished by JSON key ("live" vs
+// "word") rather than a new UUID.
+void transport_notifyLiveWord(const char *liveWord, int wpm, OperatingMode mode, unsigned long now);
+
 // Clears the BLE bond: disconnects any currently connected peer, wipes
 // NimBLE's own internal bond store, clears this app's trusted-device
 // allowlist, and reopens advertising to a new pairing. Never touches

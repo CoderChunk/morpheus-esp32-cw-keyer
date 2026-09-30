@@ -393,7 +393,13 @@ void transport_service(unsigned long now) {
   }
 }
 
-void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {
+// Shared by transport_notifyWordCompleted() (keyField "word", fired once
+// per finalized word) and transport_notifyLiveWord() (keyField "live",
+// fired once per decoded character with the whole in-progress word so
+// far) - same characteristic, same MTU/escaping logic, JSON key is the
+// only difference so app-side parsers can tell a final word from an
+// in-progress one without a separate "type" field.
+static void notifyWordChar(const char *keyField, const char *word, int wpm, OperatingMode mode, unsigned long now) {
   if (bleServer == nullptr || bleWordChar == nullptr) return;
   uint16_t connHandle = bleConnHandle;
   if (connHandle == BLE_CONN_HANDLE_INVALID) return;
@@ -418,13 +424,21 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
   }
   char json[BLE_ESCAPED_WORD_FIELD_CAP + BLE_JSON_OVERHEAD_BYTES + 1];
   snprintf(json, sizeof(json),
-           "{\"word\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
-           escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
+           "{\"%s\":\"%s\",\"wpm\":%d,\"mode\":\"%s\",\"timestamp\":%lu}",
+           keyField, escapedWord, wpm, mode == MODE_STRAIGHT ? "STRAIGHT" : "PADDLE", now);
   bleWordChar->setValue(json);
   bleWordChar->notify();
 #if FEATURE_SERIAL
   Serial.print(F("EVT BLE_NOTIFY payload=")); Serial.println(json);
 #endif
+}
+
+void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {
+  notifyWordChar("word", word, wpm, mode, now);
+}
+
+void transport_notifyLiveWord(const char *liveWord, int wpm, OperatingMode mode, unsigned long now) {
+  notifyWordChar("live", liveWord, wpm, mode, now);
 }
 
 void transport_setControlCommandHandler(BleControlCommandHandler handler) {

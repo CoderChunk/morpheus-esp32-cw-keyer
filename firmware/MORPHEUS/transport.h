@@ -46,6 +46,13 @@ void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode
 // "word") rather than a new UUID.
 void transport_notifyLiveWord(const char *liveWord, int wpm, OperatingMode mode, unsigned long now);
 
+// Called from MORPHEUS.ino's events_onPatternChanged() fan-out - one
+// notification per keyed element (dit/dah), carrying the in-progress
+// dit/dah pattern for the character currently being keyed (e.g. ".-"),
+// and once more with an empty pattern when the character finalizes.
+// Same characteristic as the other two, JSON key "pat".
+void transport_notifyLivePattern(const char *pattern, unsigned long now);
+
 // Clears the BLE bond: disconnects any currently connected peer, wipes
 // NimBLE's own internal bond store, clears this app's trusted-device
 // allowlist, and reopens advertising to a new pairing. Never touches

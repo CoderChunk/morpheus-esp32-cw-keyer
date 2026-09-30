@@ -38,6 +38,7 @@ EVENT_CHANNELS = (
     "connectionChanged",
     "keyerWordReceived",
     "keyerLiveWordReceived",
+    "keyerLivePatternReceived",
     "trainingStateChanged",
     "pairingStateChanged",
     "backendError",
@@ -92,6 +93,7 @@ class MorpheusWebSocketServer:
         self.backend.on_connection_changed(lambda info: self._broadcast("connectionChanged", info))
         self.backend.on_keyer_word(lambda evt: self._broadcast("keyerWordReceived", evt))
         self.backend.on_keyer_live_word(lambda evt: self._broadcast("keyerLiveWordReceived", evt))
+        self.backend.on_keyer_live_pattern(lambda evt: self._broadcast("keyerLivePatternReceived", evt))
         self.backend.on_training_state(lambda st: self._broadcast("trainingStateChanged", st))
         self.backend.on_pairing_state(lambda evt: self._broadcast("pairingStateChanged", evt))
         self.backend.on_error(lambda err: self._broadcast("backendError", err))

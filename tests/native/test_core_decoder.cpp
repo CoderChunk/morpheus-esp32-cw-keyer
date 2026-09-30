@@ -49,6 +49,9 @@ void events_onCharacterComplete(char decodedChar, const char *pattern) {
 void events_onWordComplete(const char *word, unsigned long now) {
   g_words.push_back({std::string(word), now});
 }
+void events_onPatternChanged(const char *pattern, unsigned long now) {
+  (void)pattern; (void)now;
+}
 
 // ----------------------------------------------------------------------------
 // Tiny assert-and-continue harness.

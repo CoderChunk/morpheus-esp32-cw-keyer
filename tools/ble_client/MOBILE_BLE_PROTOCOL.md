@@ -248,7 +248,16 @@ two shapes, told apart by which key is present:
   consumed by any Flutter code** — this direct-GATT mobile path isn't
   implemented yet at all (see `MOBILE_ARCHITECTURE.md`); when it is,
   parse this the same way the desktop bridge's `backend.py` does
-  (`_on_word_notify`: check `"live"` first, fall through to `"word"`).
+  (`_on_word_notify`: check `"pat"` first, then `"live"`, fall through
+  to `"word"`).
+- `"pat"` — the in-progress dit/dah pattern for the character currently
+  being keyed, `.`/`-` only, e.g.:
+  ```json
+  {"pat":".-","timestamp":1234567}
+  ```
+  No `wpm`/`mode` fields. Empty (`"pat":""`) once the character
+  finalizes. Fires once per keyed element — the most frequent of the
+  three shapes on this characteristic.
 
 `mode` is exactly `"STRAIGHT"` or `"PADDLE"`. `timestamp` is device
 uptime in milliseconds, not wall-clock time (no RTC on-device).

@@ -8,6 +8,34 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
+## [v2.6.0] — Live Dit/Dah Pattern Over BLE
+
+### Added
+- **BLE now also carries the live in-progress dit/dah pattern**, the
+  same thing the OLED's header readout already showed locally
+  (`ui_backend_getLivePattern()`). New `events_onPatternChanged()` hook
+  in `core_decoder.h`, fired from `core_decoder_addElement()` (one new
+  element keyed) and from `finalizeCharacter()` (character finalized,
+  pattern cleared) - same push-based approach as v2.5.0's live-word
+  event, just one granularity finer. `MORPHEUS.ino` wires it to the new
+  `transport_notifyLivePattern()`, sharing `BLE_WORD_CHAR_UUID` again,
+  this time under JSON key `"pat"`.
+  - Firmware: `core_decoder.h/.cpp`, `MORPHEUS.ino`, `transport.h/.cpp`
+  - Python bridge: `backend.py` (`LivePatternEvent`,
+    `on_keyer_live_pattern`), `ws_server.py`
+    (`keyerLivePatternReceived` event), `WS_PROTOCOL.md`,
+    `MOBILE_BLE_PROTOCOL.md`
+  - Flutter: `livePatternEvents` stream on `MorpheusClient`, a
+    `showLivePattern` toggle (session-only, not persisted) and a
+    live pattern readout docked into the CW Keyer page's metrics row,
+    plus an animated VU-meter-style waveform that pulses while a
+    pattern is being keyed
+  - Fires once per keyed element - the most frequent of the three
+    telemetry events, but still only every 30-60ms even at rapid 40 WPM
+    dits, well inside a BLE connection interval.
+
+---
+
 ## [v2.5.0] — Live Character Decode Over BLE
 
 ### Added

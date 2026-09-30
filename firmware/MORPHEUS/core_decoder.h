@@ -70,4 +70,12 @@ void core_decoder_setTrainingSink(TrainingCharSink sink);
 void events_onCharacterComplete(char decodedChar, const char *pattern);
 void events_onWordComplete(const char *word, unsigned long now);
 
+// Fired whenever the in-progress dit/dah pattern changes: once per
+// keyed element (core_decoder_addElement()) and once more, with an
+// empty pattern, when a character finalizes and clears it. Mirrors
+// exactly what the OLED's live pattern readout already polls for
+// (core_decoder_getCharPattern()) - this just makes it push-based so
+// other consumers (BLE telemetry) don't need to poll too.
+void events_onPatternChanged(const char *pattern, unsigned long now);
+
 #endif // MORPHEUS_CORE_DECODER_H

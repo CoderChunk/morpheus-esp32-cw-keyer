@@ -163,6 +163,7 @@ trip.
 | `connectionChanged` | `ConnectionInfo` (§6.1) | connection state changes |
 | `keyerWordReceived` | `KeyerWordEvent` (§6.2) | the device completes a keyed word |
 | `keyerLiveWordReceived` | `LiveWordEvent` (§6.2a) | the device decodes one more character of the in-progress word |
+| `keyerLivePatternReceived` | `LivePatternEvent` (§6.2b) | the device keys one more dit/dah element (or finalizes a character, clearing it) |
 | `trainingStateChanged` | `TrainingState` (§6.3) | training state changes |
 | `pairingStateChanged` | `PairingEvent` (§6.4) | pairing flow progresses |
 | `backendError` | `BackendError` (§6.5) | any operation fails |
@@ -209,6 +210,21 @@ At typical/worst-case keying speed (30-40 WPM) this fires at most every
 120-160ms — well within a BLE connection interval, no notification-
 coalescing risk (unlike the much burstier OLED-screenshot dump feature,
 whose chunks were microseconds apart).
+
+### 6.2b LivePatternEvent
+
+```json
+{ "pattern": string, "timestamp": integer }
+```
+
+`pattern` is the in-progress dit/dah pattern for the character
+currently being keyed, using `.`/`-` (e.g. `".-"` mid-way through "A")
+— empty once the character finalizes (mirrors the OLED's live pattern
+readout, `ui_backend_getLivePattern()`). Fires once per keyed element
+(firmware `events_onPatternChanged()`, called from
+`core_decoder_addElement()`), the most frequent of the three keyer
+telemetry events — at worst case (rapid dits at 40 WPM) roughly every
+30-60ms, still well inside a BLE connection interval.
 
 ### 6.3 TrainingState
 

@@ -133,6 +133,16 @@ class LiveWordEvent:
 
 
 @dataclass
+class LivePatternEvent:
+    """The in-progress dit/dah pattern for the character currently
+    being keyed (BLE JSON key "pat"), e.g. ".-" - empty once the
+    character finalizes. Fires once per keyed element, the most
+    frequent of the three keyer telemetry events."""
+    pattern: str
+    timestamp: int
+
+
+@dataclass
 class TrainingState:
     active: bool
     mode: Optional[str] = None
@@ -191,6 +201,7 @@ class MorpheusBackend:
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
         self._keyer_listeners: List[Callable[[KeyerWordEvent], None]] = []
         self._keyer_live_listeners: List[Callable[[LiveWordEvent], None]] = []
+        self._keyer_pattern_listeners: List[Callable[[LivePatternEvent], None]] = []
         self._training_listeners: List[Callable[[TrainingState], None]] = []
         self._pairing_listeners: List[Callable[[PairingEvent], None]] = []
         self._error_listeners: List[Callable[[BackendError], None]] = []
@@ -219,6 +230,9 @@ class MorpheusBackend:
     def on_keyer_live_word(self, callback: Callable[[LiveWordEvent], None]) -> None:
         self._keyer_live_listeners.append(callback)
 
+    def on_keyer_live_pattern(self, callback: Callable[[LivePatternEvent], None]) -> None:
+        self._keyer_pattern_listeners.append(callback)
+
     def on_training_state(self, callback: Callable[[TrainingState], None]) -> None:
         self._training_listeners.append(callback)
 
@@ -239,6 +253,10 @@ class MorpheusBackend:
 
     def _emit_keyer_live(self, evt: LiveWordEvent) -> None:
         for cb in list(self._keyer_live_listeners):
+            cb(evt)
+
+    def _emit_keyer_pattern(self, evt: LivePatternEvent) -> None:
+        for cb in list(self._keyer_pattern_listeners):
             cb(evt)
 
     def _emit_training(self, state: TrainingState) -> None:
@@ -519,6 +537,12 @@ class MorpheusBackend:
         # word-gap-finalized event (fires once per completed word).
         try:
             payload = json.loads(bytes(data).decode("utf-8"))
+            if "pat" in payload:
+                self._emit_keyer_pattern(LivePatternEvent(
+                    pattern=str(payload.get("pat", "")),
+                    timestamp=int(payload.get("timestamp", 0)),
+                ))
+                return
             if "live" in payload:
                 self._emit_keyer_live(LiveWordEvent(
                     word=str(payload.get("live", "")),

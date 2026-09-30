@@ -441,6 +441,23 @@ void transport_notifyLiveWord(const char *liveWord, int wpm, OperatingMode mode,
   notifyWordChar("live", liveWord, wpm, mode, now);
 }
 
+void transport_notifyLivePattern(const char *pattern, unsigned long now) {
+  if (bleServer == nullptr || bleWordChar == nullptr) return;
+  uint16_t connHandle = bleConnHandle;
+  if (connHandle == BLE_CONN_HANDLE_INVALID) return;
+  if (!bleLinkSecure) return;
+  // Pattern is at most MAX_PATTERN_LEN-1 raw dot/dash chars (no escaping
+  // needed - never contains '"' or '\') - a fixed small buffer is
+  // simpler here than reusing notifyWordChar()'s MTU-scaled cap.
+  char json[64];
+  snprintf(json, sizeof(json), "{\"pat\":\"%s\",\"timestamp\":%lu}", pattern, now);
+  bleWordChar->setValue(json);
+  bleWordChar->notify();
+#if FEATURE_SERIAL
+  Serial.print(F("EVT BLE_NOTIFY payload=")); Serial.println(json);
+#endif
+}
+
 void transport_setControlCommandHandler(BleControlCommandHandler handler) {
   controlCommandHandler = handler;
 }

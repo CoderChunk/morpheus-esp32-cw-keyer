@@ -53,6 +53,12 @@ void events_onCharacterComplete(char decodedChar, const char *pattern) {
 #endif
 }
 
+void events_onPatternChanged(const char *pattern, unsigned long now) {
+#if FEATURE_BLE
+  transport_notifyLivePattern(pattern, now);
+#endif
+}
+
 void events_onWordComplete(const char *word, unsigned long now) {
 #if FEATURE_SERIAL
   services_logWordComplete(word, now);

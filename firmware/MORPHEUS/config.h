@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.5.0";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.6.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;

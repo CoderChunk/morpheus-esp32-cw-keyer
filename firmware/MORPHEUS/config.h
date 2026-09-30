@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.6.0";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.7.0";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -92,7 +92,12 @@ static const char     BLE_CONTROL_EVT_UUID[]   = "7a48a2b0-0004-4ad4-9f1a-1c2d3e
 // within what NimBLE/BlueZ negotiate down to on either side.
 static const uint16_t BLE_REQUESTED_MTU        = 247;
 static const uint16_t BLE_CONTROL_CMD_CAP      = 96;    // max incoming command JSON length
-static const uint16_t BLE_CONTROL_EVT_CAP      = 220;   // max outgoing state JSON length
+// Bumped from 220: the MEMORY game_state payload now also carries the
+// full echo chain (up to GAME_MEMORY_MAX_CHAIN chars) so a BLE client can
+// synthesize matching audio locally, and train_state's longest phase
+// string grew from "EXAM_DONE" to "AWAIT_ANSWER" - both still comfortably
+// inside BLE_REQUESTED_MTU.
+static const uint16_t BLE_CONTROL_EVT_CAP      = 240;   // max outgoing state JSON length
 static const uint8_t  BLE_WORD_FIELD_CAP       = 24;
 static const uint8_t  BLE_JSON_OVERHEAD_BYTES  = 64;
 static const unsigned long BLE_PAIR_MSG_DURATION_MS = 2500;

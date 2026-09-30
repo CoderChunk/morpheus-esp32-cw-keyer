@@ -120,6 +120,12 @@ everything.
 | `startTraining` | `{ "mode": TrainingMode }` | `null` | invalid mode → `INVALID_PARAMETER` error response |
 | `stopTraining` | `{}` | `null` | |
 | `confirmTraining` | `{}` | `null` | |
+| `answerTraining` | `{ "text": string }` | `null` | identification answer for `LISTENING`/`COMBINED`, only meaningful while `phase: "AWAIT_ANSWER"`; a no-op otherwise. `text` must be exactly one character to ever match |
+| `startGame` | `{ "game": GameId }` | `null` | `GameId`: `COPY\|MEMORY\|SPEED`; invalid id → `INVALID_PARAMETER`. Stops any active Training session first (device-side exclusivity) |
+| `stopGame` | `{}` | `null` | |
+| `pauseGame` | `{}` | `null` | toggles pause |
+| `confirmGame` | `{}` | `null` | restarts the game once it's over |
+| `restartGame` | `{}` | `null` | restarts the game immediately, any time |
 | `startPairing` | `{ "targetDeviceName": string? }` | `null` | defaults to the device name in `protocol.py` |
 | `submitPasskey` | `{ "passkey": string }` | `null` | 6 numeric digits |
 | `confirmPairing` | `{ "accepted": boolean }` | `null` | |
@@ -142,6 +148,7 @@ treat `"ok": true` on `connect` as "connected," for example; wait for a
 {
   "connection": ConnectionInfo,
   "training": TrainingState,
+  "game": GameState,
   "capabilities": Capabilities,
   "metadata": { "applicationVersion": string, "deviceName": string?, "deviceFirmwareVersion": string? }
 }
@@ -150,9 +157,9 @@ treat `"ok": true` on `connect` as "connected," for example; wait for a
 Call this once immediately after connecting to the WebSocket (and
 again after any reconnect) to get current state without racing events
 that were emitted before the client subscribed — `MorpheusBackend`
-caches the latest `ConnectionInfo` and `TrainingState` internally
-specifically so this is always answerable instantly, with no BLE round
-trip.
+caches the latest `ConnectionInfo`, `TrainingState`, and `GameState`
+internally specifically so this is always answerable instantly, with
+no BLE round trip.
 
 ---
 
@@ -165,6 +172,7 @@ trip.
 | `keyerLiveWordReceived` | `LiveWordEvent` (§6.2a) | the device decodes one more character of the in-progress word |
 | `keyerLivePatternReceived` | `LivePatternEvent` (§6.2b) | the device keys one more dit/dah element (or finalizes a character, clearing it) |
 | `trainingStateChanged` | `TrainingState` (§6.3) | training state changes |
+| `gameStateChanged` | `GameState` (§6.3a) | a device game's (`COPY`/`MEMORY`/`SPEED`) state changes |
 | `pairingStateChanged` | `PairingEvent` (§6.4) | pairing flow progresses |
 | `backendError` | `BackendError` (§6.5) | any operation fails |
 
@@ -230,7 +238,7 @@ telemetry events — at worst case (rapid dits at 40 WPM) roughly every
 
 ```json
 {
-  "active": boolean, "mode": "KOCH|CHARACTERS|WORDS|CALLSIGNS|ADAPTIVE|EXAM"?,
+  "active": boolean, "mode": "KOCH|CHARACTERS|WORDS|CALLSIGNS|ADAPTIVE|EXAM|LISTENING|COMBINED"?,
   "phase": string?, "target": string?, "correct": integer, "attempts": integer,
   "kochLevel": integer?, "adaptiveWpm": integer?,
   "examScorePercent": integer?, "examPassed": boolean?,
@@ -241,6 +249,61 @@ telemetry events — at worst case (rapid dits at 40 WPM) roughly every
 `kochLevel` only meaningful for `KOCH`; `adaptiveWpm` only for
 `ADAPTIVE`; the four `exam*` fields only once an `EXAM` session has
 finished (`examTotalCount` is always `25` when present).
+
+`phase` includes `"AWAIT_ANSWER"` for `LISTENING`/`COMBINED` rounds —
+the device has played `target` and is waiting for `answerTraining`
+(§4), not a keyed reply (`"LISTENING"` phase, despite the name, is
+always the *keyed-reply* wait state for every mode, including the
+second stage of `COMBINED`). `target` is present and populated during
+`AWAIT_ANSWER` exactly like every other phase — a client that wants a
+genuine comprehension exercise must choose not to render it as visible
+text until the round resolves; the protocol does not hide it (same
+precedent as `GameState.target`/`lastChar`, §6.3a).
+
+For `LISTENING`, a round is entirely decided by one `answerTraining`
+call: `correct`/`attempts` update immediately and `phase` moves to
+`"FEEDBACK"`. For `COMBINED`, `answerTraining` only resolves the
+identification half and moves `phase` to `"LISTENING"` — the operator
+must then key the character back (the ordinary keyed-reply path every
+mode uses); the round counts as correct only when both halves were.
+
+### 6.3a GameState
+
+Device-authoritative ear-training games (`COPY`/`MEMORY`/`SPEED`,
+started with `startGame`, §4) — distinct from the client-owned Games
+catalog, which remains out of scope for this protocol (§9).
+
+```json
+{
+  "active": boolean, "game": "COPY|MEMORY|SPEED"?, "paused": boolean,
+  "phase": string?, "highScore": integer,
+  "target": string?, "score": integer?, "lives": integer?, "fallProgressPct": integer?,
+  "chainLength": integer?, "inputProgress": integer?, "chain": string?,
+  "combo": integer?, "beatRemainingMs": integer?, "lastChar": string?, "wasLastCorrect": boolean?
+}
+```
+
+Only the fields for the active `game` are meaningful:
+
+- `COPY`: `target` (the falling character), `score`, `lives`,
+  `fallProgressPct` (0-100). `phase`: `IDLE|FALLING|HIT|MISS|OVER`.
+- `MEMORY`: `chainLength`, `inputProgress`, `chain` (the full echo-chain
+  sequence — see the visibility note below).
+  `phase`: `IDLE|PLAYBACK|INPUT|ROUND_OK|OVER`.
+- `SPEED`: `combo`, `lives`, `beatRemainingMs`, `lastChar`,
+  `wasLastCorrect`. `phase`: `IDLE|LISTEN|FEEDBACK|OVER`.
+
+`target`/`chain`/`lastChar` are always present in the payload
+regardless of phase, including mid-round while the character hasn't
+been revealed on the device's own OLED yet — the same "field present,
+client chooses not to render it" precedent as `TrainingState.target`
+during `AWAIT_ANSWER` (§6.3). They exist so a client can synthesize
+matching audio locally and show feedback after the round; withholding
+them as visible text during the listening phase is a UI choice this
+protocol doesn't enforce.
+
+Input during these games is the same `keyDown`/`keyUp` (§4) used by
+Training and the virtual straight key.
 
 ### 6.4 PairingEvent
 
@@ -334,14 +397,22 @@ Same codes as `BACKEND_API.md` §8 / `MORPHEUS_BACKEND_API_REQUIREMENTS.md`
 
 ---
 
-## 9. Games are entirely out of scope for this protocol
+## 9. The client-owned Games catalog remains out of scope for this protocol
 
-Per explicit requirement: Flutter owns all six games completely
-(mechanics, animation, input, targets, scoring, combo, lives, timers,
-difficulty, progression, local high scores). The server exposes
-nothing game-related — the only thing a Flutter game needs from this
-protocol is `getMorseTable` (§7), used the same way `arcade.py`'s
-Python games use `protocol.MORSE_TABLE` today.
+Per explicit requirement: Flutter owns its six client-side games
+completely (mechanics, animation, input, targets, scoring, combo,
+lives, timers, difficulty, progression, local high scores). The server
+exposes nothing about *that* catalog — the only thing one of those
+games needs from this protocol is `getMorseTable` (§7), used the same
+way `arcade.py`'s Python games use `protocol.MORSE_TABLE` today.
+
+This is separate from the three device-authoritative games
+(`COPY`/`MEMORY`/`SPEED`, §4/§6.3a) — those run their scoring and
+character selection on the device itself, exactly like Training, and
+are very much in scope (`startGame`/`stopGame`/`gameStateChanged`
+etc.). "Games are out of scope" here means specifically the client's
+own arcade catalog, not every feature that happens to be called a
+game.
 
 ---
 

@@ -4,7 +4,15 @@
 
 enum TrainMode : uint8_t {
   TRAIN_MODE_KOCH, TRAIN_MODE_CHARACTERS, TRAIN_MODE_WORDS,
-  TRAIN_MODE_CALLSIGNS, TRAIN_MODE_ADAPTIVE, TRAIN_MODE_EXAM
+  TRAIN_MODE_CALLSIGNS, TRAIN_MODE_ADAPTIVE, TRAIN_MODE_EXAM,
+  // LISTENING: pure comprehension - the round is decided entirely by
+  // core_trainer_submitAnswer(), no keying involved at all.
+  // COMBINED: identification (submitAnswer) gates into a keying stage
+  // (the existing onTrainingCharDecoded() path) - one round exercises
+  // both skills. See core_trainer.cpp's phaseAfterPlayback/
+  // pendingIdentificationCorrect for how the two extra stages are
+  // threaded through the existing PLAYING/LISTENING/FEEDBACK machine.
+  TRAIN_MODE_LISTENING, TRAIN_MODE_COMBINED
 };
 
 // Stats hooks - core_stats.cpp registers these to observe per-character
@@ -17,7 +25,11 @@ typedef void (*TrainerExamHook)(uint8_t correctCount, uint8_t totalCount, uint8_
 void core_trainer_setExamCompleteHook(TrainerExamHook hook);
 
 enum DrillPhase : uint8_t {
-  DRILL_IDLE, DRILL_PLAYING, DRILL_LISTENING, DRILL_FEEDBACK, DRILL_EXAM_DONE
+  DRILL_IDLE, DRILL_PLAYING, DRILL_LISTENING, DRILL_FEEDBACK, DRILL_EXAM_DONE,
+  // Awaiting a typed/selected identification answer (core_trainer_submitAnswer())
+  // rather than a keyed reply - used by TRAIN_MODE_LISTENING and the first
+  // stage of TRAIN_MODE_COMBINED.
+  DRILL_AWAIT_ANSWER
 };
 
 void      core_trainer_init();
@@ -27,6 +39,7 @@ void      core_trainer_stopSession();
 bool      core_trainer_isSessionActive();
 TrainMode core_trainer_getMode();
 void      core_trainer_confirmPressed();
+void      core_trainer_submitAnswer(const char *text);   // LISTENING/COMBINED identification
 
 DrillPhase  core_trainer_getPhase();
 const char *core_trainer_getTargetText();

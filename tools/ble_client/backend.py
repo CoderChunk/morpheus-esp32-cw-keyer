@@ -65,6 +65,14 @@ class TrainingMode(str, Enum):
     CALLSIGNS = "CALLSIGNS"
     ADAPTIVE = "ADAPTIVE"
     EXAM = "EXAM"
+    LISTENING = "LISTENING"
+    COMBINED = "COMBINED"
+
+
+class GameId(str, Enum):
+    COPY = "COPY"
+    MEMORY = "MEMORY"
+    SPEED = "SPEED"
 
 
 class PairingEventType(str, Enum):
@@ -159,6 +167,29 @@ class TrainingState:
 
 
 @dataclass
+class GameState:
+    active: bool
+    game: Optional[str] = None
+    paused: bool = False
+    phase: Optional[str] = None
+    highScore: int = 0
+    # COPY
+    target: Optional[str] = None
+    score: Optional[int] = None
+    lives: Optional[int] = None
+    fallProgressPct: Optional[int] = None
+    # MEMORY
+    chainLength: Optional[int] = None
+    inputProgress: Optional[int] = None
+    chain: Optional[str] = None
+    # SPEED
+    combo: Optional[int] = None
+    beatRemainingMs: Optional[int] = None
+    lastChar: Optional[str] = None
+    wasLastCorrect: Optional[bool] = None
+
+
+@dataclass
 class PairingEvent:
     type: PairingEventType
     devicePath: Optional[str] = None
@@ -197,12 +228,14 @@ class MorpheusBackend:
     def __init__(self):
         self._connection = ConnectionInfo(state=ConnectionState.DISCONNECTED)
         self._training_state = TrainingState(active=False)
+        self._game_state = GameState(active=False)
 
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
         self._keyer_listeners: List[Callable[[KeyerWordEvent], None]] = []
         self._keyer_live_listeners: List[Callable[[LiveWordEvent], None]] = []
         self._keyer_pattern_listeners: List[Callable[[LivePatternEvent], None]] = []
         self._training_listeners: List[Callable[[TrainingState], None]] = []
+        self._game_listeners: List[Callable[[GameState], None]] = []
         self._pairing_listeners: List[Callable[[PairingEvent], None]] = []
         self._error_listeners: List[Callable[[BackendError], None]] = []
 
@@ -211,6 +244,20 @@ class MorpheusBackend:
         self._thread: Optional[threading.Thread] = None
         self._client: Optional[BleakClient] = None
         self._stop_requested = False
+
+        # Outgoing command queue (see _command_writer) - created fresh on
+        # each connection, on self._loop.
+        self._cmd_queue: Optional[asyncio.PriorityQueue] = None
+        self._cmd_seq = 0
+        self._key_backlog = 0
+
+        # Strong references for the fire-and-forget _reconcileControlState
+        # tasks _command_writer spawns - asyncio only weakly tracks a task
+        # created via ensure_future/create_task with no reference kept, so
+        # without this set the task can be garbage-collected mid-flight
+        # (a well-known asyncio footgun), silently dropping the exact
+        # correction train_stop's reliability depends on.
+        self._background_tasks: set = set()
 
         # Pairing thread/loop (independent of the GATT session, same as
         # the original ble_pairing.py design)
@@ -235,6 +282,9 @@ class MorpheusBackend:
 
     def on_training_state(self, callback: Callable[[TrainingState], None]) -> None:
         self._training_listeners.append(callback)
+
+    def on_game_state(self, callback: Callable[[GameState], None]) -> None:
+        self._game_listeners.append(callback)
 
     def on_pairing_state(self, callback: Callable[[PairingEvent], None]) -> None:
         self._pairing_listeners.append(callback)
@@ -262,6 +312,11 @@ class MorpheusBackend:
     def _emit_training(self, state: TrainingState) -> None:
         self._training_state = state
         for cb in list(self._training_listeners):
+            cb(state)
+
+    def _emit_game(self, state: GameState) -> None:
+        self._game_state = state
+        for cb in list(self._game_listeners):
             cb(state)
 
     def _emit_pairing(self, evt: PairingEvent) -> None:
@@ -293,6 +348,10 @@ class MorpheusBackend:
     def training(self) -> TrainingState:
         return self._training_state
 
+    @property
+    def game(self) -> GameState:
+        return self._game_state
+
     def get_snapshot(self) -> dict:
         """Everything a fresh consumer (e.g. a newly-connected IPC
         client - see ws_server.py) needs to reconstruct current state
@@ -300,6 +359,7 @@ class MorpheusBackend:
         return {
             "connection": self._connection,
             "training": self._training_state,
+            "game": self._game_state,
             "capabilities": self.get_capabilities(),
             "metadata": self.get_metadata(),
         }
@@ -380,6 +440,40 @@ class MorpheusBackend:
     def confirm_training(self) -> None:
         self._send_command({"cmd": "train_confirm"}, operation="confirmTraining")
 
+    def answer_training(self, text: str) -> None:
+        """Identification answer for LISTENING/COMBINED - see
+        MORPHEUS_BACKEND_API_REQUIREMENTS.md §8.2b. A no-op on the
+        device unless phase == "AWAIT_ANSWER"."""
+        self._send_command({"cmd": "train_answer", "text": text}, operation="answerTraining")
+
+    # ------------------------------------------------------------------
+    # Device games (§8.6) - COPY/MEMORY/SPEED, device-authoritative,
+    # mutually exclusive with Training (same single-decoder-consumer
+    # rule enforced firmware-side).
+    # ------------------------------------------------------------------
+    def start_game(self, game) -> None:
+        game_value = game.value if isinstance(game, GameId) else str(game)
+        if game_value not in GameId.__members__:
+            self._emit_error(BackendError(
+                code=ErrorCode.INVALID_PARAMETER.value,
+                message=f"Unknown game: {game_value}",
+                operation="startGame",
+            ))
+            return
+        self._send_command({"cmd": "game_start", "game": game_value}, operation="startGame")
+
+    def stop_game(self) -> None:
+        self._send_command({"cmd": "game_stop"}, operation="stopGame")
+
+    def pause_game(self) -> None:
+        self._send_command({"cmd": "game_pause"}, operation="pauseGame")
+
+    def confirm_game(self) -> None:
+        self._send_command({"cmd": "game_confirm"}, operation="confirmGame")
+
+    def restart_game(self) -> None:
+        self._send_command({"cmd": "game_restart"}, operation="restartGame")
+
     # ------------------------------------------------------------------
     # Pairing operations (§5) - Linux/BlueZ only
     # ------------------------------------------------------------------
@@ -459,6 +553,36 @@ class MorpheusBackend:
     # ------------------------------------------------------------------
     # Internal: GATT session
     # ------------------------------------------------------------------
+    # Every control-channel write (key_down/key_up/train_*) shares ONE
+    # GATT characteristic and each write uses response=True, so bleak's
+    # underlying BLE stack only ever has one such write in flight at a
+    # time - concurrent calls queue up implicitly at that layer. Without
+    # an explicit queue here, that implicit ordering is whatever order
+    # the asyncio scheduler happens to start the tasks in, which is FIFO
+    # by submission - fine on its own, EXCEPT a virtual key held down
+    # during WORDS/CALLSIGNS training (or a fast game) keeps submitting
+    # key_down/key_up every keyed element, so a train_stop/game_stop
+    # submitted mid-hold lands at the BACK of that backlog and doesn't
+    # reach the device until the user releases the key. _cmd_queue makes
+    # that ordering explicit and priority-aware: session-control commands
+    # (PRIORITY_CONTROL) always jump ahead of any already-queued
+    # key_down/key_up (PRIORITY_KEY), so Stop is never starved by keying.
+    PRIORITY_CONTROL = 0
+    PRIORITY_KEY = 1
+
+    # Bounds how many key_down/key_up commands may sit in the queue
+    # ahead of the one currently being written. Priority alone already
+    # lets a control command (e.g. train_stop) cut the line, but if a
+    # fast/sustained virtual-key session submits commands faster than
+    # the device's single write-with-response round trip can drain them,
+    # an unbounded backlog would still delay Stop by however long it
+    # takes the CURRENTLY in-flight write plus this whole backlog to
+    # clear, one at a time, before Stop's own turn comes up. Capping the
+    # backlog and dropping the newest excess key command bounds that
+    # worst case to MAX_KEY_BACKLOG round trips - stale queued key
+    # state is low-value anyway once a backlog has built up that deep.
+    MAX_KEY_BACKLOG = 4
+
     def _send_command(self, command: dict, operation: str) -> None:
         if self._loop is None or self._client is None:
             self._emit_error(BackendError(
@@ -468,24 +592,64 @@ class MorpheusBackend:
                 recoverable=True,
             ))
             return
-        asyncio.run_coroutine_threadsafe(self._async_send_command(command, operation), self._loop)
+        priority = self.PRIORITY_KEY if command.get("cmd", "").startswith("key_") else self.PRIORITY_CONTROL
+        asyncio.run_coroutine_threadsafe(self._enqueue_command(priority, command, operation), self._loop)
 
-    async def _async_send_command(self, command: dict, operation: str) -> None:
-        if self._client is None or not self._client.is_connected:
+    async def _enqueue_command(self, priority: int, command: dict, operation: str) -> None:
+        if self._cmd_queue is None:
             self._emit_error(BackendError(code=ErrorCode.DEVICE_BUSY.value, message="Not connected", operation=operation))
             return
-        try:
-            # Firmware's jsonGetString() (ble_control.cpp) matches the
-            # literal pattern "key":" with no space after the colon -
-            # json.dumps()'s default ": " separator would silently fail
-            # to match, so every command's "cmd" field would come back
-            # as "missing cmd". Compact separators avoid that.
-            payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
-            await self._client.write_gatt_char(proto.CONTROL_CMD_UUID, payload, response=True)
-        except Exception as exc:  # noqa: BLE001
-            code = (ErrorCode.KEYER_COMMAND_FAILED if command.get("cmd", "").startswith("key_")
-                    else ErrorCode.TRAINING_START_FAILED)
-            self._emit_error(BackendError(code=code.value, message=str(exc), operation=operation))
+        if priority == self.PRIORITY_KEY and self._key_backlog >= self.MAX_KEY_BACKLOG:
+            return  # drop: queue already deep enough that this one is stale by the time it'd be sent
+        self._cmd_seq += 1
+        if priority == self.PRIORITY_KEY:
+            self._key_backlog += 1
+        # (priority, seq, ...): seq is a tiebreaker so PriorityQueue never
+        # has to compare two dicts (which aren't orderable) for equal
+        # priorities - it just falls through to comparing ints, preserving
+        # FIFO order within the same priority band.
+        await self._cmd_queue.put((priority, self._cmd_seq, command, operation))
+
+    async def _command_writer(self) -> None:
+        """Single consumer draining self._cmd_queue in priority order -
+        the only coroutine that ever calls write_gatt_char, so command
+        ordering on the wire exactly matches queue order instead of
+        asyncio's incidental task-scheduling order."""
+        assert self._cmd_queue is not None
+        while True:
+            priority, _seq, command, operation = await self._cmd_queue.get()
+            if priority == self.PRIORITY_KEY:
+                self._key_backlog -= 1
+            if self._client is None or not self._client.is_connected:
+                self._emit_error(BackendError(code=ErrorCode.DEVICE_BUSY.value, message="Not connected", operation=operation))
+                continue
+            try:
+                # Firmware's jsonGetString() (ble_control.cpp) matches the
+                # literal pattern "key":" with no space after the colon -
+                # json.dumps()'s default ": " separator would silently fail
+                # to match, so every command's "cmd" field would come back
+                # as "missing cmd". Compact separators avoid that.
+                payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
+                # A write-with-response that never gets acked (e.g. the
+                # peripheral's BLE stack wedged after a burst of traffic)
+                # would otherwise hang this coroutine forever - since this
+                # is the ONLY place that calls write_gatt_char, that stalls
+                # every command behind it in the queue permanently,
+                # including any future train_stop. A bounded timeout turns
+                # that into a reported error instead of a silent freeze.
+                await asyncio.wait_for(
+                    self._client.write_gatt_char(proto.CONTROL_CMD_UUID, payload, response=True),
+                    timeout=3.0,
+                )
+                cmd_name = command.get("cmd", "")
+                if cmd_name.startswith("train_") or cmd_name.startswith("game_"):
+                    task = asyncio.ensure_future(self._reconcileControlState())
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
+            except Exception as exc:  # noqa: BLE001
+                code = (ErrorCode.KEYER_COMMAND_FAILED if command.get("cmd", "").startswith("key_")
+                        else ErrorCode.TRAINING_START_FAILED)
+                self._emit_error(BackendError(code=code.value, message=str(exc), operation=operation))
 
     async def _async_disconnect(self) -> None:
         if self._client is not None and self._client.is_connected:
@@ -568,6 +732,9 @@ class MorpheusBackend:
             self._emit_error(BackendError(code=ErrorCode.INTERNAL_ERROR.value,
                                            message=f"Malformed control payload: {exc}"))
             return
+        self._handle_control_payload(payload)
+
+    def _handle_control_payload(self, payload: dict) -> None:
         evt = payload.get("evt")
         if evt == "train_state":
             self._emit_training(TrainingState(
@@ -584,14 +751,57 @@ class MorpheusBackend:
                 examCorrectCount=payload.get("examCorrect"),
                 examTotalCount=payload.get("examTotal"),
             ))
+        elif evt == "game_state":
+            self._emit_game(GameState(
+                active=bool(payload.get("active")),
+                game=payload.get("game"),
+                paused=bool(payload.get("paused", False)),
+                phase=payload.get("phase"),
+                highScore=int(payload.get("highScore", 0)),
+                target=payload.get("target"),
+                score=payload.get("score"),
+                lives=payload.get("lives"),
+                fallProgressPct=payload.get("fallProgressPct"),
+                chainLength=payload.get("chainLength"),
+                inputProgress=payload.get("inputProgress"),
+                chain=payload.get("chain"),
+                combo=payload.get("combo"),
+                beatRemainingMs=payload.get("beatRemainingMs"),
+                lastChar=payload.get("lastChar"),
+                wasLastCorrect=payload.get("wasLastCorrect"),
+            ))
         elif evt == "error":
             self._emit_error(BackendError(code=ErrorCode.TRAINING_START_FAILED.value,
                                            message=payload.get("message", "unknown error")))
-        # "ack" and "game_state" events are intentionally not surfaced here:
-        # ack is fire-and-forget bookkeeping the contract doesn't require,
-        # and game_state belongs to the firmware's own 3-game protocol,
-        # which this application's Games feature does not use (see
-        # UI_SPECIFICATION.md §4).
+        # "ack" is intentionally not surfaced here - fire-and-forget
+        # bookkeeping the contract doesn't require a listener for.
+
+    async def _reconcileControlState(self) -> None:
+        """Guaranteed correction for train_state/game_state after a
+        command we just sent - see transport.cpp's BLE_CONTROL_EVT_UUID
+        comment for why this exists: BLE_CONTROL_EVT_UUID is a plain
+        NOTIFY (no delivery guarantee - confirmed via live capture that
+        it drops the one-shot active:false confirmation roughly a
+        quarter to half the time), so a train_stop/train_start/
+        train_confirm can silently leave the cached TrainingState stale
+        with nothing to self-correct it. The characteristic's underlying
+        VALUE is set on every firmware-side push regardless of whether
+        the notify itself is delivered, so a plain GATT READ - issued
+        shortly after the write, once the firmware's own control-state
+        push (rate-limited to at most every 150ms) has had time to run -
+        is unaffected by that loss and always reflects the truth.
+        """
+        if self._client is None or not self._client.is_connected:
+            return
+        await asyncio.sleep(0.3)
+        if self._client is None or not self._client.is_connected:
+            return
+        try:
+            raw = await self._client.read_gatt_char(proto.CONTROL_EVT_UUID)
+            payload = json.loads(bytes(raw).decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return
+        self._handle_control_payload(payload)
 
     async def _async_connect_main(self, address: Optional[str]) -> None:
         self._emit_connection(ConnectionInfo(state=ConnectionState.SCANNING))
@@ -615,9 +825,13 @@ class MorpheusBackend:
             return
 
         self._emit_connection(ConnectionInfo(state=ConnectionState.CONNECTING))
+        writer_task: Optional[asyncio.Task] = None
         try:
             async with BleakClient(device) as client:
                 self._client = client
+                self._cmd_queue = asyncio.PriorityQueue()
+                self._key_backlog = 0
+                writer_task = asyncio.create_task(self._command_writer())
                 self._emit_connection(ConnectionInfo(
                     state=ConnectionState.CONNECTED,
                     deviceName=device.name or proto.DEVICE_NAME,
@@ -630,4 +844,7 @@ class MorpheusBackend:
         except Exception as exc:  # noqa: BLE001
             self._emit_error(BackendError(code=ErrorCode.CONNECTION_FAILED.value, message=str(exc), operation="connect"))
         finally:
+            if writer_task is not None:
+                writer_task.cancel()
+            self._cmd_queue = None
             self._client = None

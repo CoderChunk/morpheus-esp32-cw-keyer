@@ -40,6 +40,7 @@ EVENT_CHANNELS = (
     "keyerLiveWordReceived",
     "keyerLivePatternReceived",
     "trainingStateChanged",
+    "gameStateChanged",
     "pairingStateChanged",
     "backendError",
 )
@@ -95,6 +96,7 @@ class MorpheusWebSocketServer:
         self.backend.on_keyer_live_word(lambda evt: self._broadcast("keyerLiveWordReceived", evt))
         self.backend.on_keyer_live_pattern(lambda evt: self._broadcast("keyerLivePatternReceived", evt))
         self.backend.on_training_state(lambda st: self._broadcast("trainingStateChanged", st))
+        self.backend.on_game_state(lambda st: self._broadcast("gameStateChanged", st))
         self.backend.on_pairing_state(lambda evt: self._broadcast("pairingStateChanged", evt))
         self.backend.on_error(lambda err: self._broadcast("backendError", err))
 
@@ -155,6 +157,30 @@ class MorpheusWebSocketServer:
             return None
         if method == "confirmTraining":
             b.confirm_training()
+            return None
+        if method == "answerTraining":
+            text = params.get("text")
+            if not text:
+                raise RequestError("INVALID_PARAMETER", "params.text is required")
+            b.answer_training(str(text))
+            return None
+        if method == "startGame":
+            game = params.get("game")
+            if not game:
+                raise RequestError("INVALID_PARAMETER", "params.game is required")
+            b.start_game(game)
+            return None
+        if method == "stopGame":
+            b.stop_game()
+            return None
+        if method == "pauseGame":
+            b.pause_game()
+            return None
+        if method == "confirmGame":
+            b.confirm_game()
+            return None
+        if method == "restartGame":
+            b.restart_game()
             return None
         if method == "startPairing":
             import protocol as proto

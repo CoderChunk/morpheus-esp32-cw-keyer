@@ -80,6 +80,18 @@ static uint8_t examCorrectCount = 0;
 static uint8_t examTotalCount = 0;
 static bool    examResultReady = false;
 
+// Which phase core_trainer_service() should land on once the in-flight
+// core_morseplayer playback finishes - set by whoever calls
+// startPlayback() (fresh round vs. a same-stage replay), so one shared
+// DRILL_PLAYING->? transition in core_trainer_service() serves every
+// mode without a mode switch there. See firstPhaseForMode().
+static DrillPhase phaseAfterPlayback = DRILL_LISTENING;
+
+// TRAIN_MODE_COMBINED's identification-stage result, consumed by
+// onTrainingCharDecoded() once the keying stage completes so the round
+// is only scored correct when BOTH stages are.
+static bool pendingIdentificationCorrect = false;
+
 static MorsePlayer farnsworthPlayer;
 static int  farnsworthEffectiveWpm = DEFAULT_FARNSWORTH_WPM;
 static bool farnsworthPlaying = false;
@@ -109,6 +121,8 @@ static void generateNextTarget() {
     case TRAIN_MODE_CHARACTERS:
     case TRAIN_MODE_ADAPTIVE:
     case TRAIN_MODE_EXAM:
+    case TRAIN_MODE_LISTENING:
+    case TRAIN_MODE_COMBINED:
     default:
       targetBuf[0] = FULL_CHARSET[random(0, FULL_CHARSET_LEN)];
       targetBuf[1] = '\0';
@@ -129,7 +143,18 @@ static void startPlayback() {
   phaseStartMs = millis();
 }
 
-static void advanceRound() { generateNextTarget(); startPlayback(); }
+// LISTENING/COMBINED rounds start with an identification stage instead
+// of going straight to the keyed-reply stage every other mode uses.
+static DrillPhase firstPhaseForMode(TrainMode m) {
+  return (m == TRAIN_MODE_LISTENING || m == TRAIN_MODE_COMBINED)
+    ? DRILL_AWAIT_ANSWER : DRILL_LISTENING;
+}
+
+static void advanceRound() {
+  generateNextTarget();
+  phaseAfterPlayback = firstPhaseForMode(currentMode);
+  startPlayback();
+}
 
 static void maybeLevelUpKoch() {
   if (kochRollingTotal < TRAIN_KOCH_WINDOW) return;
@@ -173,6 +198,11 @@ static void onTrainingCharDecoded(char decoded, const char *pattern) {
 
   char expected = targetBuf[targetPos];
   bool correct = (toupper((unsigned char)decoded) == toupper((unsigned char)expected));
+  // A COMBINED round only counts as a win when the earlier identification
+  // stage (core_trainer_submitAnswer(), gating into this keying stage -
+  // see firstPhaseForMode()) was ALSO right, so accuracy reflects both
+  // skills rather than just whichever one happens to run last.
+  if (currentMode == TRAIN_MODE_COMBINED) correct = correct && pendingIdentificationCorrect;
   totalCount++;
   if (correct) correctCount++;
   targetPos++;
@@ -216,10 +246,12 @@ void core_trainer_startSession(TrainMode mode) {
   kochRollingCorrect = 0; kochRollingTotal = 0;
   examCorrectCount = 0; examTotalCount = 0; examResultReady = false;
   adaptiveStreak = 0;
+  pendingIdentificationCorrect = false;
   if (mode == TRAIN_MODE_ADAPTIVE) adaptiveWpm = core_keyer_getWpm();
 
   core_decoder_setTrainingSink(onTrainingCharDecoded);
   generateNextTarget();
+  phaseAfterPlayback = firstPhaseForMode(mode);
   startPlayback();
 }
 
@@ -266,17 +298,65 @@ void core_trainer_confirmPressed() {
   switch (phase) {
     case DRILL_PLAYING:
       core_morseplayer_stop(player);
-      phase = DRILL_LISTENING;
+      phase = firstPhaseForMode(currentMode);
       phaseStartMs = millis();
       break;
     case DRILL_LISTENING:
-      startPlayback();   // replay
+      phaseAfterPlayback = DRILL_LISTENING;   // replay, stay in the keying stage
+      startPlayback();
+      break;
+    case DRILL_AWAIT_ANSWER:
+      phaseAfterPlayback = DRILL_AWAIT_ANSWER;   // replay, stay in the identification stage
+      startPlayback();
       break;
     case DRILL_FEEDBACK:
       advanceRound();
       break;
     default: break;
   }
+}
+
+// Identification answer for TRAIN_MODE_LISTENING/TRAIN_MODE_COMBINED -
+// the counterpart to onTrainingCharDecoded() for modes that test
+// recognition instead of (or before) keying. Both modes currently draw
+// single-character targets (generateNextTarget()), so `text` must be
+// exactly one letter/digit to match; anything else (empty, multi-char,
+// wrong stage) scores as incorrect rather than asserting, since a
+// mistyped or late client answer is an expected case, not a bug.
+static bool answerMatchesTarget(const char *text) {
+  if (text == nullptr || text[0] == '\0' || text[1] != '\0') return false;
+  return toupper((unsigned char)text[0]) == toupper((unsigned char)targetBuf[0]);
+}
+
+void core_trainer_submitAnswer(const char *text) {
+  if (!sessionActive || phase != DRILL_AWAIT_ANSWER) return;
+
+  bool correct = answerMatchesTarget(text);
+  strncpy(typedBuf, text != nullptr ? text : "", sizeof(typedBuf) - 1);
+  typedBuf[sizeof(typedBuf) - 1] = '\0';
+  typedLen = (uint8_t)strlen(typedBuf);
+
+  if (currentMode == TRAIN_MODE_COMBINED) {
+    // Identification alone doesn't end the round for COMBINED - it gates
+    // the keying stage that follows (onTrainingCharDecoded() reads this
+    // back once that stage resolves). The operator still gets sending
+    // practice every round, even after a wrong guess.
+    pendingIdentificationCorrect = correct;
+    if (statsHook != nullptr) statsHook(currentMode, correct);
+    targetPos = 0;
+    typedBuf[0] = '\0';
+    typedLen = 0;
+    phase = DRILL_LISTENING;
+    phaseStartMs = millis();
+    return;
+  }
+
+  // TRAIN_MODE_LISTENING: identification is the whole round.
+  totalCount++;
+  if (correct) correctCount++;
+  if (statsHook != nullptr) statsHook(currentMode, correct);
+  phase = DRILL_FEEDBACK;
+  phaseStartMs = millis();
 }
 
 uint8_t core_trainer_getKochLevel() { return kochLevel; }
@@ -342,7 +422,7 @@ void core_trainer_service(unsigned long now) {
     switch (phase) {
       case DRILL_PLAYING:
         core_morseplayer_service(player, now);
-        if (!core_morseplayer_isActive(player)) { phase = DRILL_LISTENING; phaseStartMs = now; }
+        if (!core_morseplayer_isActive(player)) { phase = phaseAfterPlayback; phaseStartMs = now; }
         break;
       case DRILL_FEEDBACK:
         if (now - phaseStartMs >= TRAIN_FEEDBACK_MS) advanceRound();

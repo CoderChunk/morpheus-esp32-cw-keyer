@@ -327,6 +327,23 @@ void transport_init() {
   );
   bleControlCmdChar->setCallbacks(new ControlCmdCallbacks());
 
+  // NOTIFY (not INDICATE - tried, see CHANGELOG v2.6.2): a bare NOTIFY is
+  // fire-and-forget at the ATT layer with zero delivery guarantee, and
+  // live BLE capture against real hardware confirmed it was intermittently
+  // losing the one-shot "active":false confirmation (~25-50% of the
+  // time), which is why Stop could appear to silently do nothing.
+  // Switching to INDICATE (acknowledged, host-retried) was tried first,
+  // but triggered a NimBLE-Arduino host-stack bug on this board: the
+  // BLE_GAP_EVENT_NOTIFY_TX status callback entered a runaway repeat loop
+  // (hundreds of thousands of identical events at the same millis()) -
+  // confirmed via a temporary onStatus() debug callback, then reverted.
+  // The reliability fix instead lives client-side: transport_sendControlEvent()
+  // is still a best-effort NOTIFY, but backend.py now does a guaranteed
+  // GATT READ of this characteristic right after every train_*/game_*
+  // command it sends - the underlying characteristic VALUE (set via
+  // setValue() below on every push, notify delivered or not) is always
+  // current, so a READ can never observe the same staleness a dropped
+  // NOTIFY does.
   bleControlEvtChar = pSvc->createCharacteristic(
       BLE_CONTROL_EVT_UUID,
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |

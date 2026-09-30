@@ -288,7 +288,16 @@ WORDS
 CALLSIGNS
 ADAPTIVE
 EXAM
+LISTENING
+COMBINED
 ```
+
+`LISTENING` is pure comprehension: the device plays a character and the
+round is decided entirely by `answerTraining()` (§8.2b) - no keying is
+involved. `COMBINED` requires both: an `answerTraining()` call first
+(identification), which gates into a keying stage using the same
+`keyDown()`/`keyUp()` path every other mode uses; the round only counts
+as correct when both stages are.
 
 ## 8.2 Training start/stop/control operations
 
@@ -299,6 +308,17 @@ confirmTraining()
 ```
 
 The backend must reject an invalid/unsupported mode with a structured error.
+
+## 8.2b Training identification answer (LISTENING/COMBINED only)
+
+```text
+answerTraining(text: string)
+```
+
+Only meaningful while `phase == "AWAIT_ANSWER"` (§8.3); a call at any
+other time is a silent no-op on the device side. `text` must be exactly
+one character to ever match - this mirrors the device's own targets for
+these two modes, which are always single characters.
 
 ## 8.3 Training live state
 
@@ -358,6 +378,58 @@ Training uses the same key operations as the virtual straight key:
 keyDown()
 keyUp()
 ```
+
+## 8.6 Device games (on-device ear training: COPY/MEMORY/SPEED)
+
+Three additional, device-authoritative sessions, mutually exclusive
+with Training (starting one while the other is active stops it first -
+same single-decoder-consumer rule as Training itself). Distinct from
+any client-owned/client-rendered game catalog, which remains out of
+scope (§18) - these three run their scoring and character selection on
+the device, exactly like Training does.
+
+```text
+GameId: COPY | MEMORY | SPEED
+startGame(game: GameId)
+stopGame()
+pauseGame()
+confirmGame()   // restarts the game once it's over
+restartGame()   // restarts the game immediately, any time
+```
+
+### GameState
+
+```text
+active: boolean
+game: GameId?
+paused: boolean
+phase: string        // per-game enum, see below
+highScore: integer
+```
+
+Per-game fields, present only for the matching `game`:
+
+- `COPY`: `target` (string, the falling character), `score` (integer),
+  `lives` (integer), `fallProgressPct` (integer, 0-100).
+  `phase`: `IDLE | FALLING | HIT | MISS | OVER`.
+- `MEMORY`: `chainLength` (integer), `inputProgress` (integer), `chain`
+  (string, the full echo-chain sequence so a client can play matching
+  audio locally - see the field-applicability note below).
+  `phase`: `IDLE | PLAYBACK | INPUT | ROUND_OK | OVER`.
+- `SPEED`: `combo` (integer), `lives` (integer), `beatRemainingMs`
+  (integer), `lastChar` (string), `wasLastCorrect` (boolean).
+  `phase`: `IDLE | LISTEN | FEEDBACK | OVER`.
+
+`target`/`chain`/`lastChar` are always present in the wire payload
+regardless of phase (including while the round is still "live" and
+unresolved) - same precedent as Training's `target` field. A UI must
+choose not to render them as visible text during the listening phase
+if it wants a genuine comprehension exercise; the field being present
+is for audio synthesis and post-round feedback, not an instruction to
+display it early.
+
+Input during these games is the same `keyDown()`/`keyUp()` virtual key
+used by Training and the straight key.
 
 The backend must associate these key events with the currently active training session when one exists.
 

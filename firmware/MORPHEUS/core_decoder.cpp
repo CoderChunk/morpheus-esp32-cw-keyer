@@ -169,7 +169,7 @@ static void finalizeCharacter() {
   charPattern[0] = '\0';
   charPatternLen = 0;
   charPending = false;
-  events_onPatternChanged(charPattern, millis());
+  if (trainingSink == nullptr) events_onPatternChanged(charPattern, millis());
 }
 
 static void finalizeWord() {
@@ -185,7 +185,7 @@ void core_decoder_addElement(ElementType type, unsigned long now, bool fromVirtu
     charPattern[charPatternLen++] = (type == ELEM_DIT) ? '.' : '-';
     charPattern[charPatternLen] = '\0';
   }
-  events_onPatternChanged(charPattern, now);
+  if (trainingSink == nullptr) events_onPatternChanged(charPattern, now);
   lastElementEndMs = now;
   lastElementWasVirtual = fromVirtualKey;
   charPending = true;

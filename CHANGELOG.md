@@ -8,6 +8,306 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
+## [v2.7.1] — Fix: Listening Audio Now Matches the Device's Real Keyer Speed
+
+v2.7.0 shipped client-side Morse audio synthesis for `LISTENING`/
+`COMBINED` training and the device games, but had no way to know the
+device's actual keyer speed - `Capabilities.settings` is still `false`,
+so it hardcoded 18 WPM (`config.h`'s `DEFAULT_WPM`), which could be
+audibly wrong (too fast or too slow) versus whatever the operator had
+actually set.
+
+### Added
+- **`"wpm"` field in `train_state` and `game_state`** (`ble_control.cpp`),
+  reporting `core_keyer_getWpm()` - the same base keyer speed
+  `startPlayback()` (training) and `copySpawnNext()`/`memoryPlayChain()`/
+  `spdSpawnBeat()` (the three device games) already derive their actual
+  playback dit length from. Present on every active session/game,
+  unconditionally, no new command needed - it rides along on state
+  pushes that were already happening.
+- `backend.py`: `wpm` on `TrainingState`/`GameState`, parsed in
+  `_handle_control_payload()`.
+- `morpheus_ui`: `wpm` on the Dart `TrainingState`/`GameState` models
+  (`lib/models/training_state.dart`, `lib/models/game_state.dart`).
+  `training_panel.dart`/`device_games_panel.dart` now call
+  `ditDurationForWpm(training.wpm ?? _kFallbackAudioWpm)` instead of a
+  flat constant - `_kFallbackAudioWpm` (still 18) only applies against
+  older firmware that doesn't send the field yet.
+- 4 new Dart tests (`test/wire_models_test.dart`) locking in the wire
+  contract: `wpm` parses when present, stays `null` against an
+  older-firmware-shaped payload missing the field.
+
+### Changed
+- `FIRMWARE_VERSION`: 2.7.0 → 2.7.1.
+
+---
+
+## [v2.7.0] — Feature: Listening Training, Combined Mode, and Device Ear-Training Games
+
+Every existing Training mode and client-owned game tested *sending*
+(key it, device decodes and scores it); comprehension - copying by ear
+alone - had no dedicated exercise anywhere in the app. This adds it at
+two levels: two new Training modes, and Flutter-side wiring for three
+on-device games that already existed in firmware but were never
+exposed to the app.
+
+### Added
+- **Two new Training modes: `LISTENING` and `COMBINED`**
+  (`core_trainer.h`/`.cpp`, `ble_control.cpp`). `LISTENING` is pure
+  comprehension - the device plays a character, phase moves to the new
+  `AWAIT_ANSWER`, and the round is decided entirely by the new
+  `train_answer` command (`core_trainer_submitAnswer()`), no keying at
+  all. `COMBINED` chains both skills: the same identification stage
+  gates into the existing keyed-reply path (`DRILL_LISTENING`), and a
+  round only counts as correct when both the identification and the
+  keyed reply were right (`pendingIdentificationCorrect` AND-gated into
+  `onTrainingCharDecoded()`). Covered by 7 new native tests in
+  `tests/native/test_core_trainer.cpp` exercising both modes' state
+  machine directly (correct/incorrect answers, replay-mid-identification,
+  the AND-gate, keyed input being ignored during `AWAIT_ANSWER`).
+- **`train_answer` BLE command** (`{"cmd":"train_answer","text":"K"}`) -
+  only meaningful while `phase == "AWAIT_ANSWER"`; a no-op otherwise.
+  Backend: `MorpheusBackend.answer_training()`; WS method `answerTraining`.
+- **Flutter wiring for the on-device COPY/MEMORY/SPEED games**
+  (`game_start`/`game_stop`/`game_pause`/`game_confirm`/`game_restart`,
+  `game_state` push) - this protocol already existed in firmware
+  (`core_games.cpp`) but had no client anywhere; `backend.py`/
+  `ws_server.py` never parsed `game_state` at all. Added `GameState`/
+  `GameId` end to end (backend.py, ws_server.py, `lib/models/game_state.dart`,
+  `MorpheusClient`/`WebSocketMorpheusClient`/`FakeMorpheusClient`,
+  `MorpheusSession.game`), and a new "Listening Arena" tab on the Games
+  page (`lib/widgets/device_games_panel.dart`) distinct from the
+  client-owned local arcade - these three are device-authoritative and
+  need a live connection, exactly like Training.
+- **Client-side Morse audio synthesis** (`lib/audio/morse_audio.dart`,
+  new `audioplayers` dependency) - real sidetone audio (600Hz sine,
+  correct dit/dah/gap timing) rendered through the computer's speakers
+  for every listening exercise (Training's `AWAIT_ANSWER`, and COPY's
+  FALLING / MEMORY's PLAYBACK / SPEED's LISTEN phases), not just the
+  device's own buzzer - useful when the operator isn't within earshot
+  of the physical device. WAV synthesis is a pure/testable function
+  (`synthesizeMorseWav`), covered by `test/morse_audio_test.dart`.
+- **`core_games_memory_getChain()`** (`core_games.h`/`.cpp`) and a new
+  `"chain"` field in `MEMORY`'s `game_state` JSON - the echo chain's
+  full character sequence was never exposed over BLE before (only
+  `chainLength`/`inputProgress`), so the client had no way to
+  synthesize matching audio for it locally.
+
+### Fixed
+- **`ble_control.cpp`: `train_state`'s `phase` field truncated
+  `"AWAIT_ANSWER"` to `"AWAIT_ANSWE"`.** `buildTrainStateJson()` copied
+  it into a local `char phaseStr[12]` - exactly 12 characters is one
+  too many for an 11-char-plus-NUL buffer, so `trainPhaseStr()`'s
+  `strncpy()` silently dropped the final "R". Caught by live
+  verification against real hardware after flashing v2.7.0 (not by the
+  native test suite - `ble_control.cpp` isn't natively testable, it
+  pulls in the full NimBLE stack); every other phase string was short
+  enough to fit, which is why nothing caught this earlier. Fixed by
+  bumping the buffer to 16 bytes.
+
+### Changed
+- `BLE_CONTROL_EVT_CAP` (`config.h`): 220 → 240 bytes - `MEMORY`'s new
+  `chain` field and `AWAIT_ANSWER` (longer than any previous phase
+  string) both grew the worst-case `game_state`/`train_state` JSON.
+- `FIRMWARE_VERSION`: 2.6.2 → 2.7.0.
+
+### Known issues / backlog
+- **Intermittent mis-keying of longer/mixed Morse patterns (e.g. "K"
+  `-.-`, "Y" `-.--`, "7" `--...`) observed during live verification,
+  via a one-off Python WebSocket test script driving `keyDown`/`keyUp`
+  with `asyncio.sleep`-timed gaps.** Reproduced on both the new
+  `COMBINED` mode's keying stage and on plain `KOCH` (untouched this
+  release) - same script, same intermittent failure mode - which rules
+  out a `LISTENING`/`COMBINED`-specific regression; the scoring logic
+  itself is independently covered by 7 deterministic native tests with
+  no timing involved at all (`tests/native/test_core_trainer.cpp`).
+  Working theory: BLE round-trip jitter between the `key_down` and
+  `key_up` writes' arrival at the firmware (each element's duration is
+  measured from the firmware's own `millis()` at write-arrival time,
+  in `ble_control.cpp`'s `handleKeyDown()`/`handleKeyUp()`) occasionally
+  pushes a short dit over the dit/dah classification threshold for
+  characters with several elements. Not yet confirmed against the real
+  Flutter app's keying path (`VirtualKey`/`backend.py`'s priority
+  queue), which orders writes more carefully than the raw test script
+  did and has tested reliably in prior live sessions. Flagged for a
+  later focused pass - reproduce against the actual Flutter UI (not a
+  synthetic script), and if real, investigate
+  `BLE_KEY_GAP_COMPENSATION_MS` (`config.h`) headroom or firmware-side
+  per-element duration tolerance.
+
+### Design notes
+- `target`/`chain`/`lastChar` are present in the wire payload
+  unconditionally, including mid-round before a human would "know" the
+  answer (same as every other mode's `target` field always was). The
+  protocol doesn't hide them - the Flutter UI does, by choosing not to
+  render them as text during the listening phase
+  (`_TargetCard.hideTarget` in `training_panel.dart`,
+  `hideTarget`/`visibleTarget` in `device_games_panel.dart`). This is
+  documented as an explicit contract in `WS_PROTOCOL.md` §6.3/§6.3a and
+  `MORPHEUS_BACKEND_API_REQUIREMENTS.md` §8.6, not an implicit
+  convention a future client could silently break.
+- Firmware-authoritative rather than Flutter-owned, unlike the
+  client-side games - this matches Training's existing "device is
+  authoritative for the current lesson and scoring" model instead of
+  the Games catalog's "Flutter owns it completely" model, since
+  `LISTENING`/`COMBINED` are new Training modes, and COPY/MEMORY/SPEED
+  were already firmware-owned games (just unwired).
+- No live WPM is exposed over the protocol yet (`Capabilities.settings`
+  is `false`), so synthesized audio uses a hardcoded 18 WPM
+  (`config.h`'s own `DEFAULT_WPM`) rather than whatever the operator's
+  keyer is actually set to - a real limitation until settings are wired
+  up, noted inline at both `_kListeningAudioWpm`/`_kDeviceGameAudioWpm`
+  call sites.
+
+---
+
+## [v2.6.2] — Fix: Stop Training Intermittently Had No Visible Effect
+
+Follow-up to v2.6.1. That fix addressed one real cause of "Stop doesn't
+work" (BLE_WORD_CHAR_UUID flooding during training), but live testing
+against real hardware - reproducing the user's exact WORDS session,
+including a background-keying stress test and a scripted 12-cycle
+start/stop loop - showed Stop could *still* silently do nothing. Root
+cause turned out to be two independent bugs, found and fixed in order:
+
+### Fixed
+- **`tools/ble_client/backend.py`: `train_stop`/`train_start`/
+  `train_confirm` could get stuck behind a backlog of `key_down`/
+  `key_up` writes.** All of these share one GATT characteristic
+  (`BLE_CONTROL_CMD_UUID`), and a held virtual key (paddle/straight key
+  in the Flutter UI) keeps writing to it continuously; with no explicit
+  ordering, concurrent asyncio tasks landed on the wire in whatever order
+  they happened to be scheduled. Fixed with a single `asyncio.PriorityQueue`
+  drained by one writer coroutine (`_command_writer`): control commands
+  always jump ahead of already-queued key events (capped at
+  `MAX_KEY_BACKLOG = 4`, beyond which excess key commands are dropped
+  rather than grown unbounded), and a 3s timeout around the one in-flight
+  `write_gatt_char` call turns a peripheral that never acks into a
+  reported error instead of a permanently wedged queue.
+- **The real remaining cause, found via direct serial capture against
+  the physical device: `sendAck()` and the periodic train_state/
+  game_state push both write the same `BLE_CONTROL_EVT_UUID`
+  characteristic value, from two different FreeRTOS tasks** (the NimBLE
+  host task processing the incoming command vs. the main `loop()` task's
+  `ble_control_service()`). Whichever writes *last* wins the
+  characteristic's value - confirmed live that `sendAck("train_stop",...)`
+  could race ahead of the state push and leave the characteristic holding
+  a stale `{"evt":"ack",...}` instead of `{"active":false}`, with nothing
+  to correct it since the state itself had already settled and wouldn't
+  naturally change again. `ble_control.cpp` now calls a new
+  `forceTrainStatePush()`/`forceGameStatePush()` immediately after every
+  train_*/game_* `sendAck()`, guaranteeing the state push is always the
+  last write for that command, bypassing the periodic pushes'
+  dedup/rate-limit (a real user command isn't the high-frequency case
+  that limiter exists for).
+- **Defense in depth:** `backend.py` now also does a guaranteed GATT
+  *read* of `BLE_CONTROL_EVT_UUID` ~300ms after every train_*/game_*
+  write, independent of whether the corresponding NOTIFY was delivered -
+  the characteristic's underlying value is always current once the above
+  ordering fix lands, so a plain read can never observe the staleness a
+  dropped NOTIFY does. This is the backstop, not the primary fix - BLE
+  Notify has no delivery guarantee at the protocol level, confirmed via
+  live capture that it was intermittently (~25-50% of the time) losing
+  the training-stopped confirmation even when the firmware sent it
+  correctly.
+
+### Tried and reverted
+- Switching `BLE_CONTROL_EVT_UUID` from NOTIFY to INDICATE (acknowledged,
+  host-retried delivery) was tried first as the fix for BLE's
+  no-delivery-guarantee problem. It triggered a NimBLE-Arduino host-stack
+  issue on this board - `BLE_GAP_EVENT_NOTIFY_TX`'s status callback
+  entered a runaway repeat loop under our usage pattern - so it was
+  reverted back to NOTIFY in favor of the read-back approach above.
+
+---
+
+## [v2.6.1] — Fix: Stop Training/Game Ignored Mid-Round
+
+### Fixed
+- **`train_stop`/`game_stop` could go unanswered while the user was mid-word
+  (WORDS/CALLSIGNS training) or mid-chain (fast-paced games).** Root cause:
+  `events_onPatternChanged()` (added in v2.6.0) fired its BLE notify on
+  *every* keyed element and character finalize unconditionally, including
+  while a training/game session had the decoder's training sink installed.
+  During a multi-character WORDS round this produced a sustained burst of
+  notifications on `BLE_WORD_CHAR_UUID`, which could starve the
+  `BLE_CONTROL_CMD_UUID` write carrying the stop command until the round's
+  keying paused — so Stop appeared to do nothing until the user finished
+  the word.
+- `core_decoder.cpp`: both call sites of `events_onPatternChanged()`
+  (`finalizeCharacter()`, `core_decoder_addElement()`) are now suppressed
+  whenever a training sink is set, mirroring the existing suppression of
+  `events_onCharacterComplete()`/word-buffer updates during training.
+
+### Changed
+- `morpheus_ui`: Training panel's live-session Stop button no longer
+  stretches to match the virtual-key card's full height — it now sits at a
+  normal 44px height, centered inside its own card.
+
+---
+
+## [v2.6.0] — Live Dit/Dah Pattern Over BLE
+
+### Added
+- **BLE now also carries the live in-progress dit/dah pattern**, the
+  same thing the OLED's header readout already showed locally
+  (`ui_backend_getLivePattern()`). New `events_onPatternChanged()` hook
+  in `core_decoder.h`, fired from `core_decoder_addElement()` (one new
+  element keyed) and from `finalizeCharacter()` (character finalized,
+  pattern cleared) - same push-based approach as v2.5.0's live-word
+  event, just one granularity finer. `MORPHEUS.ino` wires it to the new
+  `transport_notifyLivePattern()`, sharing `BLE_WORD_CHAR_UUID` again,
+  this time under JSON key `"pat"`.
+  - Firmware: `core_decoder.h/.cpp`, `MORPHEUS.ino`, `transport.h/.cpp`
+  - Python bridge: `backend.py` (`LivePatternEvent`,
+    `on_keyer_live_pattern`), `ws_server.py`
+    (`keyerLivePatternReceived` event), `WS_PROTOCOL.md`,
+    `MOBILE_BLE_PROTOCOL.md`
+  - Flutter: `livePatternEvents` stream on `MorpheusClient`, a
+    `showLivePattern` toggle (session-only, not persisted) and a
+    live pattern readout docked into the CW Keyer page's metrics row,
+    plus an animated VU-meter-style waveform that pulses while a
+    pattern is being keyed
+  - Fires once per keyed element - the most frequent of the three
+    telemetry events, but still only every 30-60ms even at rapid 40 WPM
+    dits, well inside a BLE connection interval.
+
+---
+
+## [v2.5.0] — Live Character Decode Over BLE
+
+### Added
+- **BLE now carries live, in-progress character decode**, closing a gap
+  left by v2.4.0's OLED live-decode work: the OLED redesign only ever
+  touched the local Home screen - BLE, the Python bridge, and the
+  Flutter app still only ever saw a complete word once flushed on a
+  word-gap. `events_onCharacterComplete()` (`MORPHEUS.ino`) now also
+  calls `transport_notifyLiveWord()`, sending the whole in-progress
+  word (not just the new character) over the existing
+  `BLE_WORD_CHAR_UUID` notify characteristic, distinguished from the
+  final-word event by JSON key (`"live"` vs `"word"`) rather than a new
+  UUID - so a coalesced/dropped intermediate notification is harmless,
+  the last one received always reflects full current state.
+  `core_decoder.cpp`'s `finalizeCharacter()` now appends to `wordBuffer`
+  *before* firing the character-complete event, so the live payload
+  already includes the just-decoded character.
+  - Firmware: `transport.h/.cpp`, `core_decoder.cpp`, `MORPHEUS.ino`
+  - Python bridge: `protocol.py` (n/a, same UUID), `backend.py`
+    (`LiveWordEvent`, `on_keyer_live_word`), `ws_server.py`
+    (`keyerLiveWordReceived` event), `WS_PROTOCOL.md`
+  - Flutter: `KeyerWordEvent`-shaped `liveWordEvents` stream on
+    `MorpheusClient`/`WebSocketMorpheusClient`, `MorpheusSession.liveWord`,
+    Home screen's live console display
+  - Not yet implemented in `MOBILE_BLE_PROTOCOL.md`'s direct-GATT path
+    (mobile client doesn't exist yet)
+  - At typical/worst-case keying speed (30-40 WPM), live notifications
+    fire at most every 120-160ms with a <80 byte payload - well within
+    a single BLE connection interval, no coalescing risk (the earlier
+    OLED-dump coalescing bug happened at microsecond-scale bursts,
+    ~1000x faster than character-decode timing).
+
+---
+
 ## [v2.4.0] — Live Decode Display, OLED Debug Tooling & Keyer Test Coverage
 
 ### Added

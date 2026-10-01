@@ -222,6 +222,143 @@ static void test_confirm_pressed_feedback_transition_unaffected_by_exam_check() 
   CHECK(core_trainer_getPhase() == DRILL_PLAYING);
 }
 
+// ----------------------------------------------------------------------------
+// TRAIN_MODE_LISTENING - pure comprehension, no keying involved at all.
+// ----------------------------------------------------------------------------
+
+static void test_listening_correct_answer_scores_and_advances() {
+  resetForTest("listening_correct_answer_scores_and_advances");
+
+  core_trainer_startSession(TRAIN_MODE_LISTENING);
+  core_trainer_service(g_millis);   // drive PLAYING -> AWAIT_ANSWER
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+
+  const char *target = core_trainer_getTargetText();
+  char answer[2] = { target[0], '\0' };
+  core_trainer_submitAnswer(answer);
+
+  CHECK(core_trainer_getPhase() == DRILL_FEEDBACK);
+  CHECK(core_trainer_getCorrectCount() == 1);
+  CHECK(core_trainer_getTotalCount() == 1);
+
+  core_trainer_confirmPressed();   // FEEDBACK -> advanceRound()
+  CHECK(core_trainer_getPhase() == DRILL_PLAYING);
+}
+
+static void test_listening_wrong_answer_scores_incorrect() {
+  resetForTest("listening_wrong_answer_scores_incorrect");
+
+  core_trainer_startSession(TRAIN_MODE_LISTENING);
+  core_trainer_service(g_millis);
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+
+  const char *target = core_trainer_getTargetText();
+  char wrong = (target[0] == 'A') ? 'B' : 'A';
+  char answer[2] = { wrong, '\0' };
+  core_trainer_submitAnswer(answer);
+
+  CHECK(core_trainer_getPhase() == DRILL_FEEDBACK);
+  CHECK(core_trainer_getCorrectCount() == 0);
+  CHECK(core_trainer_getTotalCount() == 1);
+}
+
+// Keying should never score a LISTENING round - onTrainingCharDecoded()'s
+// `phase != DRILL_LISTENING` guard must reject it since LISTENING never
+// visits that phase (firstPhaseForMode() routes it to AWAIT_ANSWER).
+static void test_listening_ignores_keyed_input() {
+  resetForTest("listening_ignores_keyed_input");
+
+  core_trainer_startSession(TRAIN_MODE_LISTENING);
+  CHECK(g_capturedSink != nullptr);
+  core_trainer_service(g_millis);
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+
+  const char *target = core_trainer_getTargetText();
+  g_capturedSink(target[0], "?");   // simulated keyed reply - must be ignored
+
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+  CHECK(core_trainer_getTotalCount() == 0);
+}
+
+// A multi-character submission can't be a valid answer (both LISTENING
+// and COMBINED only ever generate single-character targets) - must
+// score incorrect, not crash on targetBuf[1] access.
+static void test_listening_rejects_multi_character_answer() {
+  resetForTest("listening_rejects_multi_character_answer");
+
+  core_trainer_startSession(TRAIN_MODE_LISTENING);
+  core_trainer_service(g_millis);
+
+  core_trainer_submitAnswer("AB");
+
+  CHECK(core_trainer_getPhase() == DRILL_FEEDBACK);
+  CHECK(core_trainer_getCorrectCount() == 0);
+  CHECK(core_trainer_getTotalCount() == 1);
+}
+
+// Replaying mid-identification (confirmPressed() during DRILL_AWAIT_ANSWER)
+// must land back on DRILL_AWAIT_ANSWER, not fall through to the keying
+// stage - regression guard for phaseAfterPlayback being set wrong.
+static void test_listening_replay_returns_to_await_answer() {
+  resetForTest("listening_replay_returns_to_await_answer");
+
+  core_trainer_startSession(TRAIN_MODE_LISTENING);
+  core_trainer_service(g_millis);
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+
+  core_trainer_confirmPressed();       // replay
+  CHECK(core_trainer_getPhase() == DRILL_PLAYING);
+  core_trainer_service(g_millis);      // playback "finishes" instantly in this harness
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+}
+
+// ----------------------------------------------------------------------------
+// TRAIN_MODE_COMBINED - identification gates into a keying stage; the
+// round only counts as correct when BOTH are right.
+// ----------------------------------------------------------------------------
+
+static void test_combined_both_stages_correct_scores_correct() {
+  resetForTest("combined_both_stages_correct_scores_correct");
+
+  core_trainer_startSession(TRAIN_MODE_COMBINED);
+  CHECK(g_capturedSink != nullptr);
+  core_trainer_service(g_millis);
+  CHECK(core_trainer_getPhase() == DRILL_AWAIT_ANSWER);
+
+  const char *target = core_trainer_getTargetText();
+  char answer[2] = { target[0], '\0' };
+  core_trainer_submitAnswer(answer);
+  CHECK(core_trainer_getPhase() == DRILL_LISTENING);   // now requires keying too
+
+  g_capturedSink(target[0], "?");
+
+  CHECK(core_trainer_getPhase() == DRILL_FEEDBACK);
+  CHECK(core_trainer_getCorrectCount() == 1);
+  CHECK(core_trainer_getTotalCount() == 1);
+}
+
+// Wrong identification still requires the keying stage (sending practice
+// every round), but the round must score incorrect even if the keyed
+// reply itself was right - the AND-gate in onTrainingCharDecoded().
+static void test_combined_wrong_identification_still_requires_keying_but_scores_incorrect() {
+  resetForTest("combined_wrong_identification_still_requires_keying_but_scores_incorrect");
+
+  core_trainer_startSession(TRAIN_MODE_COMBINED);
+  core_trainer_service(g_millis);
+
+  const char *target = core_trainer_getTargetText();
+  char wrong = (target[0] == 'A') ? 'B' : 'A';
+  char answer[2] = { wrong, '\0' };
+  core_trainer_submitAnswer(answer);
+  CHECK(core_trainer_getPhase() == DRILL_LISTENING);
+
+  g_capturedSink(target[0], "?");   // keyed reply IS correct
+
+  CHECK(core_trainer_getPhase() == DRILL_FEEDBACK);
+  CHECK(core_trainer_getCorrectCount() == 0);   // still incorrect - identification failed
+  CHECK(core_trainer_getTotalCount() == 1);
+}
+
 int main() {
   test_exam_completion_marks_result_ready_with_correct_score();
   test_exam_completion_below_pass_threshold();
@@ -229,6 +366,13 @@ int main() {
   test_stop_session_clears_exam_result_too();
   test_confirm_pressed_is_noop_when_fully_idle();
   test_confirm_pressed_feedback_transition_unaffected_by_exam_check();
+  test_listening_correct_answer_scores_and_advances();
+  test_listening_wrong_answer_scores_incorrect();
+  test_listening_ignores_keyed_input();
+  test_listening_rejects_multi_character_answer();
+  test_listening_replay_returns_to_await_answer();
+  test_combined_both_stages_correct_scores_correct();
+  test_combined_wrong_identification_still_requires_keying_but_scores_incorrect();
 
   if (g_failures == 0) {
     std::printf("OK - all native trainer tests passed\n");

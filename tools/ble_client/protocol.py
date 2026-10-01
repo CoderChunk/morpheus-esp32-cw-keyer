@@ -12,7 +12,10 @@ CONTROL_EVT_UUID = "7a48a2b0-0004-4ad4-9f1a-1c2d3e4f5a6b"
 
 SCAN_TIMEOUT_S = 10.0
 
-TRAIN_MODES = ["KOCH", "CHARACTERS", "WORDS", "CALLSIGNS", "ADAPTIVE", "EXAM"]
+TRAIN_MODES = [
+    "KOCH", "CHARACTERS", "WORDS", "CALLSIGNS", "ADAPTIVE", "EXAM",
+    "LISTENING", "COMBINED",
+]
 GAMES = ["COPY", "MEMORY", "SPEED"]
 
 TRAIN_MODE_LABELS = {
@@ -22,6 +25,8 @@ TRAIN_MODE_LABELS = {
     "CALLSIGNS": "Callsigns",
     "ADAPTIVE": "Adaptive",
     "EXAM": "Exam",
+    "LISTENING": "Listening",
+    "COMBINED": "Combined",
 }
 
 TRAIN_MODE_DESCRIPTIONS = {
@@ -32,6 +37,10 @@ TRAIN_MODE_DESCRIPTIONS = {
     "CALLSIGNS": "Copy amateur radio callsigns.",
     "ADAPTIVE": "Speed automatically adjusts to your accuracy.",
     "EXAM": "A timed, graded copy test with a pass/fail result.",
+    "LISTENING": "Pure ear training - identify the character the device "
+                 "played, no keying required.",
+    "COMBINED": "Identify what you hear, then key it back - one round "
+                "tests both comprehension and sending.",
 }
 
 # Exact copy of firmware/MORPHEUS/core_trainer.cpp's KOCH_ORDER - the

@@ -403,6 +403,7 @@ MemGamePhase core_games_memory_getPhase()          { return memPhase; }
 uint8_t      core_games_memory_getChainLength()    { return memChainLen; }
 uint8_t      core_games_memory_getInputProgress()  { return memInputPos; }
 uint8_t      core_games_memory_getHighScore()      { return scores.memoryHigh; }
+const char  *core_games_memory_getChain()          { return memChain; }
 
 SpeedGamePhase core_games_speed_getPhase()       { return spdPhase; }
 uint16_t core_games_speed_getCombo()             { return spdCombo; }

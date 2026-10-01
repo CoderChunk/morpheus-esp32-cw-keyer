@@ -48,6 +48,15 @@ void events_onCharacterComplete(char decodedChar, const char *pattern) {
   services_logCharacterComplete(decodedChar, pattern);
 #endif
   core_stats_notifyCharKeyed();
+#if FEATURE_BLE
+  transport_notifyLiveWord(core_decoder_getWordBuffer(), core_keyer_getWpm(), core_keyer_getMode(), millis());
+#endif
+}
+
+void events_onPatternChanged(const char *pattern, unsigned long now) {
+#if FEATURE_BLE
+  transport_notifyLivePattern(pattern, now);
+#endif
 }
 
 void events_onWordComplete(const char *word, unsigned long now) {

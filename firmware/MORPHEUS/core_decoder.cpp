@@ -159,13 +159,17 @@ static void finalizeCharacter() {
     trainingSink(decoded, charPattern);
     // Training active: word buffer/normal events deliberately untouched.
   } else {
-    events_onCharacterComplete(decoded, charPattern);
+    // Append before firing the event: events_onCharacterComplete() (and
+    // its BLE live-word notify) reads core_decoder_getWordBuffer(), which
+    // must already include this character.
     if (wordLen < MAX_WORD_LEN - 1) { wordBuffer[wordLen++] = decoded; wordBuffer[wordLen] = '\0'; }
+    events_onCharacterComplete(decoded, charPattern);
   }
 
   charPattern[0] = '\0';
   charPatternLen = 0;
   charPending = false;
+  if (trainingSink == nullptr) events_onPatternChanged(charPattern, millis());
 }
 
 static void finalizeWord() {
@@ -181,6 +185,7 @@ void core_decoder_addElement(ElementType type, unsigned long now, bool fromVirtu
     charPattern[charPatternLen++] = (type == ELEM_DIT) ? '.' : '-';
     charPattern[charPatternLen] = '\0';
   }
+  if (trainingSink == nullptr) events_onPatternChanged(charPattern, now);
   lastElementEndMs = now;
   lastElementWasVirtual = fromVirtualKey;
   charPending = true;

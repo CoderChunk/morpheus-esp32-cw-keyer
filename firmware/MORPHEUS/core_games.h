@@ -26,6 +26,13 @@ MemGamePhase core_games_memory_getPhase();
 uint8_t      core_games_memory_getChainLength();
 uint8_t      core_games_memory_getInputProgress();
 uint8_t      core_games_memory_getHighScore();
+// Exposes the full chain so a BLE client can synthesize matching audio
+// locally instead of relying solely on the device's own buzzer - same
+// "already-always-revealed" precedent as core_games_copy_getFallingChar()/
+// core_games_speed_getLastChar() (see ble_control.cpp's buildGameStateJson()).
+// A client UI must still withhold it as visible text during MEM_PLAYBACK/
+// MEM_INPUT; the field being present doesn't mean it should be printed.
+const char  *core_games_memory_getChain();
 
 enum SpeedGamePhase : uint8_t { SPD_IDLE, SPD_LISTEN, SPD_FEEDBACK, SPD_OVER };
 SpeedGamePhase core_games_speed_getPhase();

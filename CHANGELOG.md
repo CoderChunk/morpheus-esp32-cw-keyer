@@ -8,6 +8,40 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 
 ---
 
+## [v2.7.1] — Fix: Listening Audio Now Matches the Device's Real Keyer Speed
+
+v2.7.0 shipped client-side Morse audio synthesis for `LISTENING`/
+`COMBINED` training and the device games, but had no way to know the
+device's actual keyer speed - `Capabilities.settings` is still `false`,
+so it hardcoded 18 WPM (`config.h`'s `DEFAULT_WPM`), which could be
+audibly wrong (too fast or too slow) versus whatever the operator had
+actually set.
+
+### Added
+- **`"wpm"` field in `train_state` and `game_state`** (`ble_control.cpp`),
+  reporting `core_keyer_getWpm()` - the same base keyer speed
+  `startPlayback()` (training) and `copySpawnNext()`/`memoryPlayChain()`/
+  `spdSpawnBeat()` (the three device games) already derive their actual
+  playback dit length from. Present on every active session/game,
+  unconditionally, no new command needed - it rides along on state
+  pushes that were already happening.
+- `backend.py`: `wpm` on `TrainingState`/`GameState`, parsed in
+  `_handle_control_payload()`.
+- `morpheus_ui`: `wpm` on the Dart `TrainingState`/`GameState` models
+  (`lib/models/training_state.dart`, `lib/models/game_state.dart`).
+  `training_panel.dart`/`device_games_panel.dart` now call
+  `ditDurationForWpm(training.wpm ?? _kFallbackAudioWpm)` instead of a
+  flat constant - `_kFallbackAudioWpm` (still 18) only applies against
+  older firmware that doesn't send the field yet.
+- 4 new Dart tests (`test/wire_models_test.dart`) locking in the wire
+  contract: `wpm` parses when present, stays `null` against an
+  older-firmware-shaped payload missing the field.
+
+### Changed
+- `FIRMWARE_VERSION`: 2.7.0 → 2.7.1.
+
+---
+
 ## [v2.7.0] — Feature: Listening Training, Combined Mode, and Device Ear-Training Games
 
 Every existing Training mode and client-owned game tested *sending*

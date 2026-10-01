@@ -335,6 +335,7 @@ correct: integer
 attempts: integer
 kochLevel: integer?
 adaptiveWpm: integer?
+wpm: integer?
 examScorePercent: integer?
 examPassed: boolean?
 examCorrectCount: integer?
@@ -348,6 +349,12 @@ examTotalCount: integer?
 `kochLevel` applies to `KOCH`.
 
 `adaptiveWpm` applies to `ADAPTIVE`.
+
+`wpm` (since firmware v2.7.1) applies to every mode - the base keyer
+speed (`core_keyer_getWpm()`) that every mode except `ADAPTIVE`
+actually plays `target` at. Lets a client synthesize its own listening
+audio matched to the device's real speed instead of assuming a fixed
+one.
 
 The following apply when an exam has finished:
 
@@ -405,6 +412,8 @@ game: GameId?
 paused: boolean
 phase: string        // per-game enum, see below
 highScore: integer
+wpm: integer?        // since firmware v2.7.1 - same base keyer speed as
+                      // TrainingState.wpm, present for all three games
 ```
 
 Per-game fields, present only for the matching `game`:

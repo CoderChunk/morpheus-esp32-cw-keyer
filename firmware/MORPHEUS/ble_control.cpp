@@ -384,13 +384,21 @@ static void buildTrainStateJson(char *out, size_t outSize) {
 
   snprintf(out, outSize,
     "{\"evt\":\"train_state\",\"active\":true,\"mode\":\"%s\",\"phase\":\"%s\",\"target\":\"%s\","
-    "\"kochLevel\":%u,\"correct\":%lu,\"attempts\":%lu,\"adaptiveWpm\":%d,"
+    "\"kochLevel\":%u,\"correct\":%lu,\"attempts\":%lu,\"adaptiveWpm\":%d,\"wpm\":%d,"
     "\"examScorePercent\":%u,\"examPassed\":%s,\"examCorrect\":%u,\"examTotal\":%u}",
     modeStr, phaseStr, target,
     (unsigned)core_trainer_getKochLevel(),
     (unsigned long)core_trainer_getCorrectCount(),
     (unsigned long)core_trainer_getTotalCount(),
     core_trainer_getAdaptiveWpm(),
+    // The base keyer WPM (core_keyer_getWpm()) - what startPlayback()
+    // actually derives its dit length from for every mode except
+    // ADAPTIVE (which uses adaptiveWpm above instead). A client needs
+    // this to synthesize locally-played listening audio that matches
+    // the device's own timing instead of guessing a fixed speed - see
+    // MorpheusSession.wpm / the removal of the hardcoded
+    // _kListeningAudioWpm/_kDeviceGameAudioWpm constants in morpheus_ui.
+    core_keyer_getWpm(),
     (unsigned)core_trainer_getExamScorePercent(),
     core_trainer_getExamPassed() ? "true" : "false",
     (unsigned)core_trainer_getExamCorrectCount(),
@@ -418,10 +426,11 @@ static void buildGameStateJson(char *out, size_t outSize, unsigned long now) {
     char targetBuf[2] = { core_games_copy_getFallingChar(), '\0' };
     snprintf(out, outSize,
       "{\"evt\":\"game_state\",\"game\":\"COPY\",\"active\":true,\"paused\":%s,\"phase\":\"%s\","
-      "\"target\":\"%s\",\"score\":%u,\"lives\":%u,\"highScore\":%u,\"fallProgressPct\":%u}",
+      "\"target\":\"%s\",\"score\":%u,\"lives\":%u,\"highScore\":%u,\"fallProgressPct\":%u,\"wpm\":%d}",
       paused ? "true" : "false", phaseStr, targetBuf,
       (unsigned)core_games_copy_getScore(), (unsigned)core_games_copy_getLives(),
-      (unsigned)core_games_copy_getHighScore(), (unsigned)core_games_copy_getFallProgressPct(now));
+      (unsigned)core_games_copy_getHighScore(), (unsigned)core_games_copy_getFallProgressPct(now),
+      core_keyer_getWpm());
     return;
   }
 
@@ -437,10 +446,11 @@ static void buildGameStateJson(char *out, size_t outSize, unsigned long now) {
     }
     snprintf(out, outSize,
       "{\"evt\":\"game_state\",\"game\":\"MEMORY\",\"active\":true,\"paused\":%s,\"phase\":\"%s\","
-      "\"chainLength\":%u,\"inputProgress\":%u,\"highScore\":%u,\"chain\":\"%s\"}",
+      "\"chainLength\":%u,\"inputProgress\":%u,\"highScore\":%u,\"chain\":\"%s\",\"wpm\":%d}",
       paused ? "true" : "false", phaseStr,
       (unsigned)core_games_memory_getChainLength(), (unsigned)core_games_memory_getInputProgress(),
-      (unsigned)core_games_memory_getHighScore(), core_games_memory_getChain());
+      (unsigned)core_games_memory_getHighScore(), core_games_memory_getChain(),
+      core_keyer_getWpm());
     return;
   }
 
@@ -456,11 +466,13 @@ static void buildGameStateJson(char *out, size_t outSize, unsigned long now) {
     char lastCharBuf[2] = { core_games_speed_getLastChar(), '\0' };
     snprintf(out, outSize,
       "{\"evt\":\"game_state\",\"game\":\"SPEED\",\"active\":true,\"paused\":%s,\"phase\":\"%s\","
-      "\"combo\":%u,\"lives\":%u,\"highScore\":%u,\"beatRemainingMs\":%lu,\"lastChar\":\"%s\",\"wasLastCorrect\":%s}",
+      "\"combo\":%u,\"lives\":%u,\"highScore\":%u,\"beatRemainingMs\":%lu,\"lastChar\":\"%s\",\"wasLastCorrect\":%s,"
+      "\"wpm\":%d}",
       paused ? "true" : "false", phaseStr,
       (unsigned)core_games_speed_getCombo(), (unsigned)core_games_speed_getLives(),
       (unsigned)core_games_speed_getHighScore(), core_games_speed_getBeatRemainingMs(now),
-      lastCharBuf, core_games_speed_wasLastCorrect() ? "true" : "false");
+      lastCharBuf, core_games_speed_wasLastCorrect() ? "true" : "false",
+      core_keyer_getWpm());
     return;
   }
 

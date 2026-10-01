@@ -240,7 +240,7 @@ telemetry events — at worst case (rapid dits at 40 WPM) roughly every
 {
   "active": boolean, "mode": "KOCH|CHARACTERS|WORDS|CALLSIGNS|ADAPTIVE|EXAM|LISTENING|COMBINED"?,
   "phase": string?, "target": string?, "correct": integer, "attempts": integer,
-  "kochLevel": integer?, "adaptiveWpm": integer?,
+  "kochLevel": integer?, "adaptiveWpm": integer?, "wpm": integer?,
   "examScorePercent": integer?, "examPassed": boolean?,
   "examCorrectCount": integer?, "examTotalCount": integer?
 }
@@ -249,6 +249,14 @@ telemetry events — at worst case (rapid dits at 40 WPM) roughly every
 `kochLevel` only meaningful for `KOCH`; `adaptiveWpm` only for
 `ADAPTIVE`; the four `exam*` fields only once an `EXAM` session has
 finished (`examTotalCount` is always `25` when present).
+
+`wpm` (since firmware v2.7.1) is the base keyer speed
+(`core_keyer_getWpm()`) - what every mode except `ADAPTIVE` actually
+plays `target` at (`ADAPTIVE` uses `adaptiveWpm` instead). Present for
+every active mode, always. A client synthesizing its own listening
+audio (e.g. so an operator not next to the device can still hear it)
+should use this to compute element timing (`1200 / wpm` ms per dit)
+rather than assuming a fixed speed.
 
 `phase` includes `"AWAIT_ANSWER"` for `LISTENING`/`COMBINED` rounds —
 the device has played `target` and is waiting for `answerTraining`
@@ -279,9 +287,14 @@ catalog, which remains out of scope for this protocol (§9).
   "phase": string?, "highScore": integer,
   "target": string?, "score": integer?, "lives": integer?, "fallProgressPct": integer?,
   "chainLength": integer?, "inputProgress": integer?, "chain": string?,
-  "combo": integer?, "beatRemainingMs": integer?, "lastChar": string?, "wasLastCorrect": boolean?
+  "combo": integer?, "beatRemainingMs": integer?, "lastChar": string?, "wasLastCorrect": boolean?,
+  "wpm": integer?
 }
 ```
+
+`wpm` (since firmware v2.7.1) is the same base keyer speed as
+`TrainingState.wpm` (§6.3) - present for every active game, all three
+of which play their target character(s) at this speed.
 
 Only the fields for the active `game` are meaningful:
 

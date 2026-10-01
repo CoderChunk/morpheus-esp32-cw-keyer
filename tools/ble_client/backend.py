@@ -160,6 +160,11 @@ class TrainingState:
     attempts: int = 0
     kochLevel: Optional[int] = None
     adaptiveWpm: Optional[int] = None
+    # The base keyer WPM (core_keyer_getWpm()) - what every mode except
+    # ADAPTIVE actually plays targets at. Lets a client synthesize
+    # listening audio that matches the device's real speed instead of
+    # guessing a fixed one (see MORPHEUS_BACKEND_API_REQUIREMENTS.md §8.3).
+    wpm: Optional[int] = None
     examScorePercent: Optional[int] = None
     examPassed: Optional[bool] = None
     examCorrectCount: Optional[int] = None
@@ -187,6 +192,9 @@ class GameState:
     beatRemainingMs: Optional[int] = None
     lastChar: Optional[str] = None
     wasLastCorrect: Optional[bool] = None
+    # Same as TrainingState.wpm - the base keyer WPM these games' target
+    # characters are actually played at.
+    wpm: Optional[int] = None
 
 
 @dataclass
@@ -746,6 +754,7 @@ class MorpheusBackend:
                 attempts=int(payload.get("attempts", 0)),
                 kochLevel=payload.get("kochLevel"),
                 adaptiveWpm=payload.get("adaptiveWpm"),
+                wpm=payload.get("wpm"),
                 examScorePercent=payload.get("examScorePercent"),
                 examPassed=payload.get("examPassed"),
                 examCorrectCount=payload.get("examCorrect"),
@@ -769,6 +778,7 @@ class MorpheusBackend:
                 beatRemainingMs=payload.get("beatRemainingMs"),
                 lastChar=payload.get("lastChar"),
                 wasLastCorrect=payload.get("wasLastCorrect"),
+                wpm=payload.get("wpm"),
             ))
         elif evt == "error":
             self._emit_error(BackendError(code=ErrorCode.TRAINING_START_FAILED.value,

@@ -129,6 +129,7 @@ everything.
 | `startPairing` | `{ "targetDeviceName": string? }` | `null` | defaults to the device name in `protocol.py` |
 | `submitPasskey` | `{ "passkey": string }` | `null` | 6 numeric digits |
 | `confirmPairing` | `{ "accepted": boolean }` | `null` | |
+| `requestDeviceInfo` | `{}` | `null` | fire-and-forget, same as the commands above — result arrives as a `deviceInfoChanged` event (§5, §6.7). Unlike `getSnapshot`, this **is** a real BLE round trip |
 | `getSnapshot` | `{}` | `Snapshot` (§4.1) | call once right after connecting |
 | `getMorseTable` | `{}` | `{ "table": {char: pattern}, "reverse": {pattern: char} }` | §7 |
 | `getKochSequence` | `{}` | `{ "sequence": string }` | the 40-char Koch order |
@@ -174,6 +175,7 @@ no BLE round trip.
 | `trainingStateChanged` | `TrainingState` (§6.3) | training state changes |
 | `gameStateChanged` | `GameState` (§6.3a) | a device game's (`COPY`/`MEMORY`/`SPEED`) state changes |
 | `pairingStateChanged` | `PairingEvent` (§6.4) | pairing flow progresses |
+| `deviceInfoChanged` | `DeviceInfo` (§6.7) | a `requestDeviceInfo` round trip completes |
 | `backendError` | `BackendError` (§6.5) | any operation fails |
 
 ## 6. Data shapes
@@ -362,6 +364,31 @@ machine right now (checked live, not hardcoded by platform). Every
 `false` flag is a section with no BLE support yet — see
 `UI_SPECIFICATION.md` for what those sections need once the firmware
 exposes them; don't hide the section, disable it and say why.
+
+### 6.7 DeviceInfo
+
+```json
+{
+  "firmwareVersion": "2.7.1",
+  "wpm": 20,
+  "sidetoneHz": 600,
+  "sidetoneEnabled": true,
+  "volume": 80,
+  "paddleReversed": false,
+  "mode": "PADDLE",
+  "iambicMode": "IAMBIC_B",
+  "weightPercent": 50
+}
+```
+
+The firmware's current live keyer configuration (`core_keyer.h`
+getters — ble_control.cpp's `sendDeviceInfo()`), not a saved profile:
+if the operator has tweaked a setting via the OLED menu since the last
+profile load, this reflects that live value. Only populated after a
+`requestDeviceInfo` round trip (§4) — there is no unprompted push, so a
+fresh connection has no `DeviceInfo` until a client asks for one.
+`metadata.deviceFirmwareVersion` (§4.1) is filled from this same round
+trip's `firmwareVersion` field; it stays `null` until then.
 
 ---
 

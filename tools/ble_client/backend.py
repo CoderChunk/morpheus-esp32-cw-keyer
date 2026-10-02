@@ -237,6 +237,11 @@ class MorpheusBackend:
         self._connection = ConnectionInfo(state=ConnectionState.DISCONNECTED)
         self._training_state = TrainingState(active=False)
         self._game_state = GameState(active=False)
+        # Populated only after a "get_device_info" round trip (see
+        # request_device_info()/ble_control.cpp's sendDeviceInfo()) -
+        # firmwareVersion/wpm/sidetoneHz/sidetoneEnabled/volume/
+        # paddleReversed/mode/iambicMode/weightPercent. Empty until then.
+        self._device_info: dict = {}
 
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
         self._keyer_listeners: List[Callable[[KeyerWordEvent], None]] = []
@@ -246,6 +251,7 @@ class MorpheusBackend:
         self._game_listeners: List[Callable[[GameState], None]] = []
         self._pairing_listeners: List[Callable[[PairingEvent], None]] = []
         self._error_listeners: List[Callable[[BackendError], None]] = []
+        self._device_info_listeners: List[Callable[[dict], None]] = []
 
         # GATT session thread/loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -300,6 +306,9 @@ class MorpheusBackend:
     def on_error(self, callback: Callable[[BackendError], None]) -> None:
         self._error_listeners.append(callback)
 
+    def on_device_info_changed(self, callback: Callable[[dict], None]) -> None:
+        self._device_info_listeners.append(callback)
+
     def _emit_connection(self, info: ConnectionInfo) -> None:
         self._connection = info
         for cb in list(self._connection_listeners):
@@ -335,6 +344,11 @@ class MorpheusBackend:
         for cb in list(self._error_listeners):
             cb(error)
 
+    def _emit_device_info(self, info: dict) -> None:
+        self._device_info = info
+        for cb in list(self._device_info_listeners):
+            cb(info)
+
     # ------------------------------------------------------------------
     # Capabilities / metadata (§10, §12)
     # ------------------------------------------------------------------
@@ -345,8 +359,17 @@ class MorpheusBackend:
         return {
             "applicationVersion": APPLICATION_VERSION,
             "deviceName": self._connection.deviceName,
-            "deviceFirmwareVersion": None,  # not exposed over BLE yet
+            # None until a "get_device_info" round trip completes (see
+            # request_device_info()) - the firmware doesn't push this
+            # unprompted, so a fresh connection starts without it.
+            "deviceFirmwareVersion": self._device_info.get("firmwareVersion"),
         }
+
+    def get_device_info(self) -> dict:
+        """Last "device_info" snapshot received (see
+        on_device_info_changed/request_device_info) - empty until the
+        first round trip completes."""
+        return dict(self._device_info)
 
     @property
     def connection(self) -> ConnectionInfo:
@@ -481,6 +504,12 @@ class MorpheusBackend:
 
     def restart_game(self) -> None:
         self._send_command({"cmd": "game_restart"}, operation="restartGame")
+
+    def request_device_info(self) -> None:
+        """Fire-and-forget, same as every other command here - the
+        result arrives via on_device_info_changed (ble_control.cpp's
+        "device_info" event), not a return value."""
+        self._send_command({"cmd": "get_device_info"}, operation="requestDeviceInfo")
 
     # ------------------------------------------------------------------
     # Pairing operations (§5) - Linux/BlueZ only
@@ -780,6 +809,18 @@ class MorpheusBackend:
                 wasLastCorrect=payload.get("wasLastCorrect"),
                 wpm=payload.get("wpm"),
             ))
+        elif evt == "device_info":
+            self._emit_device_info({
+                "firmwareVersion": payload.get("firmwareVersion"),
+                "wpm": payload.get("wpm"),
+                "sidetoneHz": payload.get("sidetoneHz"),
+                "sidetoneEnabled": payload.get("sidetoneEnabled"),
+                "volume": payload.get("volume"),
+                "paddleReversed": payload.get("paddleReversed"),
+                "mode": payload.get("mode"),
+                "iambicMode": payload.get("iambicMode"),
+                "weightPercent": payload.get("weightPercent"),
+            })
         elif evt == "error":
             self._emit_error(BackendError(code=ErrorCode.TRAINING_START_FAILED.value,
                                            message=payload.get("message", "unknown error")))

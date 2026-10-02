@@ -43,6 +43,7 @@ EVENT_CHANNELS = (
     "gameStateChanged",
     "pairingStateChanged",
     "backendError",
+    "deviceInfoChanged",
 )
 
 
@@ -99,6 +100,7 @@ class MorpheusWebSocketServer:
         self.backend.on_game_state(lambda st: self._broadcast("gameStateChanged", st))
         self.backend.on_pairing_state(lambda evt: self._broadcast("pairingStateChanged", evt))
         self.backend.on_error(lambda err: self._broadcast("backendError", err))
+        self.backend.on_device_info_changed(lambda info: self._broadcast("deviceInfoChanged", info))
 
     # ------------------------------------------------------------------
     # Outbound: backend callbacks -> event frames
@@ -194,6 +196,9 @@ class MorpheusWebSocketServer:
             return None
         if method == "confirmPairing":
             b.confirm_pairing(bool(params.get("accepted")))
+            return None
+        if method == "requestDeviceInfo":
+            b.request_device_info()
             return None
         if method == "getSnapshot":
             return b.get_snapshot()

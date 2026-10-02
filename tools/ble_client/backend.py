@@ -736,8 +736,22 @@ class MorpheusBackend:
         # JSON key: "live" is the whole in-progress word so far (fires
         # per character, never itself authoritative), "word" is the
         # word-gap-finalized event (fires once per completed word).
+        #
+        # This characteristic also carries "pat" (live dit/dah pattern),
+        # so with three event kinds sharing one NOTIFY-only (no delivery
+        # guarantee) characteristic, an occasional empty/truncated/
+        # garbled payload is expected transport noise, not a real fault
+        # - same reasoning _reconcileControlState()'s docstring gives for
+        # BLE_CONTROL_EVT_UUID silently losing notifies. Surfacing every
+        # one of these as a user-facing INTERNAL_ERROR would alarm the
+        # user over something that isn't actionable and doesn't affect
+        # correctness (the next notify on this channel is seconds away
+        # at most). Drop it quietly instead.
         try:
             payload = json.loads(bytes(data).decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return
+        try:
             if "pat" in payload:
                 self._emit_keyer_pattern(LivePatternEvent(
                     pattern=str(payload.get("pat", "")),
@@ -759,6 +773,9 @@ class MorpheusBackend:
                 timestamp=int(payload.get("timestamp", 0)),
             ))
         except Exception as exc:  # noqa: BLE001
+            # A payload that *parsed* as JSON but doesn't match the
+            # expected shape is more likely a real bug than transport
+            # noise, so this one still surfaces.
             self._emit_error(BackendError(code=ErrorCode.INTERNAL_ERROR.value,
                                            message=f"Malformed keyer payload: {exc}"))
 

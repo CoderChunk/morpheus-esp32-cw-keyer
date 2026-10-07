@@ -41,7 +41,7 @@ and `--soak ADDR MINUTES` are the stand-alone reliability modes.
 
 ## Known failing tests (open defects, kept strict on purpose)
 FND-03 (stuck key after link loss) was fixed in firmware 2.8.5 and verified on hardware; NEG-D14 / FS-N07 now pass on 2.8.5 and still fail on 2.8.4.
-FND-02 (virtual key floor of about 97 ms) was mitigated in firmware 2.8.6 by requesting a 7.5–15 ms connection interval; ST-16 now measures a requested 30 ms hold as 57 ms.
+FND-02 (virtual key floor of about 97 ms) was mitigated in firmware 2.8.7 by requesting a 7.5–15 ms connection interval; ST-16 now measures a requested 30 ms hold as 57 ms.
 
 A red run is the truth until these are fixed. Details: `docs/test-reports/FIRMWARE_TEST_REPORT_*.md`.
 

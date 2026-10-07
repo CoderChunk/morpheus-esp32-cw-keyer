@@ -1,13 +1,16 @@
 # Changelog
 
-## Source 2.8.6 — 2026-10-07
+## Source 2.8.7 — 2026-10-07
 
 - Perf (FND-02): once the link is secure the device requests a 7.5–15 ms connection
   interval (latency 0, 4 s supervision timeout). Remote virtual-key press/release latency
   on Linux/BlueZ drops from about 97 ms to about 57 ms (requested 30 ms hold measured as
   57 ms; SYS-16). Hosts may ignore or adjust the request; behaviour is otherwise unchanged.
+- Fix: `core_decoder_lookupPattern()` returns false for a null or zero-size buffer instead
+  of underflowing `outSize - 1`. No existing caller passes one.
 - Includes 2.8.5 (FND-03, key released when the link drops). No protocol, UUID, security
-  or NVS changes; compatible with every existing client.
+  or NVS changes; compatible with every existing client. This release replaces the
+  short-lived v2.8.6.
 - Known issue FND-01: roughly 5–10 % of reconnects to a bonded device still need a retry
   (SYS-13 9/10 on hardware, unchanged by this release); clients recover automatically.
 

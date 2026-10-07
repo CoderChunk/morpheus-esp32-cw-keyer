@@ -220,7 +220,10 @@ class MorpheusWebSocketServer:
             b.confirm_pairing(params.get("accepted"), params.get("attemptId"))
             return None
         if method == "setKeyerSetting":
-            b.set_keyer_setting(params.get("field"), params.get("value"))
+            try:
+                b.set_keyer_setting(params.get("field"), params.get("value"))
+            except ValueError as exc:   # unknown field / non-integer / outside the firmware range
+                raise RequestError("INVALID_PARAMETER", str(exc))
             return None
         if method == "probeKeyerMetrics":
             b.request_keyer_metrics(params.get("id"), params.get("reset", False))

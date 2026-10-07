@@ -1,0 +1,8 @@
+transport.cpp: 'bool NimBLEService::start()' is deprecated: NimBLEService::start() has no effect. Services are started when t
+transport.cpp: unused variable 'started' [-Wunused-variable]
+ui_backend.cpp: format '%X' expects argument of type 'unsigned int', but argument N has type 'uintN_t' {aka 'long unsigned int
+ui_backend.cpp: unused variable 'oldMode' [-Wunused-variable]
+ui_screens.cpp: '%s' directive output may be truncated writing up to N bytes into a region of size between N and N [-Wformat-t
+ui_screens.cpp: 'snprintf' output may be truncated before the last format character [-Wformat-truncation=]
+ui_screens.cpp: 'void drawGameHelpOverlay(UNGN&, const char*, const char*)' defined but not used [-Wunused-function]
+ui_state.cpp: 'snprintf' output may be truncated before the last format character [-Wformat-truncation=]

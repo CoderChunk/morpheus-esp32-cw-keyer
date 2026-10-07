@@ -39,6 +39,9 @@
  *     decided.
  *   {"cmd":"game_start","game":"COPY|MEMORY|SPEED"}
  *   {"cmd":"game_stop"} / {"cmd":"game_pause"} / {"cmd":"game_confirm"} / {"cmd":"game_restart"}
+ *   {"cmd":"get_device_info"} -> one {"evt":"device_info",...} (see below).
+ *     Firmware version plus the keyer's current live configuration
+ *     (core_keyer.h getters - wpm/sidetone/volume/paddle/mode/weight).
  *
  *   Bench-diagnostic only, FEATURE_DEBUG_SERIAL_COMMANDS-gated (off by
  *   default, not part of the stable vocabulary above - see
@@ -55,6 +58,10 @@
  *   {"evt":"train_state", ...} / {"evt":"game_state", ...} - pushed on
  *   change (rate-limited), see buildTrainStateJson()/buildGameStateJson().
  *   {"evt":"ack","cmd":"...","ok":bool} / {"evt":"error","message":"..."}
+ *   {"evt":"device_info","firmwareVersion":"2.7.1","wpm":20,
+ *     "sidetoneHz":600,"sidetoneEnabled":true,"volume":80,
+ *     "paddleReversed":false,"mode":"PADDLE|STRAIGHT",
+ *     "iambicMode":"IAMBIC_A|IAMBIC_B","weightPercent":50}
  *   {"evt":"screen_dump_start","w":128,"h":64,"bytes":1024,"n":16}
  *   {"evt":"screen_dump_chunk","i":<0..n-1>,"hex":"<up to 128 hex chars>"}
  *
@@ -64,6 +71,8 @@
 #include "ble_control.h"
 #include "config.h"
 #include "core_keyer.h"
+#include "keyer_settings_protocol.h"
+#include "keyer_metrics.h"
 #include "core_trainer.h"
 #include "core_games.h"
 #include "transport.h"
@@ -119,6 +128,20 @@ static bool jsonGetInt(const char *json, const char *key, int *out) {
 // Virtual keying - see file header. Guarded against overlapping with a
 // real physical key (core_keyer_isTxActive()) or a stray double key_down.
 // ----------------------------------------------------------------------------
+static KeyerMetrics keyerMetrics;
+static bool metricsActive() {
+  return !core_trainer_isSessionActive() && !core_games_isSessionActive();
+}
+void ble_control_metricsKeyDown(unsigned long now, bool fromVirtualKey) {
+  if (metricsActive()) keyerMetrics.keyDown(uint32_t(now), fromVirtualKey);
+  else keyerMetrics.reset();
+}
+void ble_control_metricsElement(bool isDah, unsigned long duration, unsigned long now) {
+  if (metricsActive()) keyerMetrics.element(isDah, uint32_t(duration), uint32_t(now));
+}
+void ble_control_metricsCharacter() { if (metricsActive()) keyerMetrics.character(); }
+void ble_control_metricsWord() { if (metricsActive()) keyerMetrics.word(); }
+
 static bool virtualKeyDown = false;
 static unsigned long virtualKeyDownMs = 0;
 
@@ -126,7 +149,7 @@ static void handleKeyDown() {
   if (core_keyer_isTxActive() || virtualKeyDown) return;
   virtualKeyDown = true;
   virtualKeyDownMs = millis();
-  events_onKeyDown(virtualKeyDownMs);
+  events_onKeyDown(virtualKeyDownMs, true);
 }
 
 static void handleKeyUp() {
@@ -152,6 +175,30 @@ static void sendAck(const char *cmd, bool ok) {
 static void sendError(const char *message) {
   char buf[96];
   snprintf(buf, sizeof(buf), "{\"evt\":\"error\",\"message\":\"%s\"}", message);
+  transport_sendControlEvent(buf);
+}
+
+// Answers "get_device_info" with firmware version plus the keyer's
+// current live configuration (core_keyer.h getters) - the same values
+// the OLED Settings menu reads/writes, just surfaced to a remote client.
+// Profiles (core_profiles.h) are the saved presets; this reports what's
+// actually active right now, which can differ if it's been tweaked
+// since the last profile load.
+static void sendDeviceInfo() {
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+    "{\"evt\":\"device_info\",\"firmwareVersion\":\"%s\",\"wpm\":%d,"
+    "\"sidetoneHz\":%lu,\"sidetoneEnabled\":%s,\"volume\":%u,"
+    "\"paddleReversed\":%s,\"mode\":\"%s\",\"iambicMode\":\"%s\",\"weightPercent\":%u}",
+    FIRMWARE_VERSION,
+    core_keyer_getWpm(),
+    (unsigned long)core_keyer_getSidetoneFreq(),
+    core_keyer_getSidetoneEnabled() ? "true" : "false",
+    core_keyer_getVolume(),
+    core_keyer_getPaddleReversed() ? "true" : "false",
+    core_keyer_getMode() == MODE_PADDLE ? "PADDLE" : "STRAIGHT",
+    core_keyer_getIambicMode() == IAMBIC_MODE_B ? "IAMBIC_B" : "IAMBIC_A",
+    core_keyer_getWeightPercent());
   transport_sendControlEvent(buf);
 }
 
@@ -253,8 +300,19 @@ void ble_control_handleCommand(const char *json) {
       // checks for an active trainer session), so a remote client could
       // otherwise wedge both into "active" at once, fighting over the
       // one shared decoder training sink.
+      int kochPoolLevel = 0;
+      if (strstr(json, "\"kochLevel\"") != nullptr) {
+        char levelJson[40];
+        const char* level = strstr(json, "\"kochLevel\"") + 11;
+        while(*level==' '||*level=='\t')++level;
+        if(*level++!=':'){sendError("invalid Koch pool level");return;}
+        snprintf(levelJson, sizeof(levelJson), "{\"value\":%s", level);
+        if (!keyerProtocolValue(levelJson, &kochPoolLevel) || kochPoolLevel < 2 || kochPoolLevel > 40) {
+          sendError("invalid Koch pool level"); return;
+        }
+      }
       if (core_games_isSessionActive()) core_games_stop();
-      core_trainer_startSession(mode);
+      core_trainer_startSession(mode, (uint8_t)kochPoolLevel);
       sendAck("train_start", core_trainer_isSessionActive());
       forceTrainStatePush();
     } else {
@@ -303,6 +361,34 @@ void ble_control_handleCommand(const char *json) {
     core_games_restart();
     sendAck("game_restart", true);
     forceGameStatePush();
+  } else if (!strcmp(cmd, "set_keyer")) {
+    char field[12]; int value;
+    if (!jsonGetString(json, "field", field, sizeof(field)) ||
+        !keyerProtocolValue(json, &value) || !keyerProtocolValid(field, value)) {
+      sendError("invalid keyer setting"); return;
+    }
+    if (core_keyer_isTxActive() || virtualKeyDown || core_trainer_isSessionActive() || core_games_isSessionActive()) {
+      sendError("keyer busy"); return;
+    }
+    if (!strcmp(field,"wpm")) core_keyer_setWpm(value);
+    else if (!strcmp(field,"tone")) core_keyer_setSidetoneFreq(value);
+    else if (!strcmp(field,"volume")) core_keyer_setVolume(value);
+    else if (!strcmp(field,"reversed")) core_keyer_setPaddleReversed(value == 1);
+    else if (!strcmp(field,"mode")) core_keyer_setMode(value == 1 ? MODE_PADDLE : MODE_STRAIGHT);
+    else if (!strcmp(field,"iambic")) core_keyer_setIambicMode(value == 1 ? IAMBIC_MODE_B : IAMBIC_MODE_A);
+    else if (!strcmp(field,"weight")) core_keyer_setWeightPercent(value);
+    else if (!strcmp(field,"sidetone")) core_keyer_setSidetoneEnabled(value == 1);
+    sendAck("set_keyer", true);
+    sendDeviceInfo();
+  } else if (!strcmp(cmd, "probe_keyer") || !strcmp(cmd, "reset_keyer_metrics")) {
+    char id[26], buf[BLE_CONTROL_EVT_CAP];
+    if (!jsonGetString(json, "id", id, sizeof(id)) || !KeyerMetrics::validId(id)) {
+      sendError("invalid probe id"); return;
+    }
+    if (!strcmp(cmd, "reset_keyer_metrics") || !metricsActive()) keyerMetrics.reset();
+    if (keyerMetrics.encode(buf, sizeof(buf), id, uint32_t(millis()))) transport_sendControlEvent(buf);
+  } else if (!strcmp(cmd, "get_device_info")) {
+    sendDeviceInfo();
 #if FEATURE_DEBUG_SERIAL_COMMANDS
   } else if (!strcmp(cmd, "dump_screen_start")) {
     handleDumpScreenStart();
@@ -556,6 +642,12 @@ void ble_control_init() {
 }
 
 void ble_control_service(unsigned long now) {
+  // Starting a drill/game from either BLE or the OLED ends the free-keying
+  // measurement context, even if that session never receives a key edge.
+  static bool keyerWasAvailable = true;
+  const bool keyerAvailable = metricsActive();
+  if (keyerWasAvailable && !keyerAvailable) keyerMetrics.reset();
+  keyerWasAvailable = keyerAvailable;
   serviceTrainingStatePush(now);
   serviceGameStatePush(now);
 }

@@ -155,21 +155,42 @@ static void finalizeCharacter() {
   char decoded = lookupMorse(charPattern);
   if (decoded == 0) decoded = '?';
 
+  // Save the completed pattern before resetting charPattern below -
+  // trainingSink() and events_onCharacterComplete() both still need
+  // the real pattern (e.g. "..." for S), not the post-reset empty one.
+  char completedPattern[MAX_PATTERN_LEN];
+  strncpy(completedPattern, charPattern, sizeof(completedPattern) - 1);
+  completedPattern[sizeof(completedPattern) - 1] = '\0';
+
+  // Reset the pattern (and fire its own BLE notify) *before*
+  // events_onCharacterComplete()'s live-word notify, not after.
+  // transport_notifyLiveWord() and transport_notifyLivePattern() share
+  // one BLE characteristic (bleWordChar - see transport.cpp), and two
+  // back-to-back setValue()+notify() calls on the same characteristic
+  // race: only the later call's value actually reaches the central
+  // before the earlier one is overwritten. With the pattern-reset
+  // firing last (as it used to), the live-word notify was the one that
+  // always lost that race - confirmed by live BLE capture: "pat":""
+  // reset events arrived every time, "live" word events never did.
+  // Firing the reset first means the live-word notify is now the one
+  // that wins, at the minor cost of the pattern display not visibly
+  // clearing until the next keyed element (it was already going to be
+  // overwritten by then regardless).
+  charPattern[0] = '\0';
+  charPatternLen = 0;
+  charPending = false;
+  if (trainingSink == nullptr) events_onPatternChanged(charPattern, millis());
+
   if (trainingSink != nullptr) {
-    trainingSink(decoded, charPattern);
+    trainingSink(decoded, completedPattern);
     // Training active: word buffer/normal events deliberately untouched.
   } else {
     // Append before firing the event: events_onCharacterComplete() (and
     // its BLE live-word notify) reads core_decoder_getWordBuffer(), which
     // must already include this character.
     if (wordLen < MAX_WORD_LEN - 1) { wordBuffer[wordLen++] = decoded; wordBuffer[wordLen] = '\0'; }
-    events_onCharacterComplete(decoded, charPattern);
+    events_onCharacterComplete(decoded, completedPattern);
   }
-
-  charPattern[0] = '\0';
-  charPatternLen = 0;
-  charPending = false;
-  if (trainingSink == nullptr) events_onPatternChanged(charPattern, millis());
 }
 
 static void finalizeWord() {

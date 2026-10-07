@@ -35,7 +35,7 @@ bool core_keyer_diagToneStart(uint32_t hz);
 void core_keyer_diagToneStop();
 bool core_keyer_isDiagToneActive();
 
-void events_onKeyDown(unsigned long now);
+void events_onKeyDown(unsigned long now, bool fromVirtualKey = false);
 // fromVirtualKey: forwarded to core_decoder_addElement() - see its
 // declaration in core_decoder.h. Defaults to false so the physical
 // keyer's existing call site (core_keyer.cpp) needs no change.

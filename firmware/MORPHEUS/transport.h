@@ -107,6 +107,12 @@ bool transport_sendControlEvent(const char *json);
 
 #if FEATURE_DEBUG_SERIAL_COMMANDS
 void transport_debugDumpState();
+// Observational only; dedicated optional characteristic leaves legacy telemetry intact.
+void transport_notifyGameMorse(const char *game, uint32_t run, uint32_t seq, char decoded, const char *pattern, unsigned long now);
+
 #endif
+
+// Observational only; dedicated optional characteristic leaves legacy telemetry intact.
+void transport_notifyGameMorse(const char *game, uint32_t run, uint32_t seq, char decoded, const char *pattern, unsigned long now);
 
 #endif // MORPHEUS_TRANSPORT_H

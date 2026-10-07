@@ -38,7 +38,7 @@ struct KeyUpEvent { ElementType type; unsigned long durMs; unsigned long thresho
 static int g_keyDownCount = 0;
 static std::vector<KeyUpEvent> g_keyUps;
 
-void events_onKeyDown(unsigned long) { g_keyDownCount++; }
+void events_onKeyDown(unsigned long, bool) { g_keyDownCount++; }
 void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresholdMs, unsigned long, bool) {
   g_keyUps.push_back({type, durMs, thresholdMs});
 }

@@ -58,7 +58,7 @@ class _PairingAgentInterface(ServiceInterface):
 
     @method()
     def Cancel(self):
-        pass
+        self._driver.cancel()
 
 
 class PairingDriver:
@@ -75,6 +75,21 @@ class PairingDriver:
         self._on_failed = on_failed
         self._passkey_future = None
         self._confirm_future = None
+        self._task = None
+        self._device_iface = None
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+        async def stop():
+            if self._device_iface is not None:
+                try:
+                    await self._device_iface.call_cancel_pairing()
+                except DBusError:
+                    pass
+            if self._task is not None and not self._task.done():
+                self._task.cancel()
+        self._loop.call_soon_threadsafe(lambda: asyncio.create_task(stop()))
 
     def submit_passkey(self, value: int):
         self._resolve(self._passkey_future, value)
@@ -85,7 +100,10 @@ class PairingDriver:
     def _resolve(self, future, value):
         if future is None or future.done():
             return
-        self._loop.call_soon_threadsafe(future.set_result, value)
+        def resolve():
+            if not future.done():
+                future.set_result(value)
+        self._loop.call_soon_threadsafe(resolve)
 
     async def await_passkey_entry(self, device_path: str) -> int:
         self._passkey_future = self._loop.create_future()
@@ -106,78 +124,146 @@ class PairingDriver:
     def on_passkey_display(self, device_path: str, passkey: int) -> None:
         self._on_display_passkey(device_path, passkey)
 
-    async def run(self, target_name: str):
+    async def run(self, target_name: str, target_address=None):
+        self._task = asyncio.current_task()
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         agent = _PairingAgentInterface(self)
-        bus.export(AGENT_PATH, agent)
+        agent_mgr = None
+        try:
+            bus.export(AGENT_PATH, agent)
 
-        bluez_intr = await bus.introspect(BLUEZ, "/org/bluez")
-        bluez_obj = bus.get_proxy_object(BLUEZ, "/org/bluez", bluez_intr)
-        agent_mgr = bluez_obj.get_interface("org.bluez.AgentManager1")
-        await agent_mgr.call_register_agent(AGENT_PATH, "KeyboardDisplay")
-        await agent_mgr.call_request_default_agent(AGENT_PATH)
+            bluez_intr = await bus.introspect(BLUEZ, "/org/bluez")
+            bluez_obj = bus.get_proxy_object(BLUEZ, "/org/bluez", bluez_intr)
+            agent_mgr = bluez_obj.get_interface("org.bluez.AgentManager1")
+            await agent_mgr.call_register_agent(AGENT_PATH, "KeyboardDisplay")
+            await agent_mgr.call_request_default_agent(AGENT_PATH)
 
-        root_intr = await bus.introspect(BLUEZ, "/")
-        root_obj = bus.get_proxy_object(BLUEZ, "/", root_intr)
-        om = root_obj.get_interface("org.freedesktop.DBus.ObjectManager")
-        objects = await om.call_get_managed_objects()
+            root_intr = await bus.introspect(BLUEZ, "/")
+            root_obj = bus.get_proxy_object(BLUEZ, "/", root_intr)
+            om = root_obj.get_interface("org.freedesktop.DBus.ObjectManager")
+            objects = await om.call_get_managed_objects()
 
-        adapter_path = next((p for p, ifaces in objects.items() if "org.bluez.Adapter1" in ifaces), None)
-        if adapter_path is None:
-            self._on_failed("PAIRING_FAILED", "No Bluetooth adapter found")
-            return
+            adapter_path = next((p for p, ifaces in objects.items() if "org.bluez.Adapter1" in ifaces), None)
+            if adapter_path is None:
+                self._on_failed("PAIRING_FAILED", "No Bluetooth adapter found")
+                return
 
-        adapter_intr = await bus.introspect(BLUEZ, adapter_path)
-        adapter_obj = bus.get_proxy_object(BLUEZ, adapter_path, adapter_intr)
-        adapter = adapter_obj.get_interface("org.bluez.Adapter1")
+            adapter_intr = await bus.introspect(BLUEZ, adapter_path)
+            adapter_obj = bus.get_proxy_object(BLUEZ, adapter_path, adapter_intr)
+            adapter = adapter_obj.get_interface("org.bluez.Adapter1")
 
-        found_path = next(
-            (p for p, ifaces in objects.items()
-             if "org.bluez.Device1" in ifaces and ifaces["org.bluez.Device1"].get("Name")
-             and ifaces["org.bluez.Device1"]["Name"].value == target_name),
-            None,
-        )
+            def matches(dev):
+                if target_address:
+                    address = dev.get("Address")
+                    name = dev.get("Name")
+                    services = dev.get("UUIDs")
+                    morpheus = (name is not None and name.value.upper().startswith("MORPHEUS")) or (services is not None and "7a48a2b0-0001-4ad4-9f1a-1c2d3e4f5a6b" in [u.lower() for u in services.value])
+                    return morpheus and address is not None and address.value.upper() == target_address.upper()
+                name = dev.get("Name")
+                return name is not None and name.value == target_name
 
-        if found_path is None:
-            found_event = asyncio.Event()
-            found_holder = {}
+            found_path = next(
+                (p for p, ifaces in objects.items()
+                 if "org.bluez.Device1" in ifaces and matches(ifaces["org.bluez.Device1"])),
+                None,
+            )
 
-            def on_interfaces_added(path, interfaces):
-                dev = interfaces.get("org.bluez.Device1")
-                if dev and dev.get("Name") and dev["Name"].value == target_name:
-                    found_holder["path"] = path
-                    found_event.set()
+            if found_path is None:
+                found_event = asyncio.Event()
+                found_holder = {}
 
-            om.on_interfaces_added(on_interfaces_added)
-            await adapter.call_start_discovery()
-            try:
-                await asyncio.wait_for(found_event.wait(), timeout=DISCOVERY_TIMEOUT_S)
-                found_path = found_holder.get("path")
-            except asyncio.TimeoutError:
-                pass
-            finally:
+                def on_interfaces_added(path, interfaces):
+                    dev = interfaces.get("org.bluez.Device1")
+                    if dev and matches(dev):
+                        found_holder["path"] = path
+                        found_event.set()
+
+                om.on_interfaces_added(on_interfaces_added)
+                await adapter.call_start_discovery()
                 try:
-                    await adapter.call_stop_discovery()
+                    await asyncio.wait_for(found_event.wait(), timeout=DISCOVERY_TIMEOUT_S)
+                    found_path = found_holder.get("path")
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    try:
+                        await adapter.call_stop_discovery()
+                    except DBusError:
+                        pass
+                    om.off_interfaces_added(on_interfaces_added)
+
+            if found_path is None:
+                self._on_failed("DEVICE_NOT_FOUND", f"{target_name} not found within {DISCOVERY_TIMEOUT_S:.0f}s")
+                return
+
+            dev_intr = await bus.introspect(BLUEZ, found_path)
+            dev_obj = bus.get_proxy_object(BLUEZ, found_path, dev_intr)
+            device_iface = dev_obj.get_interface("org.bluez.Device1")
+            self._device_iface = device_iface
+            props_iface = dev_obj.get_interface("org.freedesktop.DBus.Properties")
+
+            try:
+                already_paired = await props_iface.call_get("org.bluez.Device1", "Paired")
+                if not already_paired.value:
+                    await asyncio.wait_for(device_iface.call_pair(), timeout=90)
+                await props_iface.call_set("org.bluez.Device1", "Trusted", Variant("b", True))
+            except DBusError as exc:
+                self._on_failed("PAIRING_FAILED", str(exc))
+                return
+
+            self._on_succeeded(found_path)
+
+        finally:
+            if agent_mgr is not None:
+                try:
+                    await agent_mgr.call_unregister_agent(AGENT_PATH)
                 except DBusError:
                     pass
-                om.off_interfaces_added(on_interfaces_added)
+            bus.unexport(AGENT_PATH)
+            bus.disconnect()
+            self._device_iface = None
+            self._task = None
 
-        if found_path is None:
-            self._on_failed("DEVICE_NOT_FOUND", f"{target_name} not found within {DISCOVERY_TIMEOUT_S:.0f}s")
-            return
 
-        dev_intr = await bus.introspect(BLUEZ, found_path)
-        dev_obj = bus.get_proxy_object(BLUEZ, found_path, dev_intr)
-        device_iface = dev_obj.get_interface("org.bluez.Device1")
-        props_iface = dev_obj.get_interface("org.freedesktop.DBus.Properties")
+async def paired_devices():
+    """Read actual host-side BlueZ bonds; no PINs or keys are returned."""
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        intr = await bus.introspect(BLUEZ, "/")
+        objects = await bus.get_proxy_object(BLUEZ, "/", intr).get_interface(
+            "org.freedesktop.DBus.ObjectManager").call_get_managed_objects()
+        result = []
+        for path, interfaces in objects.items():
+            dev = interfaces.get("org.bluez.Device1", {})
+            name = dev.get("Name") or dev.get("Alias")
+            address = dev.get("Address")
+            paired = dev.get("Paired")
+            uuids = dev.get("UUIDs")
+            is_morpheus = ((name and name.value.upper().startswith("MORPHEUS")) or
+                           (uuids and "7a48a2b0-0001-4ad4-9f1a-1c2d3e4f5a6b" in uuids.value))
+            if is_morpheus and address and paired and paired.value:
+                result.append(dict(identifier=address.value, name=name.value if name else "MORPHEUS-CW", paired=True))
+        return result
+    finally:
+        bus.disconnect()
 
-        try:
-            already_paired = await props_iface.call_get("org.bluez.Device1", "Paired")
-            if not already_paired.value:
-                await device_iface.call_pair()
-            await props_iface.call_set("org.bluez.Device1", "Trusted", Variant("b", True))
-        except DBusError as exc:
-            self._on_failed("PAIRING_FAILED", str(exc))
-            return
 
-        self._on_succeeded(found_path)
+async def remove_pairing(address):
+    """Remove one exact BlueZ device/bond via its owning adapter."""
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        intr = await bus.introspect(BLUEZ, "/")
+        objects = await bus.get_proxy_object(BLUEZ, "/", intr).get_interface(
+            "org.freedesktop.DBus.ObjectManager").call_get_managed_objects()
+        for path, interfaces in objects.items():
+            dev = interfaces.get("org.bluez.Device1", {})
+            identifier = dev.get("Address")
+            if identifier and identifier.value.upper() == address.upper():
+                adapter_path = dev["Adapter"].value
+                intr = await bus.introspect(BLUEZ, adapter_path)
+                adapter = bus.get_proxy_object(BLUEZ, adapter_path, intr).get_interface("org.bluez.Adapter1")
+                await adapter.call_remove_device(path)
+                return
+        # Already absent is a successful, idempotent removal.
+    finally:
+        bus.disconnect()

@@ -14,4 +14,10 @@ void ble_control_service(unsigned long now);
 // ble_control_init()) whenever a command write arrives.
 void ble_control_handleCommand(const char *json);
 
+// Measured normal-keyer signal events, called by the existing sketch fan-out.
+void ble_control_metricsKeyDown(unsigned long now, bool fromVirtualKey);
+void ble_control_metricsElement(bool isDah, unsigned long duration, unsigned long now);
+void ble_control_metricsCharacter();
+void ble_control_metricsWord();
+
 #endif // MORPHEUS_BLE_CONTROL_H

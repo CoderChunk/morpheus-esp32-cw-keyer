@@ -1,5 +1,37 @@
 # Changelog
 
+## Desktop bridge 1.2.0 — 2026-10-06
+
+- Add multi-device discovery, actual BlueZ paired-device import, runtime scan/
+  notification state, fresh advertisement RSSI and host bond removal.
+- Correlate exact-identifier pairing/PIN/confirmation/cancellation by attempt;
+  retain secure Linux in-app PIN entry and operating-system pairing fallback.
+- Wait for old connection worker cleanup when switching; authenticated GATT
+  read and subscriptions precede CONNECTED/success.
+- Update Flutter desktop/mobile adapters and protocol specifications. Bleak
+  >=1.0 and a bridge restart are required. Firmware/GATT/security is unchanged.
+
+
+## Source 2.8.4 — 2026-10-06
+
+- Observe actual physical/remote key durations and decoded inter-character
+  silence without changing the authoritative decoder or configured timings.
+- Add bounded correlated `probe_keyer` / `reset_keyer_metrics` reporting on the
+  existing control channel; missing/expired samples are null. Exclude word gaps,
+  training/game input and mixed-source samples.
+- Add desktop bridge probes and real monotonic BLE write-to-reply RTT, keeping
+  request dispatch asynchronous and probe writes below key/session traffic.
+- Keep UUIDs, MTU/security, existing telemetry and NVS formats unchanged. Native
+  tests, Python bridge tests and ESP32 compile verify source; hardware not flashed.
+
+## Source2.8.3 — 2026-10-03
+
+- Add minimal validated set_keyer access to existing core setters for required device controls; busy rejection and actual DeviceInfo confirmation.
+- Add optional2..40 Koch pool to train_start; mode-only requests preserve defaults.
+- Update desktop/mobile adapters, observed-outcome waits, parser/pool/command regressions.
+- Retain2.8.2 scoped input, firmware game/decoder authority, normal telemetry, settings/NVS formats. Compile tested; not flashed.
+
+
 All notable changes to MORPHEUS are documented here.
 
 Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
@@ -7,6 +39,27 @@ Versioning follows a simple `MAJOR.MINOR.PATCH` scheme:
 - **Bug fixes** increment the patch version (e.g. v1.1.1).
 
 ---
+
+## [v2.8.2] — Additive game-scoped decoded Morse observation
+
+COPY/MEMORY/SPEED now publish already-decoded character observations on an
+optional independent encrypted/authenticated GATT characteristic, UUID suffix
+0005. Fields identify game, boot-local run, per-run sequence, decoded character,
+original pattern and uptime. The existing exclusive decoder sink and game
+handlers/scoring remain authoritative; normal transcript/pattern and control
+telemetry are unchanged. Bounded NOTIFY delivery follows existing MTU/security
+constraints. No new command, NVS format, OTA behavior or serial flag change.
+
+The desktop Python bridge discovers/subscribes when present and forwards
+`gameMorseReceived` without changing existing WebSocket methods. Older firmware
+without 0005 remains supported. The mobile Flutter client uses the same optional
+channel directly. Host tests cover the encoder and actual firmware dispatcher
+including existing scoring, exclusivity, restart/run identity and sink release.
+
+Required for the shared Flutter/Flame visual input architecture while preserving
+firmware authority. Detailed schema, compatibility and rationale:
+`../morpheus_ui/PROTOCOL_CHANGES.md`. Source implementation does not imply that a
+connected device has been flashed or that physical BLE validation has occurred.
 
 ## [v2.7.1] — Fix: Listening Audio Now Matches the Device's Real Keyer Speed
 

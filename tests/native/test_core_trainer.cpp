@@ -359,7 +359,25 @@ static void test_combined_wrong_identification_still_requires_keying_but_scores_
   CHECK(core_trainer_getTotalCount() == 1);
 }
 
+static void test_optional_koch_pool_preserves_legacy_defaults() {
+  resetForTest("optional_koch_pool_preserves_legacy_defaults");
+  core_trainer_startSession(TRAIN_MODE_LISTENING, 2);
+  CHECK(core_trainer_getTargetText()[0] == 'K'); // deterministic RNG picks index 0
+  CHECK(core_trainer_getKochLevel() == 2);
+  core_trainer_stopSession();
+  core_trainer_startSession(TRAIN_MODE_COMBINED, 4);
+  CHECK(core_trainer_getTargetText()[0] == 'K');
+  core_trainer_stopSession();
+  core_trainer_startSession(TRAIN_MODE_LISTENING); // old two-field train_start
+  CHECK(core_trainer_getTargetText()[0] == 'A'); // original full alphabet, not sticky K
+  core_trainer_stopSession();
+  core_trainer_startSession(TRAIN_MODE_COMBINED);
+  CHECK(core_trainer_getTargetText()[0] == 'A');
+  core_trainer_stopSession();
+}
+
 int main() {
+  test_optional_koch_pool_preserves_legacy_defaults();
   test_exam_completion_marks_result_ready_with_correct_score();
   test_exam_completion_below_pass_threshold();
   test_confirm_pressed_clears_exam_result_and_resets_to_idle();

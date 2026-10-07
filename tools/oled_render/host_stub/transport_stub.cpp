@@ -11,7 +11,7 @@
 // only ever drives navigation events (UI_EV_ROTATE/SELECT/BACK), never a
 // virtual key, so these never actually fire during a render walk - they
 // exist purely to satisfy the linker for core_keyer.cpp/core_decoder.cpp.
-void events_onKeyDown(unsigned long) {}
+void events_onKeyDown(unsigned long, bool) {}
 void events_onKeyUp(ElementType, unsigned long, unsigned long, unsigned long, bool) {}
 void events_onCharacterComplete(char, const char *) {}
 void events_onWordComplete(const char *, unsigned long) {}

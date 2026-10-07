@@ -1,5 +1,44 @@
 # MORPHEUS Backend WebSocket/JSON Protocol (Windows/Linux/macOS only)
 
+## Additive CW measurements — firmware 2.8.4
+
+`probeKeyerMetrics` accepts `{"id":"<1..24 ASCII letters/digits>","reset":false}`.
+`reset` is optional and defaults to false. The usual request response confirms
+dispatch only; it does **not** constitute a device measurement. The server does
+not await BLE in its request dispatcher, so remote key-up remains dispatchable.
+The existing default event subscription includes `keyerMetricsReceived`:
+
+```json
+{"type":"event","event":"keyerMetricsReceived","data":{"evt":"keyer_metrics","id":"a123","ts":456,"seq":3,"ditMs":73,"dahMs":213,"gapMs":218,"virtual":false,"bleRoundTripMs":43.0}}
+```
+
+Example values describe a protocol fixture, not device defaults. Firmware sends
+one correlated response through existing GATT 0004 for `probe_keyer` or
+`reset_keyer_metrics`. The latter clears observations before replying. `ts` is
+uint32 ESP32 uptime; `seq` is a uint32 completed-element/reset counter. `ditMs`
+and `dahMs` are latest actual completed key-down durations, classified by the
+existing device keyer. `gapMs` is the actual silence between the last key-up of
+a decoded character and the next key-down, after the decoder finalized a
+character and before a word boundary. Word gaps are excluded. No duration is
+computed from WPM. Each sample is null before measurement or after 30 seconds.
+`virtual` identifies the observed physical/remote source; switching source
+clears earlier samples. Active firmware training/games yield null samples.
+
+The Python BLE central adds `bleRoundTripMs`, measured with its monotonic clock
+immediately before GATT write until the matching device response. Writer queue
+delay is excluded; BLE/device processing and notification delivery are included.
+Only outstanding matching IDs are accepted, once; cached/unsolicited packets
+cannot supply latency. After five seconds without a response, or on disconnect,
+the event is `{"id":"a123","unavailable":true}` with no invented timing fields.
+The Flutter desktop client separately measures application request-to-device
+reply RTT, including the WebSocket bridge, and correlates both request dispatch
+and device reply. Neither value is a one-way latency estimate.
+
+Minimum firmware for these commands is 2.8.4. Older firmware retains all prior
+workflows; the CW page suppresses unsupported probes and shows unavailable
+measurements. No new characteristic, pairing policy, decoder or settings format
+is introduced. Probe writes have lower priority than session controls/key edges.
+
 **This document describes the desktop transport only.** Android and
 iOS do not use a WebSocket or a Python process at all — see
 `MOBILE_BLE_PROTOCOL.md` for the mobile transport, and
@@ -31,6 +70,82 @@ over GATT instead of over this WebSocket. Only §1 (Transport) and §10
 (Dart client sketch, which assumes this WebSocket) are desktop-specific.
 
 ---
+
+## Connectivity device management — bridge 1.2.0
+
+These additive host operations use the existing WebSocket boundary; firmware
+GATT UUIDs, security policy and command formats are unchanged. Restart an older
+bridge after updating its source/dependencies (`bleak>=1.0`). A client must check
+`getDeviceRuntime.deviceManagement`; an older bridge reports an unsupported
+method instead of accepting a fictitious pairing.
+
+| Method | Params | Result / completion |
+|---|---|---|
+| `discoverDevices` | `{}` | `{ "devices": [ManagedDevice] }`, after a five-second discovery; preserves the current application connection |
+| `listPairedDevices` | `{}` | `{ "devices": [ManagedDevice] }`, actual MORPHEUS BlueZ host bonds when `canListPairings` is true; otherwise an empty array with capability false |
+| `getDeviceRuntime` | `{}` | Runtime object below; bridge cache/status, not a device-latency probe |
+| `startPairing` | `{ "targetDeviceName": string?, "deviceAddress": string?, "attemptId": string? }` | `null` after dispatch; wait for correlated `pairingStateChanged` |
+| `submitPasskey` | `{ "passkey": string, "attemptId": string? }` | `null`; exactly six ASCII digits, including leading zeros |
+| `confirmPairing` | `{ "accepted": boolean, "attemptId": string? }` | `null`; strict boolean |
+| `cancelPairing` | `{ "attemptId": string? }` | `null` after stopping the pending agent/system-pairing worker |
+| `removePairing` | `{ "deviceAddress": string }` | `null` after actual host bond removal; requires disconnection of that device first |
+
+`ManagedDevice` contains `identifier`, `name`, nullable `paired`, nullable
+`lastSeen` (ISO8601 UTC) and nullable `rssi` (advertisement dBm). No secret is
+included. Multiple devices with the same advertised name are selected by
+identifier. Linux/Windows use Bluetooth MAC addresses; macOS uses the
+CoreBluetooth UUID. Legacy name-only `startPairing` remains supported on Linux.
+The new UI always supplies both an exact identifier and a fresh attempt token.
+
+```json
+{
+  "deviceManagement": true,
+  "bridgeRunning": true,
+  "usesSystemPairing": false,
+  "canListPairings": true,
+  "canRemovePairing": true,
+  "scanActive": false,
+  "notificationsReady": false,
+  "lastSeen": null,
+  "rssi": null,
+  "signalPercent": null
+}
+```
+
+Flags describe actual host capabilities: the Linux BlueZ agent supplies custom
+PIN entry, bond enumeration and removal. Windows uses the system prompt and
+Bleak unpair; macOS uses the system prompt and requires system Bluetooth
+settings for removal. A Linux installation without the optional agent also
+uses system pairing. Bond enumeration is not claimed on those fallback paths.
+
+`bridgeRunning` means this RPC was served by the running bridge. The app measures
+its own WebSocket request/response round trip for **Bridge latency**, separately
+from the existing correlated hardware BLE round trip. `notificationsReady`
+becomes true only after subscriptions and an authenticated control read succeed.
+`lastSeen` records actual received device frames/readback. Scan RSSI is exposed
+only for the active identifier while its advertisement is younger than 30s.
+Neither firmware nor the central currently supplies a calibrated percentage;
+`signalPercent` is null, never derived from RSSI.
+
+Pairing events add `deviceAddress` and `attemptId`. Clients ignore previous
+attempts or other devices. States include existing STARTED/PASSKEY/CONFIRMATION/
+SUCCEEDED/FAILED/UNAVAILABLE plus `PAIRING_SYSTEM_PROMPT` and
+`PAIRING_CANCELLED`. A passkey may appear only for an active display/comparison
+step; terminal state models discard it. Requests are not logged with PINs and
+the UI stores identities only. Wrong PIN or timeout produces FAILED with retry;
+cancellation cancels BlueZ Pair/agent futures and unregisters the agent.
+
+The app disconnects its active device and observes DISCONNECTED before starting
+pairing or connecting another saved device. `connect` waits for old worker
+cleanup before launching a new one. CONNECTED is emitted only after secured
+GATT is usable. A saved identity is not proof of a current OS bond: where OS
+enumeration exists, missing bonds are demoted to saved/unpaired identities.
+Removing a pairing completes OS removal before removing the local identity;
+a failed removal leaves the saved identity visible.
+
+The current BLE events do not report complete decoded-character duration.
+Connectivity displays that field as unavailable instead of calculating a value
+from configured WPM. Received time uses the application's actual receipt clock.
 
 ## 1. Transport
 
@@ -126,9 +241,10 @@ everything.
 | `pauseGame` | `{}` | `null` | toggles pause |
 | `confirmGame` | `{}` | `null` | restarts the game once it's over |
 | `restartGame` | `{}` | `null` | restarts the game immediately, any time |
-| `startPairing` | `{ "targetDeviceName": string? }` | `null` | defaults to the device name in `protocol.py` |
-| `submitPasskey` | `{ "passkey": string }` | `null` | 6 numeric digits |
-| `confirmPairing` | `{ "accepted": boolean }` | `null` | |
+| `startPairing` | `{ "targetDeviceName": string?, "deviceAddress": string?, "attemptId": string? }` | `null` | see Connectivity device management above |
+| `submitPasskey` | `{ "passkey": string, "attemptId": string? }` | `null` | 6 numeric digits |
+| `confirmPairing` | `{ "accepted": boolean, "attemptId": string? }` | `null` | |
+| `requestDeviceInfo` | `{}` | `null` | fire-and-forget, same as the commands above — result arrives as a `deviceInfoChanged` event (§5, §6.7). Unlike `getSnapshot`, this **is** a real BLE round trip |
 | `getSnapshot` | `{}` | `Snapshot` (§4.1) | call once right after connecting |
 | `getMorseTable` | `{}` | `{ "table": {char: pattern}, "reverse": {pattern: char} }` | §7 |
 | `getKochSequence` | `{}` | `{ "sequence": string }` | the 40-char Koch order |
@@ -174,6 +290,7 @@ no BLE round trip.
 | `trainingStateChanged` | `TrainingState` (§6.3) | training state changes |
 | `gameStateChanged` | `GameState` (§6.3a) | a device game's (`COPY`/`MEMORY`/`SPEED`) state changes |
 | `pairingStateChanged` | `PairingEvent` (§6.4) | pairing flow progresses |
+| `deviceInfoChanged` | `DeviceInfo` (§6.7) | a `requestDeviceInfo` round trip completes |
 | `backendError` | `BackendError` (§6.5) | any operation fails |
 
 ## 6. Data shapes
@@ -322,8 +439,9 @@ Training and the virtual straight key.
 
 ```json
 {
-  "type": "PAIRING_STARTED|PAIRING_WAITING_FOR_PASSKEY|PAIRING_WAITING_FOR_CONFIRMATION|PAIRING_SUCCEEDED|PAIRING_FAILED|PAIRING_UNAVAILABLE",
-  "devicePath": string?, "passkey": integer?, "errorCode": string?, "errorMessage": string?
+  "type": "PAIRING_STARTED|PAIRING_WAITING_FOR_PASSKEY|PAIRING_WAITING_FOR_CONFIRMATION|PAIRING_SUCCEEDED|PAIRING_FAILED|PAIRING_UNAVAILABLE|PAIRING_SYSTEM_PROMPT|PAIRING_CANCELLED",
+  "devicePath": string?, "passkey": integer?, "errorCode": string?, "errorMessage": string?,
+  "deviceAddress": string?, "attemptId": string?
 }
 ```
 
@@ -352,16 +470,43 @@ known (absent for spontaneous errors like a lost connection).
 ```json
 {
   "connection": true, "pairing": boolean, "keyer": true, "training": true,
-  "statistics": false, "connectivityManagement": false, "profiles": false,
+  "statistics": false, "connectivityManagement": true, "profiles": false,
   "settings": false, "diagnostics": false, "tools": false
 }
 ```
 
 `pairing` reflects whether `dbus-next` is actually importable on this
-machine right now (checked live, not hardcoded by platform). Every
+machine right now (checked live, not hardcoded by platform). This is custom
+agent pairing; `getDeviceRuntime.usesSystemPairing` describes the OS fallback.
+`connectivityManagement` is true in bridge 1.2.0 for host discovery/management. Every
 `false` flag is a section with no BLE support yet — see
 `UI_SPECIFICATION.md` for what those sections need once the firmware
 exposes them; don't hide the section, disable it and say why.
+
+### 6.7 DeviceInfo
+
+```json
+{
+  "firmwareVersion": "2.7.1",
+  "wpm": 20,
+  "sidetoneHz": 600,
+  "sidetoneEnabled": true,
+  "volume": 80,
+  "paddleReversed": false,
+  "mode": "PADDLE",
+  "iambicMode": "IAMBIC_B",
+  "weightPercent": 50
+}
+```
+
+The firmware's current live keyer configuration (`core_keyer.h`
+getters — ble_control.cpp's `sendDeviceInfo()`), not a saved profile:
+if the operator has tweaked a setting via the OLED menu since the last
+profile load, this reflects that live value. Only populated after a
+`requestDeviceInfo` round trip (§4) — there is no unprompted push, so a
+fresh connection has no `DeviceInfo` until a client asks for one.
+`metadata.deviceFirmwareVersion` (§4.1) is filled from this same round
+trip's `firmwareVersion` field; it stays `null` until then.
 
 ---
 
@@ -487,3 +632,48 @@ final snapshot = await client.call('getSnapshot');
 - No persistence of subscription state across a reconnect — a client
   that reconnects starts with a fresh "subscribed to everything"
   session and should call `getSnapshot` again.
+
+
+## Additive 2.8.2 game-input observation (2026-10-02)
+
+Optional GATT characteristic `7a48a2b0-0005-4ad4-9f1a-1c2d3e4f5a6b`, READ/NOTIFY
+with existing authenticated/encrypted access, emits:
+
+```json
+{"evt":"game_morse","game":"COPY","run":1,"seq":1,"char":"K","pattern":"-.-","timestamp":123456}
+```
+
+This observes finalized input to firmware COPY/MEMORY/SPEED. It does not change
+normal word/live/pattern telemetry, commands, ACKs or authoritative game state.
+The Python backend offers `on_game_morse`; WebSocket channel is
+`gameMorseReceived` (included in default subscriptions). Mobile clients subscribe
+to 0005 directly when discovered. Older firmware without this characteristic is
+tolerated; older clients can continue using existing channels. NOTIFY is bounded
+and best effort; run/sequence permit dedup and unobserved-position accounting.
+No physical Morse decoding or firmware scoring is moved into Flutter.
+
+Full rationale/field limits/security/compatibility/test boundaries:
+`../../../morpheus_ui/PROTOCOL_CHANGES.md` (workspace sibling document).
+
+
+## Additive UI-control support — firmware source2.8.3 (2026-10-03)
+
+The optional game-input0005 channel from2.8.2 remains. `set_keyer` adds validated
+existing core setter access, e.g. `{"cmd":"set_keyer","field":"wpm","value":20}`.
+Fields/ranges: wpm5..40, tone200..2000, volume0..100, mode/reversed/iambic/sidetone0..1,
+weight30..70. Reject unknown/bad integer values and TX/key/training/game busy states.
+Accepted writes use existing debounced NVS and publish actual DeviceInfo; settings
+version9 is unchanged. WS method `setKeyerSetting` maps to backend
+`set_keyer_setting(field,value)`. Updated clients reconcile0004 and await actual
+matching info; command dispatch alone is not device success.
+
+`startTraining`/backend `start_training` optionally accepts `kochLevel:2..40`,
+forwarded as `{"cmd":"train_start","mode":"LISTENING","kochLevel":10}`. KOCH
+selects the existing level; LISTENING/COMBINED select that Koch prefix. Omitted
+argument keeps original mode behavior/full pool. Validate before stopping games.
+These are necessary for the new real keyer/lesson controls, not a trainer/decoder
+rewrite. Older firmware supports baseline commands but cannot provide configured
+lessons or setter confirmation; clients gate2.8.3. Local Farnsworth remains local.
+
+Complete rationale, changed-file list and validation boundaries: workspace
+`morpheus_ui/PROTOCOL_CHANGES.md`. No hardware was flashed.

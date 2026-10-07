@@ -20,6 +20,7 @@
  * ============================================================================
  */
 #include "core_games.h"
+#include "transport.h"
 #include "core_morseplayer.h"
 #include "core_trainer.h"
 #include "core_decoder.h"
@@ -32,6 +33,7 @@
 static GameId activeGame = GAME_NONE;
 static MorsePlayer gamePlayer;   // shared - games are mutually exclusive
 static bool paused = false;
+static uint32_t inputRun = 0, inputSequence = 0;
 static unsigned long pauseStartMs = 0;
 static unsigned long pauseAccumMs = 0;
 
@@ -268,7 +270,8 @@ static void speedServiceTick(unsigned long now) {
 // Dispatcher - single decoder training-sink consumer, routed by activeGame
 // ----------------------------------------------------------------------------
 static void onGameCharDecoded(char decoded, const char *pattern) {
-  (void)pattern;
+  const char *gameName = activeGame == GAME_COPY ? "COPY" : activeGame == GAME_MEMORY ? "MEMORY" : activeGame == GAME_SPEED ? "SPEED" : nullptr;
+  if (gameName) transport_notifyGameMorse(gameName, inputRun, ++inputSequence, decoded, pattern, millis());
   switch (activeGame) {
     case GAME_COPY:   copyHandleChar(decoded);   break;
     case GAME_MEMORY: memoryHandleChar(decoded); break;
@@ -292,6 +295,7 @@ GameId core_games_getActiveGame()   { return activeGame; }
 void core_games_start(GameId game) {
   if (core_trainer_isSessionActive() || activeGame != GAME_NONE) return;
   activeGame = game;
+  ++inputRun; inputSequence = 0;
   core_decoder_setTrainingSink(onGameCharDecoded);
   unsigned long now = millis();
 
@@ -329,18 +333,21 @@ void core_games_confirmPressed() {
   switch (activeGame) {
     case GAME_COPY:
       if (copyPhase == COPY_OVER) {
+        ++inputRun; inputSequence = 0;
         copyScore = 0; copyLives = GAME_COPY_START_LIVES; copyStreak = 0;
         copySpawnNext(now);
       }
       break;
     case GAME_MEMORY:
       if (memPhase == MEM_OVER) {
+        ++inputRun; inputSequence = 0;
         memChainLen = 1; memChain[0] = pickKoch(); memChain[1] = '\0'; memInputPos = 0;
         memoryPlayChain(now);
       }
       break;
     case GAME_SPEED:
       if (spdPhase == SPD_OVER) {
+        ++inputRun; inputSequence = 0;
         spdCombo = 0; spdLives = GAME_SPEED_START_LIVES; spdBeatMs = reactionBudgetMs();
         spdSpawnBeat(now);
       }

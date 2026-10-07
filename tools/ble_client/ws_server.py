@@ -35,6 +35,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
 EVENT_CHANNELS = (
+    "gameMorseReceived",
     "connectionChanged",
     "keyerWordReceived",
     "keyerLiveWordReceived",
@@ -43,6 +44,8 @@ EVENT_CHANNELS = (
     "gameStateChanged",
     "pairingStateChanged",
     "backendError",
+    "deviceInfoChanged",
+    "keyerMetricsReceived",
 )
 
 
@@ -96,9 +99,12 @@ class MorpheusWebSocketServer:
         self.backend.on_keyer_live_word(lambda evt: self._broadcast("keyerLiveWordReceived", evt))
         self.backend.on_keyer_live_pattern(lambda evt: self._broadcast("keyerLivePatternReceived", evt))
         self.backend.on_training_state(lambda st: self._broadcast("trainingStateChanged", st))
+        self.backend.on_game_morse(lambda evt: self._broadcast("gameMorseReceived", evt))
         self.backend.on_game_state(lambda st: self._broadcast("gameStateChanged", st))
         self.backend.on_pairing_state(lambda evt: self._broadcast("pairingStateChanged", evt))
         self.backend.on_error(lambda err: self._broadcast("backendError", err))
+        self.backend.on_keyer_metrics(lambda metrics: self._broadcast("keyerMetricsReceived", metrics))
+        self.backend.on_device_info_changed(lambda info: self._broadcast("deviceInfoChanged", info))
 
     # ------------------------------------------------------------------
     # Outbound: backend callbacks -> event frames
@@ -135,6 +141,7 @@ class MorpheusWebSocketServer:
             b.scan()
             return None
         if method == "connect":
+            await b.prepare_connect()
             b.connect(params.get("deviceAddress"))
             return None
         if method == "disconnect":
@@ -150,7 +157,7 @@ class MorpheusWebSocketServer:
             mode = params.get("mode")
             if not mode:
                 raise RequestError("INVALID_PARAMETER", "params.mode is required")
-            b.start_training(mode)
+            b.start_training(mode, params.get("kochLevel"))
             return None
         if method == "stopTraining":
             b.stop_training()
@@ -182,18 +189,44 @@ class MorpheusWebSocketServer:
         if method == "restartGame":
             b.restart_game()
             return None
+        if method == "discoverDevices":
+            return {"devices": await b.discover_devices()}
+        if method == "listPairedDevices":
+            return {"devices": await b.list_paired_devices()}
+        if method == "getDeviceRuntime":
+            return b.get_device_runtime()
+        if method == "removePairing":
+            await b.remove_pairing(params.get("deviceAddress"))
+            return None
+        if method == "cancelPairing":
+            b.cancel_pairing(params.get("attemptId"))
+            await b.wait_pairing_idle()
+            await b.prepare_connect()
+            return None
         if method == "startPairing":
             import protocol as proto
-            b.start_pairing(params.get("targetDeviceName", proto.DEVICE_NAME))
+            await b.wait_pairing_idle()
+            await b.prepare_connect()
+            b.start_pairing(params.get("targetDeviceName", proto.DEVICE_NAME),
+                            params.get("deviceAddress"), params.get("attemptId"))
             return None
         if method == "submitPasskey":
             passkey = params.get("passkey")
             if passkey is None:
                 raise RequestError("INVALID_PARAMETER", "params.passkey is required")
-            b.submit_passkey(str(passkey))
+            b.submit_passkey(passkey, params.get("attemptId"))
             return None
         if method == "confirmPairing":
-            b.confirm_pairing(bool(params.get("accepted")))
+            b.confirm_pairing(params.get("accepted"), params.get("attemptId"))
+            return None
+        if method == "setKeyerSetting":
+            b.set_keyer_setting(params.get("field"), params.get("value"))
+            return None
+        if method == "probeKeyerMetrics":
+            b.request_keyer_metrics(params.get("id"), params.get("reset", False))
+            return None  # Reply with dispatch only; real device response is a correlated event.
+        if method == "requestDeviceInfo":
+            b.request_device_info()
             return None
         if method == "getSnapshot":
             return b.get_snapshot()

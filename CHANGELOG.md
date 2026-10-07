@@ -77,8 +77,8 @@ channel directly. Host tests cover the encoder and actual firmware dispatcher
 including existing scoring, exclusivity, restart/run identity and sink release.
 
 Required for the shared Flutter/Flame visual input architecture while preserving
-firmware authority. Detailed schema, compatibility and rationale:
-`../morpheus_ui/PROTOCOL_CHANGES.md`. Source implementation does not imply that a
+firmware authority. Detailed schema and compatibility: `tools/ble_client/WS_PROTOCOL.md` and
+`MOBILE_BLE_PROTOCOL.md`. Source implementation does not imply that a
 connected device has been flashed or that physical BLE validation has occurred.
 
 ## [v2.7.1] — Fix: Listening Audio Now Matches the Device's Real Keyer Speed
@@ -216,8 +216,7 @@ exposed to the app.
   render them as text during the listening phase
   (`_TargetCard.hideTarget` in `training_panel.dart`,
   `hideTarget`/`visibleTarget` in `device_games_panel.dart`). This is
-  documented as an explicit contract in `WS_PROTOCOL.md` §6.3/§6.3a and
-  `MORPHEUS_BACKEND_API_REQUIREMENTS.md` §8.6, not an implicit
+  documented as an explicit contract in `WS_PROTOCOL.md` §6.3/§6.3a, not an implicit
   convention a future client could silently break.
 - Firmware-authoritative rather than Flutter-owned, unlike the
   client-side games - this matches Training's existing "device is
@@ -440,7 +439,7 @@ cause turned out to be two independent bugs, found and fixed in order:
   `services.cpp`/`core_clock.cpp` already provide one;
   `core_profiles.cpp` saying "four" preset slots (actual: six);
   `docs/architecture.md` describing a "live pattern footer" this
-  release moved to the header. `docs/FUNCTIONALITY_STATUS.md` had
+  release moved to the header. a status document had
   accumulated the most drift - stale version numbers, features it
   claimed were unreachable that were already wired up
   (`core_stats_resetLifetime()`, `core_led_trainerFlashOn/Off()`), and
@@ -618,7 +617,6 @@ cause turned out to be two independent bugs, found and fixed in order:
 
 ### Added
 - **Diagnostics → LED Test** — instant LED ON / LED OFF / BLINK TEST actions for verifying the status LED on the bench, independent of BLE or training state. Blink test is a bounded, self-terminating pattern.
-- `docs/FUNCTIONALITY_STATUS.md` — code-grounded audit of implemented vs. stubbed vs. implemented-but-unreachable functionality.
 - `docs/USER_MANUAL.md` — full operator manual for the current feature set.
 
 ### Housekeeping

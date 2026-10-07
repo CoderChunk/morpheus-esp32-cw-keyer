@@ -394,9 +394,6 @@ tolerated; older clients can continue using existing channels. NOTIFY is bounded
 and best effort; run/sequence permit dedup and unobserved-position accounting.
 No physical Morse decoding or firmware scoring is moved into Flutter.
 
-Full rationale/field limits/security/compatibility/test boundaries:
-`../../../morpheus_ui/PROTOCOL_CHANGES.md` (workspace sibling document).
-
 
 ## Additive UI-control support — firmware source2.8.3 (2026-10-03)
 
@@ -417,5 +414,4 @@ These are necessary for the new real keyer/lesson controls, not a trainer/decode
 rewrite. Older firmware supports baseline commands but cannot provide configured
 lessons or setter confirmation; clients gate2.8.3. Local Farnsworth remains local.
 
-Complete rationale, changed-file list and validation boundaries: workspace
-`morpheus_ui/PROTOCOL_CHANGES.md`. No hardware was flashed.
+

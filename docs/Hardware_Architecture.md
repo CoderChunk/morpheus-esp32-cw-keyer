@@ -21,7 +21,7 @@ This specification defines:
 - Known open decisions and constraints for upcoming revisions
 
 It does not define firmware implementation details, module APIs, or software
-architecture — see `Guide.md` and the module headers (`core_keyer.h`,
+architecture — see `architecture.md` and the module headers (`core_keyer.h`,
 `core_decoder.h`, `display.h`, `transport.h`, `services.h`) for that.
 
 ---
@@ -80,7 +80,7 @@ any of them should be a deliberate, documented choice, not a default.
 8. **Timing-critical inputs get dedicated digital pins; non-critical inputs
    may share an analog ladder or a bus.** This preserves the timing-domain
    separation that is central to the existing firmware architecture (see
-   `Guide.md`) — the keyer's real-time path must never depend on ADC
+   `architecture.md`) — the keyer's real-time path must never depend on ADC
    conversion latency or shared-bus arbitration.
 9. **Electrically shared inputs must not require firmware to know they're
    shared.** Where a built-in control (e.g. a practice key/paddle button) is

@@ -326,5 +326,3 @@ diagrams and design rationale.
 
 ---
 
-*For a breakdown of what's implemented vs. still in progress, see
-`docs/FUNCTIONALITY_STATUS.md`.*

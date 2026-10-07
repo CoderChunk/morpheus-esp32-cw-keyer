@@ -89,7 +89,7 @@ corresponding page in `pages.py`.
 ## Files
 
 - `backend.py` — `MorpheusBackend`: the transport-agnostic backend (no
-  Qt import at all) implementing `BACKEND_API.md` / `MORPHEUS_BACKEND_API_REQUIREMENTS.md` -
+  Qt import at all) implementing `BACKEND_API.md` -
   connection, keyer telemetry, virtual key, training, pairing,
   capabilities, structured errors
 - `pairing_backend.py` — the BlueZ Agent1 D-Bus implementation, lazily
@@ -100,8 +100,7 @@ corresponding page in `pages.py`.
   client on Windows/Linux/macOS - see `WS_PROTOCOL.md`; Android/iOS use
   a native `flutter_reactive_ble` driver instead, see
   `MOBILE_ARCHITECTURE.md` and `MOBILE_BLE_PROTOCOL.md` for the
-  GATT-level wire format it implements, and `MOBILE_BLE_VALIDATION.md`
-  for the real-hardware test plan); not needed to run the Qt desktop
+  GATT-level wire format it implements); not needed to run the Qt desktop
   app
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
@@ -111,7 +110,7 @@ corresponding page in `pages.py`.
 - `pairing_dialog.py` — the in-app "Pair New Device" dialog
 - `pages.py` — the CW Keyer / Training / Placeholder page widgets
 - `arcade.py` — the Games tab: six client-side Morse typing/arcade
-  games (no BLE involvement - see `UI_SPECIFICATION.md` §4)
+  games (no BLE involvement)
 - `protocol.py` — UUID/command-vocabulary constants plus the exact
   Koch order and Morse table (copied from firmware source)
 

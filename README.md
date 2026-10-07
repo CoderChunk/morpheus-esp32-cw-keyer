@@ -4,7 +4,7 @@
 
 An open-source ESP32 CW keyer featuring real-time Morse decoding, Koch/Farnsworth/adaptive training, three CW arcade games, an OLED operator interface, and secure Bluetooth Low Energy telemetry.
 
-Current firmware version: **v2.3.0**. See `docs/USER_MANUAL.md` for full operating instructions and `docs/FUNCTIONALITY_STATUS.md` for a code-grounded audit of what's implemented vs. still stubbed.
+Current firmware version: **v2.3.0**. See `docs/USER_MANUAL.md` for full operating instructions.
 
 ---
 
@@ -174,8 +174,7 @@ morpheus-esp32-cw-keyer/
 │   ├── build.md
 │   ├── Hardware_Architecture.md
 │   ├── wiring.md
-│   ├── USER_MANUAL.md
-│   └── FUNCTIONALITY_STATUS.md
+│   └── USER_MANUAL.md
 ├── firmware
 │   └── MORPHEUS
 │       ├── MORPHEUS.ino
@@ -296,8 +295,6 @@ Contributors are also encouraged to explore:
 * A hardware bond-reset trigger
 * Test coverage for the keyer, trainer, games, stats, profiles, and UI state machine
 * Mobile applications, web dashboards, contest logging, network gateways, SDR integrations
-
-See `docs/FUNCTIONALITY_STATUS.md` for the full, current gap analysis.
 
 ---
 

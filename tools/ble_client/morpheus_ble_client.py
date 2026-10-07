@@ -328,7 +328,7 @@ PLACEHOLDER_NOTES = {
     "Help": "MORPHEUS BLE Test Client\n\n"
             "Word telemetry, Training and Games are fully live over BLE. "
             "Other sections are placeholders for future protocol work - "
-            "see docs/USER_MANUAL.md and docs/FUNCTIONALITY_STATUS.md in "
+            "see docs/USER_MANUAL.md in "
             "the firmware repo for what's implemented on-device.",
 }
 

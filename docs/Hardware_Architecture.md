@@ -2,7 +2,7 @@
 
 **Status:** Living document — authoritative reference for MORPHEUS hardware planning
 **Applies to:** All MORPHEUS hardware variants (OLED, TFT, and future revisions)
-**Baseline firmware:** v1.2.2
+**Baseline firmware:** 2.8.6 (OLED variant); the TFT variant is a plan only
 **Document created:** 2026-07-04
 
 This document is maintained alongside the firmware and hardware design. Any GPIO
@@ -98,8 +98,8 @@ any of them should be a deliberate, documented choice, not a default.
 
 MORPHEUS ships as two hardware variants sharing the same firmware core:
 
-- **OLED variant** — compact, lower-cost, lower-power. Current production
-  hardware (v1.2.2).
+- **OLED variant** — compact, lower-cost, lower-power. The implemented
+  hardware (firmware 2.8.6).
 - **TFT variant** — premium, richer graphical interface, PWM-controlled
   backlight for adjustable brightness and power management. Planned.
 
@@ -118,16 +118,24 @@ the full navigation/menu button set.
 | 25 | Jack tip — DIT / straight key (shared node with built-in equivalent) | Current, extended role |
 | 26 | Jack ring — DAH (shared node with built-in equivalent) | Current, extended role |
 | 18 | Buzzer / sidetone | Current |
-| 33 | Mode switch | Current |
-| 27 | Bond reset | Current |
-| 34 | Nav ladder (Up/Down/Left/Right), ADC1 | Reserved |
-| 13 | OK (menu, dedicated) | Planned |
-| 14 | Select (menu, dedicated) | Planned |
-| 16 | Back (menu, dedicated) | Planned |
+| 27 | Status LED | Current |
+| 19 | Rotary encoder A | Current |
+| 23 | Rotary encoder B | Current |
+| 4 | Encoder push (select) | Current |
+| 14 | Confirm button | Current |
+| 13 | Back button | Current |
+| 34 | Nav ladder (Up/Down/Left/Right), ADC1 | Reserved (unused) |
 
-**Committed: 11 of 19. Free: 8** → GPIO4, 17, 19, 23, 32, 35, 36, 39.
+Straight-key / paddle mode and BLE bond reset are menu settings, not hardware
+inputs.
+
+**Committed: 12 of 19 (including the reserved GPIO34). Free: 7** → GPIO16, 17, 32,
+33, 35, 36, 39.
 
 ## GPIO Allocation — TFT Variant
+
+*Planning only; not implemented. The OLED variant has since moved to a rotary-encoder
+plus two-button interface (see above), so this table needs rework before a TFT board is built.*
 
 | Pin | Function | Status |
 |---|---|---|
@@ -139,8 +147,7 @@ the full navigation/menu button set.
 | 4 | TFT RST | Planned |
 | 25 | Jack tip (shared node) | Carried over |
 | 26 | Jack ring (shared node) | Carried over |
-| 33 | Mode switch | Carried over |
-| 27 | Bond reset | Carried over |
+| 27 | Status LED | Carried over |
 | 34 | Nav ladder, ADC1 | Reserved |
 | 13 | OK (menu, dedicated) | Planned |
 | 14 | Select (menu, dedicated) | Planned |
@@ -167,7 +174,7 @@ GPIO21, 22, 35, 36, 39.
 
 | Variant | Free pins | Composition |
 |---|---|---|
-| OLED | 8 | 4 flexible non-ADC (4,17,19,23) + 4 ADC1-capable (32,35,36,39) |
+| OLED | 7 | 2 flexible non-ADC (16,17) + 5 ADC1-capable (32,33,35,36,39) |
 | TFT | 5 | I²C bus intact (21,22) + 3 ADC1-capable (35,36,39) |
 
 Both variants retain their full ADC1 headroom minus what the nav ladder and
@@ -263,8 +270,7 @@ hardware beyond the base design.*
   the first costs zero further GPIOs, unlike ADC or discrete-GPIO parts.
 - **ADC1 stewardship:** Only 6 ADC1 pins exist across the entire platform.
   Track their use carefully as features accumulate; do not let a future
-  feature "just borrow" an ADC1 pin for a purely digital purpose the way
-  GPIO33 (mode switch) already does today (see §10).
+  feature "just borrow" an ADC1 pin for a purely digital purpose.
 - **SPI on OLED is a decision point, not a default.** If SD card or other SPI
   peripherals become a near-term commitment rather than speculative, adding a
   dedicated SPI bus to the OLED variant should be scoped and reviewed on its
@@ -283,9 +289,6 @@ hardware beyond the base design.*
    IC from the start? Both are supported; this is a cost/accuracy trade-off,
    not a GPIO question.
 3. **Expansion header:** Populate in the first revision, or reserve pads only?
-4. **GPIO33 reassignment:** The mode switch currently occupies an ADC1-capable
-   pin for a purely digital function. Not urgent, but flagged as a candidate
-   to reassign to a non-ADC pin if ADC1 demand tightens in a future revision.
 
 ---
 
@@ -294,3 +297,4 @@ hardware beyond the base design.*
 | Version | Date | Summary |
 |---|---|---|
 | 1.0 | 2026-07-04 | Initial consolidation: OLED/TFT GPIO allocation, design rules, feature classification, and open decisions from hardware architecture review. |
+| 1.1 | 2026-10-07 | Synchronised the OLED variant with firmware 2.8.6: rotary encoder, confirm/back buttons and status LED; mode switch and hardware bond-reset button removed (both are menu functions now). |

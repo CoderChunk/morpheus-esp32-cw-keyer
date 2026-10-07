@@ -29,33 +29,36 @@ Disable features by setting the corresponding value to `0` before compiling.
 For example, setting `FEATURE_BLE` to `0` removes NimBLE-dependent code paths
 and leaves transport functions as no-op stubs.
 
-## Host-side tests
+## Tests
 
-Two independent test suites run without ESP32 hardware:
+The complete suite (functional, non-functional, regression, integration, system and
+negative tests) is described in [TEST_SUITE.md](TEST_SUITE.md) and run through one entry
+point:
 
 ```sh
-python -m unittest discover -s tests
-tests/native/run.sh
+tests/run_all.sh --host                         # host tests, no hardware
+tests/run_all.sh --host --build                 # ... plus the ESP32 build, size budget and warning baseline
+tests/run_all.sh --device AA:BB:CC:DD:EE:FF     # real-device system tests (never flashes)
 ```
 
-The Python `unittest` suite models decoder timing behavior (element
-accumulation, character/word-gap finalization, TX-active gating,
-pattern-length bounds) and BLE JSON payload budget constants - a parallel
-model, not the real firmware source.
+The pieces can also be run directly:
 
-`tests/native/run.sh` compiles and links the actual firmware `.cpp` files
-(host g++, an `Arduino.h` stub in `tests/native/arduino_stub/`, no ESP32
-toolchain) and exercises them directly - currently the decoder, trainer,
-and keyer. This is the stronger signal of the two: it catches regressions
-in the real source, not a reimplementation. Requires only a host C++17
-compiler (`g++`).
+```sh
+python3 -m unittest discover -s tests           # Python bridge, protocol and timing-model tests
+tests/native/run.sh                             # host g++ tests linking the real firmware .cpp files
+tests/native/run_sanitized.sh                   # hardened native build, fuzzing and benchmark
+```
 
-Neither suite replaces an Arduino/ESP32 compile or hardware validation for
-GPIO, LEDC, OLED, NimBLE, NVS, or pairing behavior.
+`tests/native/run.sh` compiles and links the actual firmware sources (an `Arduino.h`
+stub in `tests/native/arduino_stub/`, no ESP32 toolchain) and exercises them directly:
+decoder, trainer, keyer, games input, the keyer-settings and game-input protocols,
+keyer metrics and the virtual-key guard. It needs only a host C++17 compiler (`g++`).
+
+Host tests do not replace an ESP32 compile or hardware validation for GPIO, LEDC, OLED,
+NimBLE, NVS or pairing behavior.
 
 ## Suggested validation before a pull request
 
-Run both host test suites and perform at least one firmware compile with the
-feature set you changed. For BLE, display, sidetone, settings persistence, or
-wiring changes, also validate on hardware because those paths depend on ESP32
-peripherals and attached devices.
+Run `tests/run_all.sh --host --build`, which also compiles the firmware. For BLE, display,
+sidetone, settings persistence or wiring changes, also validate on hardware because those
+paths depend on ESP32 peripherals and attached devices.

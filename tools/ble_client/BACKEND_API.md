@@ -18,11 +18,10 @@ exactly what to import and call.
 **Transport:** this is a Python application with no client/server split
 and no network boundary — the backend is an in-process Python class,
 consumed via direct method calls and plain-callback event subscriptions.
-This is a valid transport under the requirements doc's own §3.1 ("local
-API, IPC, native bindings, ..."). If a future frontend runs in a
+The backend contract is transport-agnostic. If a frontend runs in a
 different process or language, this class is the natural place to put
 a thin RPC/IPC wrapper around — its methods and events already map
-1:1 onto the requested contract.
+1:1 onto the backend contract.
 
 **Module:** `tools/ble_client/backend.py` — class `MorpheusBackend`.
 **Pairing internals:** `tools/ble_client/pairing_backend.py` (imported

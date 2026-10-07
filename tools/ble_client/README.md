@@ -44,13 +44,16 @@ python3 morpheus_ble_client.py
 Leave the address field blank to auto-discover by name (`MORPHEUS-CW`),
 or paste a specific MAC/UUID if you have multiple units.
 
-## What's live vs. placeholder
+## What's live vs. placeholder (in this Qt client)
+
+The Flutter UI covers much more (keyer settings, device information, metrics, device
+management); this table describes only this reference client.
 
 | Sidebar section | Status |
 |---|---|
 | CW Keyer | Live — word telemetry (`BLE_WORD_CHAR_UUID`) |
-| Training | Live — start/stop any of the 6 modes, live drill state, virtual keying |
-| Games | Live — start/stop/pause/restart any of the 3 games, live game state, virtual keying |
+| Training | Live — start/stop any training mode, live drill state, virtual keying |
+| Games | Live — start/stop/pause/restart any of the 3 device games, live game state, virtual keying |
 | Statistics, Connectivity, Profiles, Settings, Diagnostics, Tools | Placeholder — no command exists yet on the BLE control protocol for these |
 | Help | Static info |
 
@@ -62,8 +65,8 @@ event schema on a new characteristic pair (`BLE_CONTROL_CMD_UUID` write,
 `BLE_WORD_CHAR_UUID` word-telemetry characteristic. `protocol.py` holds
 the UUID constants that must match `config.h`.
 
-Commands are compact JSON (no whitespace after `:`) written to
-`BLE_CONTROL_CMD_UUID`:
+Commands are compact JSON (no whitespace after `:`, at most 96 bytes) written to
+`BLE_CONTROL_CMD_UUID`; the full vocabulary is in `WS_PROTOCOL.md`:
 
 ```json
 {"cmd":"train_start","mode":"KOCH"}

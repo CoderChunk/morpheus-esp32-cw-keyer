@@ -310,10 +310,9 @@ two shapes, told apart by which key is present:
   Same `wpm`/`mode`/`timestamp` fields, same characteristic. Never
   itself authoritative — only the `"word"` shape means "this word is
   done." A mobile client that only wants completed words can check for
-  `"word"` and ignore anything with `"live"` instead. **Not yet
-  consumed by any Flutter code** — this direct-GATT mobile path isn't
-  implemented yet at all (see `MOBILE_ARCHITECTURE.md`); when it is,
-  parse this the same way the desktop bridge's `backend.py` does
+  `"word"` and ignore anything with `"live"` instead. The native Flutter client
+  (`NativeBleMorpheusClient`, see `MOBILE_ARCHITECTURE.md`) parses this
+  the same way the desktop bridge's `backend.py` does
   (`_on_word_notify`: check `"pat"` first, then `"live"`, fall through
   to `"word"`).
 - `"pat"` — the in-progress dit/dah pattern for the character currently

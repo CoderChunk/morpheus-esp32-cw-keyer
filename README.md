@@ -2,32 +2,32 @@
 
 > **Forge the Sound of Morse.**
 
-An open-source ESP32 CW keyer featuring real-time Morse decoding, Koch/Farnsworth/adaptive training, three CW arcade games, an OLED operator interface, and secure Bluetooth Low Energy telemetry.
+An open-source ESP32 CW keyer with real-time Morse decoding, adaptive Koch/Farnsworth training, three device arcade games, an OLED operator interface, and secure Bluetooth Low Energy remote control and telemetry.
 
-Current firmware version: **v2.3.0**. See `docs/USER_MANUAL.md` for full operating instructions.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-ESP32-red)
+
+Current firmware: **2.8.6** (see [CHANGELOG.md](CHANGELOG.md)). Operating instructions are in [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
+The companion app is [MORPHEUS UI](https://github.com/CoderChunk/morpheus_ui) (Flutter; Linux tested, other platforms implemented).
 
 ---
 
 ## Overview
 
-MORPHEUS is more than a Morse keyer.
-
-It is a development platform for modern CW technology.
-
-The firmware combines:
+MORPHEUS combines:
 
 * Straight key and iambic paddle (Mode A/B) keying
 * Real-time Morse decoding
-* Six training modes (Koch, Characters, Words, Callsigns, Adaptive, Exam) plus Farnsworth spacing
-* Three CW arcade games with persisted high scores
+* Eight training modes (Koch, Characters, Words, Callsigns, Adaptive, Exam, Listening, Combined) plus Farnsworth spacing
+* Three device arcade games with persisted high scores
 * Session and lifetime statistics
 * Six named operating profiles (Default, Portable, Contest, Practice, Outdoor, Silent)
 * A 5-slot memory keyer
 * A rotary-encoder-driven OLED menu system
-* Secure Bluetooth Low Energy telemetry
-* Modular event-driven architecture
+* Secure BLE: word telemetry plus a JSON control channel for remote keying, training, games and settings
+* A modular, event-driven architecture
 
-Every subsystem is isolated and independently expandable, making MORPHEUS suitable for experimentation, education, and future enhancements.
+Every subsystem is isolated and independently expandable, making MORPHEUS suitable for experimentation, education and further development.
 
 ---
 
@@ -44,14 +44,14 @@ Every subsystem is isolated and independently expandable, making MORPHEUS suitab
 
 ### Real-Time Decoding
 
-* Live Morse decoding
-* Character and word recognition
-* Timing-based classification
-* Runtime enable/disable
+* Live Morse decoding with character and word recognition
+* Timing-based classification and runtime enable/disable
+* Measured key durations and inter-character silence reported over BLE
 
 ### Training
 
-* Koch Method, Characters, Words, Callsigns, Adaptive, and Exam modes
+* Koch, Characters, Words, Callsigns, Adaptive and Exam modes on the device
+* Listening and Combined modes driven from the companion app
 * Farnsworth spacing practice
 * Per-mode statistics and a 90%-to-pass Exam mode
 
@@ -60,7 +60,7 @@ Every subsystem is isolated and independently expandable, making MORPHEUS suitab
 * Copy Challenge (falling-character reaction game)
 * Memory Challenge (Simon-style growing chain)
 * Speed Challenge "Overdrive" (accelerating fixed-tempo beat)
-* Persisted high scores, survive Factory Reset
+* Persisted high scores, which survive Factory Reset
 
 ### Statistics & Profiles
 
@@ -68,24 +68,25 @@ Every subsystem is isolated and independently expandable, making MORPHEUS suitab
 * Six named operating profiles bundling WPM/tone/paddle-reverse/mode/volume/contrast
 * 5-slot memory keyer for canned CQ/exchange messages
 
-### Wireless Telemetry
+### Wireless
 
-* Secure BLE communication (bonding, MITM protection, LE Secure Connections)
-* Passkey authentication, multi-device trusted allowlist (up to 3 remembered devices, one active connection at a time)
-* Bounded, auto-expiring pairing window
-* Real-time word transmission (JSON payload per completed word)
+* Secure BLE: bonding, MITM protection, LE Secure Connections with a passkey shown on the OLED
+* Up to 3 remembered devices, one active connection at a time
+* Bounded, auto-expiring pairing window (60 s); BLE is off by default
+* Real-time word and live-pattern notifications (JSON)
+* Remote control channel: virtual key, training and game control, keyer settings, device information. A held virtual key is released if the link drops.
+* Preferred connection interval of 7.5–15 ms for responsive remote keying
 
 ### Operator Display
 
-* OLED status display with live decoded text
-* Current WPM and operating mode
+* OLED status display with live decoded text, WPM and operating mode
 * BLE connection status and pairing information
-* Status LED: keydown pulse, BLE pairing/connect feedback, and training/playback flash
+* Status LED: key-down pulse, BLE pairing/connect feedback, training/playback flash
 
 ### Diagnostics
 
 * Serial diagnostics (opt-in, off by default)
-* Input, display, audio, BLE, GPIO, and LED diagnostic screens
+* Input, display, audio, BLE, GPIO and LED diagnostic screens
 * Runtime statistics and heap information
 
 ---
@@ -173,6 +174,8 @@ morpheus-esp32-cw-keyer/
 │   ├── architecture.md
 │   ├── build.md
 │   ├── Hardware_Architecture.md
+│   ├── TEST_SUITE.md
+│   ├── test-reports/
 │   ├── wiring.md
 │   └── USER_MANUAL.md
 ├── firmware
@@ -188,13 +191,14 @@ morpheus-esp32-cw-keyer/
 │       ├── transport.{h,cpp}
 │       └── ble_control.{h,cpp} # BLE remote-control command/event bridge
 ├── tests
-│   ├── test_ble_json_budget.py
-│   ├── test_decoder_logic.py
-│   └── native/                 # host g++ tests linking the real firmware .cpp
+│   ├── run_all.sh              # one entry point for every test level
+│   ├── native/                 # host g++ tests linking the real firmware .cpp
+│   ├── hardware/               # real-device system and integration tests
+│   └── test_*.py               # bridge, protocol and timing-model tests
 ├── tools
-│   ├── ble_client/              # PySide6 desktop BLE reference client
-│   ├── oled_render/             # host OLED simulator (no hardware)
-│   └── oled_screencap/          # live OLED screenshot over BLE
+│   ├── ble_client/             # protocol specs; Python BLE bridge (debug route) and Qt reference client
+│   ├── oled_render/            # host OLED simulator (no hardware)
+│   └── oled_screencap/         # live OLED screenshot over BLE
 ├── LICENSE
 ├── CHANGELOG.md
 └── README.md
@@ -219,21 +223,19 @@ arduino-cli compile --fqbn esp32:esp32:esp32 firmware/MORPHEUS
 arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32 firmware/MORPHEUS
 ```
 
-Host-side decoder timing-model tests can be run with:
+Release builds are published as GitHub releases: a full 4 MB flash image (write at `0x0`)
+and an app-only binary.
+
+## Testing
 
 ```sh
-python -m unittest discover -s tests
+tests/run_all.sh --host --build                 # host tests, ESP32 build, size budget, warning baseline
+tests/run_all.sh --device AA:BB:CC:DD:EE:FF     # real-device system tests (never flashes)
 ```
 
-Native tests that compile and exercise the actual firmware modules (not
-reimplementations) - currently the decoder, trainer, and keyer - can be
-run with:
-
-```sh
-tests/native/run.sh
-```
-
-Requires only a host C++17 compiler (`g++`) - no other dependencies.
+The suite covers functional, non-functional (fuzzing, hardened builds, benchmarks), regression,
+integration, system and negative tests. See [docs/TEST_SUITE.md](docs/TEST_SUITE.md) and the
+reports in [docs/test-reports/](docs/test-reports/). Native tests need only a host C++17 compiler.
 
 See `docs/build.md` for more detail.
 
@@ -241,9 +243,11 @@ See `docs/build.md` for more detail.
 
 # Required Libraries
 
-* NimBLE-Arduino
+* NimBLE-Arduino (2.x)
 * U8g2
 * Preferences (ESP32 Core)
+
+Tested with ESP32 Arduino core 3.3.x, NimBLE-Arduino 2.5.1 and U8g2 2.36.19.
 
 ---
 
@@ -276,7 +280,11 @@ MORPHEUS uses:
 * Bonded devices
 * Encrypted communication
 
-Only trusted devices may reconnect after pairing. BLE is off by default and must be explicitly enabled; even when enabled, advertising only runs during a bounded, auto-expiring pairing window.
+Only trusted devices may reconnect after pairing. BLE is off by default and must be explicitly enabled; pairing mode advertises only during a bounded, auto-expiring window.
+
+The GATT service and the control-channel command and event formats are specified in
+[`tools/ble_client/WS_PROTOCOL.md`](tools/ble_client/WS_PROTOCOL.md) and
+[`tools/ble_client/MOBILE_BLE_PROTOCOL.md`](tools/ble_client/MOBILE_BLE_PROTOCOL.md).
 
 ---
 
@@ -292,9 +300,11 @@ The following are present in the menu today as explicit "Feature not yet" placeh
 Contributors are also encouraged to explore:
 
 * OTA firmware updates
-* A hardware bond-reset trigger
-* Test coverage for the keyer, trainer, games, stats, profiles, and UI state machine
-* Mobile applications, web dashboards, contest logging, network gateways, SDR integrations
+* Test coverage for the games, stats, profiles and UI state machine (the keyer, decoder, trainer and BLE control protocol are covered)
+* Web dashboards, contest logging, network gateways, SDR integrations
+
+Known issue: about 5–10 % of reconnects to an already-bonded device need a retry; see the latest
+test report.
 
 ---
 

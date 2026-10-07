@@ -190,12 +190,12 @@ Details of findings are in §9. Limits of this test campaign are in §10.
 
 The firmware passes 68 of the 71 planned tests. Two fail, and both are the same defect (FND-01, seen as NFT-11 and ST-13); one is pending (ST-17, interactive). All documented commands and error paths behave as specified on a real device, the parsers withstood more than 734,000 hostile inputs, resource growth since v2.7.1 is negligible, and a 30-minute soak ran without a drop. The open reliability defect **FND-01 (intermittent failure after reconnecting)** should be diagnosed with an HCI trace or serial log before the firmware is treated as release-quality for unattended use. FND-02 is a documented design limit with a likely firmware-side improvement.
 
-## Addendum — firmware 2.8.6 (2026-10-07)
+## Addendum — firmware 2.8.7 (2026-10-07)
 
 | Finding | Status |
 |---|---|
 | **FND-03** stuck key after link loss | **Closed** in 2.8.5; verified on hardware. |
-| **FND-02** virtual key floor | **Mitigated** in 2.8.6: the firmware requests a 7.5–15 ms connection interval once the link is secure. On the same Linux/BlueZ host ST-16 now measures requested 30/70/150/300 ms holds as 57/90/168/326 ms (previously 97/146/244/389). Hosts may ignore or adjust the request. |
-| **FND-01** reconnect failures | **Open**, unchanged (SYS-13 9/10 and the reconnect-cycle step 9/10 after the 2.8.6 flash). Root cause still unconfirmed. |
+| **FND-02** virtual key floor | **Mitigated** in 2.8.7: the firmware requests a 7.5–15 ms connection interval once the link is secure. On the same Linux/BlueZ host ST-16 now measures requested 30/70/150/300 ms holds as 57/90/168/326 ms (previously 97/146/244/389). Hosts may ignore or adjust the request. |
+| **FND-01** reconnect failures | **Open**, unchanged (SYS-13 9/10 and the reconnect-cycle step 9/10 after the 2.8.7 flash). Root cause still unconfirmed. |
 
-The 2.8.6 smoke test ran on a board flashed with the 2.8.5 build plus the connection-interval change; the released 2.8.6 differs only in the version string.
+The smoke test ran on a board flashed with the 2.8.5 build plus the connection-interval change; the released 2.8.7 adds only the version string and the zero-size guard in `core_decoder_lookupPattern()` (host-tested).

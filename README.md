@@ -7,7 +7,7 @@ An open-source ESP32 CW keyer with real-time Morse decoding, adaptive Koch/Farns
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-ESP32-red)
 
-Current firmware: **2.8.7** (see [CHANGELOG.md](CHANGELOG.md)). Operating instructions are in [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
+Current firmware: **2.8.8** (see [CHANGELOG.md](CHANGELOG.md)). Operating instructions are in [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
 The companion app is [MORPHEUS UI](https://github.com/CoderChunk/morpheus_ui) (Flutter; Linux tested, other platforms implemented).
 
 ---

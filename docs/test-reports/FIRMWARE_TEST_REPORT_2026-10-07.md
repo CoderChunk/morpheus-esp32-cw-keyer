@@ -199,3 +199,10 @@ The firmware passes 68 of the 71 planned tests. Two fail, and both are the same 
 | **FND-01** reconnect failures | **Open**, unchanged (SYS-13 9/10 and the reconnect-cycle step 9/10 after the 2.8.7 flash). Root cause still unconfirmed. |
 
 The smoke test ran on a board flashed with the 2.8.5 build plus the connection-interval change; the released 2.8.7 adds only the version string and the zero-size guard in `core_decoder_lookupPattern()` (host-tested).
+
+## Addendum — firmware 2.8.8 (2026-10-07)
+
+| Finding | Status |
+|---|---|
+| **FND-01** reconnect failures | **Root cause found and fixed.** A serial log from a debug build showed `Guru Meditation Error ... Stack canary watchpoint triggered (nimble_host)` about 250 ms after connecting: the control-write callback ran the command handler on the NimBLE host task and overflowed its stack. 2.8.8 queues the command in the callback and runs it on the main loop (`control_cmd_queue.h`; host test `test_control_cmd_queue.cpp`). The earlier `startSecurity()` race hypothesis was wrong. |
+| Verification | Debug build with serial logging: 60/60 reconnects, no panics. Release build: device system tests 30/30, reconnect gate 30/30 strict, bridge integration 10/10, UI system tests over native BLE and the bridge pass (FS-12 20/20 on both). A later 100-cycle run: 99/100; the single failure was `failed to discover services, device disconnected` (about 1 %), not yet analysed. |

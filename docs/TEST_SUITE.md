@@ -43,11 +43,11 @@ and `--soak ADDR MINUTES` are the stand-alone reliability modes.
 FND-03 (stuck key after link loss) was fixed in firmware 2.8.5 and verified on hardware; NEG-D14 / FS-N07 now pass on 2.8.5 and still fail on 2.8.4.
 FND-02 (virtual key floor of about 97 ms) was mitigated in firmware 2.8.7 by requesting a 7.5–15 ms connection interval; ST-16 now measures a requested 30 ms hold as 57 ms.
 
-A red run is the truth until these are fixed. Details: `docs/test-reports/FIRMWARE_TEST_REPORT_*.md`.
+FND-01 (about 10 % of reconnects failing) was a device crash — a stack overflow in the NimBLE host task caused by running the control-command handler in the write callback. Fixed in firmware 2.8.8: reconnect gate 30/30 strict, 60/60 with serial logging and no panics. One connect/discovery failure of a different kind (about 1 %) appeared in a later 100-cycle run and is not yet analysed; the reconnect tests stay strict.
 
-| Test | Defect |
-|---|---|
-| `D3` / ST-13 / NFT-11 | **FND-01** about 10–12% of reconnects fail right after connecting (reproduced with two clients) |
+A red run is the truth. Details: `docs/test-reports/FIRMWARE_TEST_REPORT_*.md`.
+
+No defects are currently open.
 
 ## Adding tests
 Host tests compile the real sources; add a `.cpp` to `tests/native/` and a `run` line in `run.sh` and

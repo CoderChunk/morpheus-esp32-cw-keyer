@@ -1,5 +1,19 @@
 # Changelog
 
+## Source 2.8.8 — 2026-10-07
+
+- Fix (FND-01): the device no longer crashes shortly after a client connects. The BLE
+  control-write callback ran the whole command handler on the NimBLE host task, whose small
+  stack overflowed ("Stack canary watchpoint triggered (nimble_host)"), rebooting the
+  device about 250 ms after connecting. This showed up as 5–12 % of reconnects failing.
+  The callback now only queues the command (`control_cmd_queue.h`, 8 slots); the main loop
+  runs it. Queued commands are discarded on disconnect.
+- Measured on hardware: 60/60 reconnects with serial logging and no panics; strict
+  reconnect gate 30/30; UI system tests over both transports pass. One failure in a later
+  100-cycle run was a connect/discovery failure of a different kind (about 1 %).
+- Commands now run one main-loop pass after they arrive instead of inside the BLE callback.
+  No protocol, UUID, security or NVS changes; compatible with every existing client.
+
 ## Source 2.8.7 — 2026-10-07
 
 - Perf (FND-02): once the link is secure the device requests a 7.5–15 ms connection

@@ -108,3 +108,14 @@ corresponding page in `pages.py`.
   games (no BLE involvement - see `UI_SPECIFICATION.md` §4)
 - `protocol.py` — UUID/command-vocabulary constants plus the exact
   Koch order and Morse table (copied from firmware source)
+
+## Flutter Connectivity device management
+
+Bridge application 1.2.0 adds exact-identifier discovery, runtime telemetry,
+Linux paired-device import, PIN/confirmation/cancellation events and host bond
+removal. Update requirements (`bleak>=1.0`) and restart the bridge to enable the
+new Flutter device manager. Linux supports in-app six-digit PIN entry through
+BlueZ; other platforms use their operating system prompt. The app keeps one
+active connection and a separate saved-identity list. See WS_PROTOCOL.md and
+MOBILE_BLE_PROTOCOL.md for capability limits. Firmware security is unchanged;
+no firmware update/flash is required for these management additions.

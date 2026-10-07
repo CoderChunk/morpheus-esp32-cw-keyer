@@ -34,7 +34,7 @@ enum DrillPhase : uint8_t {
 
 void      core_trainer_init();
 void      core_trainer_service(unsigned long now);
-void      core_trainer_startSession(TrainMode mode);
+void      core_trainer_startSession(TrainMode mode, uint8_t kochPoolLevel = 0);
 void      core_trainer_stopSession();
 bool      core_trainer_isSessionActive();
 TrainMode core_trainer_getMode();

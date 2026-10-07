@@ -1,5 +1,45 @@
 # MORPHEUS Mobile BLE Protocol — GATT-Level Reference
 
+## Additive measured CW telemetry — firmware 2.8.4
+
+Write a compact command to existing authenticated/encrypted 0003:
+
+```json
+{"cmd":"probe_keyer","id":"a123"}
+```
+
+`reset_keyer_metrics` with the same ID field clears observations before replying.
+IDs must be 1..24 ASCII alphanumeric characters. Each command emits one response
+on existing READ/NOTIFY 0004, with no separate ACK:
+
+```json
+{"evt":"keyer_metrics","id":"a123","ts":456,"seq":3,"ditMs":73,"dahMs":213,"gapMs":218,"virtual":false}
+```
+
+Examples are protocol fixtures. `ts` is uint32 device uptime and `seq` is a
+uint32 completed-element/reset counter. Durations are latest actual key-down
+measurements from the authoritative keyer. `gapMs` measures silence from the
+previous character's final key-up to the next key-down, only after a decoded
+character boundary and before a word boundary. It excludes word gaps and is
+never the configured 3×dit interval. Each sample is independently null before
+measurement or after 30 seconds. Source changes clear old samples; `virtual`
+indicates physical/remote input. Training/game activity clears observations.
+
+The native app records a monotonic stopwatch immediately before the serialized
+GATT write and measures at the matching reply. It excludes time waiting
+in the writer queue and includes BLE/device processing/delivery. RTT is shown
+as a round trip, never divided to manufacture a one-way estimate. A READ of
+0004 can recover a missed NOTIFY only if its ID matches this outstanding probe;
+old cached events cannot produce measurements. Recovery reads time out after
+two seconds so a stalled read cannot permanently block subsequent key commands.
+The driver fails a probe after six seconds or on disconnect. The UI suppresses commands on pre-2.8.4 firmware
+and shows unavailable values rather than WPM-derived timing. Packet size fits
+the existing bounded 240-byte control payload and negotiated MTU requirements.
+
+Full field semantics and desktop bridge additions are in the matching
+`WS_PROTOCOL.md` CW measurement extension. Existing UUIDs, decoder, bonding,
+training/game scoring and NVS schemas are unchanged.
+
 The exact wire-level protocol the native Dart transport driver
 (`NativeBleMorpheusClient`, see `MOBILE_ARCHITECTURE.md`) must
 implement using `flutter_reactive_ble` on Android/iOS. Every value
@@ -58,6 +98,32 @@ True)`), and gives the driver a signal that the write was accepted at
 the link layer (though not that the command was semantically valid —
 see §6 for how validity is actually reported).
 
+## Connectivity device management (2026-10-06)
+
+The implemented native Dart client shares saved-device identity storage and the
+single active-device session model with desktop. Discovery returns all matching
+MORPHEUS advertisements (name/service), including actual scan RSSI and receipt
+time, without replacing the active link. RSSI expires after 30s; a percentage is
+unavailable. There is no Python/WebSocket bridge on mobile, so bridge runtime
+and bridge latency remain unavailable.
+
+Pairing a selected identifier emits `PAIRING_SYSTEM_PROMPT`: Android/iOS own PIN
+entry and bond security. The app explains which device is selected and instructs
+the user to enter the six digits shown on its screen in the system prompt; it
+never pretends its desktop custom PIN field can submit credentials to the mobile
+OS. Secured control read/subscription success is required before CONNECTED and
+PAIRING_SUCCEEDED. Cancelling disconnects the pending native link and invalidates
+its callbacks, including delayed authentication completion.
+
+`flutter_reactive_ble` does not expose OS bond enumeration/removal in this driver.
+Runtime sets `canListPairings` and `canRemovePairing` false. Previously saved
+identities stay accessible; "Remove saved device" confirms removal from this app
+and explains how to remove the bond in system Bluetooth settings. The registry
+stores no PIN, LTK or authentication material. A new pairing/switch disconnects
+the currently active device first. These are host-management additions, requiring
+no firmware/GATT/security change or new firmware minimum. Existing keyer metric
+commands still require firmware 2.8.4.
+
 ## 3. Connection, bonding, and security requirements
 
 - `NimBLEDevice::setSecurityAuth(true, true, true)` — **bonding
@@ -72,7 +138,7 @@ see §6 for how validity is actually reported).
   level the first time the app touches one of them post-connection —
   see `MOBILE_ARCHITECTURE.md`'s pairing table (Android: system bonding
   dialog / `createBond`; iOS: Core Bluetooth bonds transparently). The
-  Dart driver does not need to implement any pairing UI of its own —
+  Dart driver provides a device-selection/status flow; secure PIN entry remains with the OS —
   that's the entire reason `pairing_backend.py`'s custom BlueZ Agent1
   dialog exists only for desktop Linux, which lacks this OS-level UX.
 - Once bonded, the device remembers up to 3 trusted peers
@@ -308,3 +374,48 @@ characteristics before sending any command**, not after.
 | Commands NOT used by mobile | `game_start`/`game_stop`/`game_pause`/`game_confirm`/`game_restart` (games are entirely client-side) |
 | Field rename required | wire `examCorrect`/`examTotal` → logical `examCorrectCount`/`examTotalCount` |
 | Error code mapping | any control-channel error → `TRAINING_START_FAILED` |
+
+
+## Additive 2.8.2 game-input observation (2026-10-02)
+
+Optional GATT characteristic `7a48a2b0-0005-4ad4-9f1a-1c2d3e4f5a6b`, READ/NOTIFY
+with existing authenticated/encrypted access, emits:
+
+```json
+{"evt":"game_morse","game":"COPY","run":1,"seq":1,"char":"K","pattern":"-.-","timestamp":123456}
+```
+
+This observes finalized input to firmware COPY/MEMORY/SPEED. It does not change
+normal word/live/pattern telemetry, commands, ACKs or authoritative game state.
+The Python backend offers `on_game_morse`; WebSocket channel is
+`gameMorseReceived` (included in default subscriptions). Mobile clients subscribe
+to 0005 directly when discovered. Older firmware without this characteristic is
+tolerated; older clients can continue using existing channels. NOTIFY is bounded
+and best effort; run/sequence permit dedup and unobserved-position accounting.
+No physical Morse decoding or firmware scoring is moved into Flutter.
+
+Full rationale/field limits/security/compatibility/test boundaries:
+`../../../morpheus_ui/PROTOCOL_CHANGES.md` (workspace sibling document).
+
+
+## Additive UI-control support — firmware source2.8.3 (2026-10-03)
+
+The optional game-input0005 channel from2.8.2 remains. `set_keyer` adds validated
+existing core setter access, e.g. `{"cmd":"set_keyer","field":"wpm","value":20}`.
+Fields/ranges: wpm5..40, tone200..2000, volume0..100, mode/reversed/iambic/sidetone0..1,
+weight30..70. Reject unknown/bad integer values and TX/key/training/game busy states.
+Accepted writes use existing debounced NVS and publish actual DeviceInfo; settings
+version9 is unchanged. WS method `setKeyerSetting` maps to backend
+`set_keyer_setting(field,value)`. Updated clients reconcile0004 and await actual
+matching info; command dispatch alone is not device success.
+
+`startTraining`/backend `start_training` optionally accepts `kochLevel:2..40`,
+forwarded as `{"cmd":"train_start","mode":"LISTENING","kochLevel":10}`. KOCH
+selects the existing level; LISTENING/COMBINED select that Koch prefix. Omitted
+argument keeps original mode behavior/full pool. Validate before stopping games.
+These are necessary for the new real keyer/lesson controls, not a trainer/decoder
+rewrite. Older firmware supports baseline commands but cannot provide configured
+lessons or setter confirmation; clients gate2.8.3. Local Farnsworth remains local.
+
+Complete rationale, changed-file list and validation boundaries: workspace
+`morpheus_ui/PROTOCOL_CHANGES.md`. No hardware was flashed.

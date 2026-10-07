@@ -35,3 +35,24 @@ g++ -std=c++17 -Wall -Wextra \
   -o "$OUT_DIR/test_core_keyer"
 
 "$OUT_DIR/test_core_keyer"
+
+g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_game_morse_protocol.cpp" -o "$OUT_DIR/test_game_morse_protocol"
+"$OUT_DIR/test_game_morse_protocol"
+
+# Real firmware game rules plus decoded-input observer (no ESP32 radio/NVS).
+g++ -std=c++17 -Wall -Wextra \
+  -I "$SCRIPT_DIR/arduino_stub" -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_core_games_input.cpp" "$REPO_ROOT/firmware/MORPHEUS/core_games.cpp" \
+  -o "$OUT_DIR/test_core_games_input"
+"$OUT_DIR/test_core_games_input"
+
+g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_keyer_settings_protocol.cpp" -o "$OUT_DIR/test_keyer_settings_protocol"
+"$OUT_DIR/test_keyer_settings_protocol"
+
+g++ -std=c++17 -Wall -Wextra \
+  -I "$SCRIPT_DIR/arduino_stub" -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_keyer_metrics.cpp" "$REPO_ROOT/firmware/MORPHEUS/core_decoder.cpp" \
+  -o "$OUT_DIR/test_keyer_metrics"
+"$OUT_DIR/test_keyer_metrics"

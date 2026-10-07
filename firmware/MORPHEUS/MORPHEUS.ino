@@ -28,7 +28,8 @@
 #include "services.h"
 #include "ble_control.h"
 
-void events_onKeyDown(unsigned long now) {
+void events_onKeyDown(unsigned long now, bool fromVirtualKey) {
+  ble_control_metricsKeyDown(now, fromVirtualKey);
 #if FEATURE_SERIAL
   services_logKeyDown(now);
 #endif
@@ -39,6 +40,7 @@ void events_onKeyUp(ElementType type, unsigned long durMs, unsigned long thresho
 #if FEATURE_SERIAL
   services_logKeyUp(type, durMs, thresholdMs, now);
 #endif
+  ble_control_metricsElement(type == ELEM_DAH, durMs, now);
   core_stats_notifyElementKeyed();
   core_decoder_addElement(type, now, fromVirtualKey);
 }
@@ -47,6 +49,7 @@ void events_onCharacterComplete(char decodedChar, const char *pattern) {
 #if FEATURE_SERIAL
   services_logCharacterComplete(decodedChar, pattern);
 #endif
+  ble_control_metricsCharacter();
   core_stats_notifyCharKeyed();
 #if FEATURE_BLE
   transport_notifyLiveWord(core_decoder_getWordBuffer(), core_keyer_getWpm(), core_keyer_getMode(), millis());
@@ -63,6 +66,7 @@ void events_onWordComplete(const char *word, unsigned long now) {
 #if FEATURE_SERIAL
   services_logWordComplete(word, now);
 #endif
+  ble_control_metricsWord();
   core_stats_notifyWordKeyed();
 #if FEATURE_OLED
   display_appendWord(word);

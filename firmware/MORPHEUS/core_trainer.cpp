@@ -70,6 +70,7 @@ static uint32_t correctCount = 0;
 static uint32_t totalCount = 0;
 
 static uint8_t  kochLevel = 2;
+static uint8_t remoteKochPool = 0;
 static uint16_t kochRollingCorrect = 0;
 static uint16_t kochRollingTotal = 0;
 
@@ -124,7 +125,8 @@ static void generateNextTarget() {
     case TRAIN_MODE_LISTENING:
     case TRAIN_MODE_COMBINED:
     default:
-      targetBuf[0] = FULL_CHARSET[random(0, FULL_CHARSET_LEN)];
+      targetBuf[0] = remoteKochPool > 0 && (currentMode == TRAIN_MODE_LISTENING || currentMode == TRAIN_MODE_COMBINED)
+        ? KOCH_ORDER[random(0, remoteKochPool)] : FULL_CHARSET[random(0, FULL_CHARSET_LEN)];
       targetBuf[1] = '\0';
       break;
   }
@@ -237,7 +239,9 @@ static void onTrainingCharDecoded(char decoded, const char *pattern) {
   if (targetComplete) { phase = DRILL_FEEDBACK; phaseStartMs = millis(); }
 }
 
-void core_trainer_startSession(TrainMode mode) {
+void core_trainer_startSession(TrainMode mode, uint8_t kochPoolLevel) {
+  remoteKochPool = kochPoolLevel >= 2 && kochPoolLevel <= KOCH_ORDER_LEN ? kochPoolLevel : 0;
+  if (remoteKochPool > 0) core_trainer_setKochLevel(remoteKochPool);
   if (farnsworthPlaying) core_trainer_farnsworthStop();
 
   currentMode = mode;

@@ -1,5 +1,6 @@
 #include "transport.h"
 #include "config.h"
+#include "game_morse_protocol.h"
 #include "core_led.h"
 #include "display.h"
 #if FEATURE_BLE
@@ -9,6 +10,7 @@
 
 static NimBLEServer *bleServer = nullptr;
 static NimBLECharacteristic *bleWordChar = nullptr;
+static NimBLECharacteristic *bleGameMorseChar = nullptr;
 static NimBLECharacteristic *bleControlCmdChar = nullptr;
 static NimBLECharacteristic *bleControlEvtChar = nullptr;
 static BleControlCommandHandler controlCommandHandler = nullptr;
@@ -351,6 +353,9 @@ void transport_init() {
   );
   bleControlEvtChar->setValue("{}");
 
+  bleGameMorseChar = pSvc->createCharacteristic(BLE_GAME_MORSE_UUID,
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+  bleGameMorseChar->setValue("{}");
   pSvc->start();
 
   NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
@@ -479,6 +484,16 @@ void transport_setControlCommandHandler(BleControlCommandHandler handler) {
   controlCommandHandler = handler;
 }
 
+void transport_notifyGameMorse(const char *game, uint32_t run, uint32_t seq, char decoded, const char *pattern, unsigned long now) {
+  if (!bleServer || !bleGameMorseChar || !bleLinkSecure || bleConnHandle == BLE_CONN_HANDLE_INVALID) return;
+  char json[192];
+  if (!encodeGameMorse(json, sizeof(json), game, run, seq, decoded, pattern, now)) return;
+  uint16_t mtu = bleServer->getPeerMTU(bleConnHandle);
+  if (mtu <= 3 || strlen(json) > (size_t)(mtu - 3)) return;
+  bleGameMorseChar->setValue(json);
+  bleGameMorseChar->notify();
+}
+
 bool transport_sendControlEvent(const char *json) {
   if (bleServer == nullptr || bleControlEvtChar == nullptr) return false;
   uint16_t connHandle = bleConnHandle;
@@ -602,6 +617,7 @@ uint16_t transport_getCurrentMtu() {
 
 #else // !FEATURE_BLE - stub implementations, no NimBLE/Preferences dependency at all
 
+void transport_notifyGameMorse(const char *, uint32_t, uint32_t, char, const char *, unsigned long) {}
 void transport_init() {}
 void transport_service(unsigned long now) { (void)now; }
 void transport_notifyWordCompleted(const char *word, int wpm, OperatingMode mode, unsigned long now) {

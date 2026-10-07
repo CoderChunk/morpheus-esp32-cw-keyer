@@ -1,5 +1,15 @@
 # MORPHEUS Backend API — Implementation Reference
 
+Firmware 2.8.4 adds `request_keyer_metrics(probe_id: str, reset: bool = False)`
+and `on_keyer_metrics(callback)`. IDs require 1..24 ASCII letters/digits.
+Requests enqueue `probe_keyer` / `reset_keyer_metrics` below key/session traffic;
+they return immediately. The callback receives the correlated firmware samples
+plus real monotonic `bleRoundTripMs`, measured from actual BLE write to reply
+and excluding writer queue delay. Timeout/disconnection instead emits
+`{"id":probe_id,"unavailable":True}`. Unmatched or repeated cached packets are
+ignored. See the additive measurement sections in `WS_PROTOCOL.md` and
+`MOBILE_BLE_PROTOCOL.md` for duration, source, expiry and null semantics.
+
 This documents the concrete implementation of the contract requested in
 `MORPHEUS_BACKEND_API_REQUIREMENTS.md`. That document was transport-agnostic
 by design; this one describes the actual delivered transport, so a new
@@ -104,6 +114,8 @@ class PairingEvent:
     passkey: int | None = None
     errorCode: str | None = None
     errorMessage: str | None = None
+    deviceAddress: str | None = None
+    attemptId: str | None = None
 
 @dataclass
 class BackendError:
@@ -187,7 +199,7 @@ the latest `ConnectionInfo` and `TrainingState` internally so a client
 that subscribes *after* some events already fired can still reconstruct
 current state immediately, with no BLE round trip.
 
-`Capabilities.pairing` is computed by actually attempting the lazy
+`Capabilities.pairing` describes custom Linux-agent pairing and is computed by actually attempting the lazy
 import of `pairing_backend.py` (which itself only imports `dbus-next`
 on Linux) — not by hardcoding a platform check, so it's accurate on any
 future platform the app runs on. Every other flag currently defaults to
@@ -222,7 +234,7 @@ Statistics/Settings get real BLE commands):
 | `DEVICE_BUSY` | a command was issued with no active connection |
 | `INVALID_PARAMETER` | `start_training()` was given a mode outside `TrainingMode` |
 | `TRAINING_START_FAILED` | the device's control channel reported `{"evt":"error"}` |
-| `PAIRING_UNAVAILABLE` | pairing attempted where `Capabilities.pairing` is `False` |
+| `PAIRING_UNAVAILABLE` | no custom agent and no selected identifier for system pairing; see runtime capabilities |
 | `PAIRING_FAILED` | any step of the BlueZ pairing flow failed |
 | `INTERNAL_ERROR` | an unexpected exception inside the backend's own async code |
 
@@ -251,3 +263,73 @@ thread). A frontend built by an external tool can either:
   macOS, Android, iOS) uses, since it can't import a Python class
   directly. See `WS_PROTOCOL.md` for the full wire protocol; the BLE
   domain logic is unchanged, only the transport differs.
+
+
+## Additive 2.8.2 game-input observation (2026-10-02)
+
+Optional GATT characteristic `7a48a2b0-0005-4ad4-9f1a-1c2d3e4f5a6b`, READ/NOTIFY
+with existing authenticated/encrypted access, emits:
+
+```json
+{"evt":"game_morse","game":"COPY","run":1,"seq":1,"char":"K","pattern":"-.-","timestamp":123456}
+```
+
+This observes finalized input to firmware COPY/MEMORY/SPEED. It does not change
+normal word/live/pattern telemetry, commands, ACKs or authoritative game state.
+The Python backend offers `on_game_morse`; WebSocket channel is
+`gameMorseReceived` (included in default subscriptions). Mobile clients subscribe
+to 0005 directly when discovered. Older firmware without this characteristic is
+tolerated; older clients can continue using existing channels. NOTIFY is bounded
+and best effort; run/sequence permit dedup and unobserved-position accounting.
+No physical Morse decoding or firmware scoring is moved into Flutter.
+
+Full rationale/field limits/security/compatibility/test boundaries:
+`../../../morpheus_ui/PROTOCOL_CHANGES.md` (workspace sibling document).
+
+
+## Additive UI-control support — firmware source2.8.3 (2026-10-03)
+
+The optional game-input0005 channel from2.8.2 remains. `set_keyer` adds validated
+existing core setter access, e.g. `{"cmd":"set_keyer","field":"wpm","value":20}`.
+Fields/ranges: wpm5..40, tone200..2000, volume0..100, mode/reversed/iambic/sidetone0..1,
+weight30..70. Reject unknown/bad integer values and TX/key/training/game busy states.
+Accepted writes use existing debounced NVS and publish actual DeviceInfo; settings
+version9 is unchanged. WS method `setKeyerSetting` maps to backend
+`set_keyer_setting(field,value)`. Updated clients reconcile0004 and await actual
+matching info; command dispatch alone is not device success.
+
+`startTraining`/backend `start_training` optionally accepts `kochLevel:2..40`,
+forwarded as `{"cmd":"train_start","mode":"LISTENING","kochLevel":10}`. KOCH
+selects the existing level; LISTENING/COMBINED select that Koch prefix. Omitted
+argument keeps original mode behavior/full pool. Validate before stopping games.
+These are necessary for the new real keyer/lesson controls, not a trainer/decoder
+rewrite. Older firmware supports baseline commands but cannot provide configured
+lessons or setter confirmation; clients gate2.8.3. Local Farnsworth remains local.
+
+Complete rationale, changed-file list and validation boundaries: workspace
+`morpheus_ui/PROTOCOL_CHANGES.md`. No hardware was flashed.
+
+## Connectivity management additions (application 1.2.0)
+
+Async operations: `discover_devices() -> list[dict]`,
+`list_paired_devices() -> list[dict]`, `remove_pairing(address) -> None`,
+`prepare_connect() -> None`, `wait_pairing_idle() -> None`.
+`get_device_runtime() -> dict` is synchronous and exposes actual host capability,
+scan/subscription state and fresh advertisement RSSI. See WS_PROTOCOL.md's
+Connectivity section for all result fields, platform limits and freshness rules.
+
+`start_pairing(name, device_address=None, attempt_id=None)` selects an exact
+identifier when supplied and correlates its events. `submit_passkey(pin,
+attempt_id=None)`, `confirm_pairing(accepted, attempt_id=None)` and
+`cancel_pairing(attempt_id=None)` reject stale attempts. PINs must be six ASCII
+digits as a string. System pairing uses Bleak's `pair=True` (Bleak 1.0+) and a
+longer authentication timeout. Linux agent pairing retains its independent
+worker, with explicit cancellation/cleanup. Event registration remains through
+`on_pairing_state(callback)`; events additionally include deviceAddress and
+attemptId plus SYSTEM_PROMPT/CANCELLED states. Connection readiness now requires
+notifications and an authenticated read, rather than merely an opened link.
+
+Before switching, disconnect and observe DISCONNECTED, then await
+`prepare_connect()` so the previous worker cannot absorb the next request.
+Bond removal must happen after disconnection, and local identity removal only
+after successful OS removal. No firmware command or BLE characteristic changes.

@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.8.1";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.8.4";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -90,6 +90,7 @@ static const char     BLE_CONTROL_EVT_UUID[]   = "7a48a2b0-0004-4ad4-9f1a-1c2d3e
 // Bumped from 128: control-event JSON (training/game state) carries more
 // fields than the word payload and needs more headroom. Still well
 // within what NimBLE/BlueZ negotiate down to on either side.
+static const char BLE_GAME_MORSE_UUID[] = "7a48a2b0-0005-4ad4-9f1a-1c2d3e4f5a6b";
 static const uint16_t BLE_REQUESTED_MTU        = 247;
 static const uint16_t BLE_CONTROL_CMD_CAP      = 96;    // max incoming command JSON length
 // Bumped from 220: the MEMORY game_state payload now also carries the

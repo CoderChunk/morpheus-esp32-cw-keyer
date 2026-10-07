@@ -6,6 +6,7 @@
 #if FEATURE_BLE
 #include <NimBLEDevice.h>
 #include <Preferences.h>
+#include "control_cmd_queue.h"
 #include <string.h>
 
 static NimBLEServer *bleServer = nullptr;
@@ -14,6 +15,9 @@ static NimBLECharacteristic *bleGameMorseChar = nullptr;
 static NimBLECharacteristic *bleControlCmdChar = nullptr;
 static NimBLECharacteristic *bleControlEvtChar = nullptr;
 static BleControlCommandHandler controlCommandHandler = nullptr;
+// Commands written by the client, waiting for the main loop (see control_cmd_queue.h).
+static ControlCmdQueue<8, BLE_CONTROL_CMD_CAP> controlCmdQueue;
+static portMUX_TYPE controlCmdMux = portMUX_INITIALIZER_UNLOCKED;
 static Preferences blePrefs;
 static volatile uint16_t bleConnHandle = BLE_CONN_HANDLE_INVALID;
 static volatile bool bleLinkSecure = false;
@@ -179,6 +183,9 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 #endif
     bleConnHandle = BLE_CONN_HANDLE_INVALID;
     bleLinkSecure = false;
+    portENTER_CRITICAL(&controlCmdMux);
+    controlCmdQueue.clear();       // never run a dead client's stale commands
+    portEXIT_CRITICAL(&controlCmdMux);
     if (!bleAwaitingTimeout) {
       pushDisplayStatus(DISPLAY_LINK_ADV);
     }
@@ -264,12 +271,12 @@ class ControlCmdCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
     (void)connInfo;
     if (controlCommandHandler == nullptr) return;
+    // Runs on the NimBLE host task (small stack): only queue the command here and let
+    // the main loop execute it (transport_service). See control_cmd_queue.h.
     std::string value = pChar->getValue();
-    if (value.empty() || value.size() >= BLE_CONTROL_CMD_CAP) return;
-    char buf[BLE_CONTROL_CMD_CAP];
-    memcpy(buf, value.data(), value.size());
-    buf[value.size()] = '\0';
-    controlCommandHandler(buf);
+    portENTER_CRITICAL(&controlCmdMux);
+    controlCmdQueue.push(value.data(), value.size());
+    portEXIT_CRITICAL(&controlCmdMux);
   }
 };
 
@@ -394,6 +401,18 @@ void transport_init() {
 }
 
 void transport_service(unsigned long now) {
+  // Run queued control commands on the main task, not the NimBLE host task.
+  if (controlCommandHandler != nullptr) {
+    char cmd[BLE_CONTROL_CMD_CAP];
+    for (;;) {
+      portENTER_CRITICAL(&controlCmdMux);
+      bool have = controlCmdQueue.pop(cmd);
+      portEXIT_CRITICAL(&controlCmdMux);
+      if (!have) break;
+      controlCommandHandler(cmd);
+    }
+  }
+
   portENTER_CRITICAL(&bleStateMux);
   if (bleAwaitingTimeout && (now - bleStateChangeMs >= BLE_PAIR_MSG_DURATION_MS)) {
     bleAwaitingTimeout = false;

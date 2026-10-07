@@ -67,4 +67,9 @@ g++ -std=c++17 -Wall -Wextra \
 # FND-03: orphaned virtual key (link lost while held) is released.
 g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
   "$SCRIPT_DIR/test_virtual_key_guard.cpp" -o "$OUT_DIR/test_virtual_key_guard"
+
+# FND-01: control commands are queued off the NimBLE host task and run by the main loop.
+g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_control_cmd_queue.cpp" -o "$OUT_DIR/test_control_cmd_queue"
+"$OUT_DIR/test_control_cmd_queue"
 "$OUT_DIR/test_virtual_key_guard"

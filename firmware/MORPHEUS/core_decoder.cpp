@@ -137,6 +137,7 @@ void core_decoder_setEnabled(bool enabled) {
 }
 
 bool core_decoder_lookupPattern(char ch, char *out, size_t outSize) {
+  if (out == nullptr || outSize == 0) return false;   // nothing can be written
   if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
   for (uint8_t i = 0; i < MORSE_TABLE_SIZE; i++) {
     MorseEntry entry;

@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.8.4";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.8.6";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -109,6 +109,13 @@ static const uint16_t BLE_CONN_HANDLE_INVALID  = 0xFFFF;
 // but still only ONE active connection at a time - the trusted-device
 // list controls who is ALLOWED to connect, not how many simultaneously.
 static const uint8_t  BLE_TRUSTED_DEVICE_CAP   = 3;
+// Preferred connection interval, requested once the link is secure (units of
+// 1.25 ms: 6..12 = 7.5..15 ms). Keeps the remote virtual key's press/release
+// latency low; hosts may ignore or adjust the request.
+static const uint16_t BLE_CONN_INTERVAL_MIN      = 6;
+static const uint16_t BLE_CONN_INTERVAL_MAX      = 12;
+static const uint16_t BLE_CONN_LATENCY           = 0;
+static const uint16_t BLE_CONN_SUPERVISION_TO    = 400;  // 10 ms units = 4 s
 
 // ----------------------------------------------------------------------------
 // Training module tunables

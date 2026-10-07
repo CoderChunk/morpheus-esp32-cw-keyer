@@ -251,6 +251,13 @@ class MorpheusBackend:
         # paddleReversed/mode/iambicMode/weightPercent. Empty until then.
         self._device_info: dict = {}
         self._metric_probes: dict = {}
+        # Errors are events: one refusal can reach us as a notification, again as the
+        # post-command re-read and again as BlueZ's echo of that read. Report it once
+        # per command (reset each time a command is written).
+        self._last_error_msg = None
+        # BlueZ reports our own GATT read as a notification of the same value; drop that
+        # echo (value, expiry) so it is not mistaken for a new event.
+        self._echo_guard = None
         self._metrics_listeners: list = []
 
         self._connection_listeners: List[Callable[[ConnectionInfo], None]] = []
@@ -873,6 +880,8 @@ class MorpheusBackend:
                 # to match, so every command's "cmd" field would come back
                 # as "missing cmd". Compact separators avoid that.
                 payload = json.dumps(command, separators=(",", ":")).encode("utf-8")
+                self._last_error_msg = None  # a refusal after this write is new
+                self._echo_guard = None      # ...and so is any event after it (the read's echo is long past)
                 # A write-with-response that never gets acked (e.g. the
                 # peripheral's BLE stack wedged after a burst of traffic)
                 # would otherwise hang this coroutine forever - since this
@@ -1005,6 +1014,9 @@ class MorpheusBackend:
                                            message=f"Malformed keyer payload: {exc}"))
 
     def _on_control_notify(self, _characteristic, data: bytearray) -> None:
+        guard = self._echo_guard
+        if guard is not None and bytes(data) == guard[0] and time.monotonic() < guard[1]:
+            return  # echo of our own read, not a new event
         self._last_seen = datetime.now(timezone.utc).isoformat()
         try:
             payload = json.loads(bytes(data).decode("utf-8"))
@@ -1074,8 +1086,11 @@ class MorpheusBackend:
                 "weightPercent": payload.get("weightPercent"),
             })
         elif evt == "error":
-            self._emit_error(BackendError(code=ErrorCode.TRAINING_START_FAILED.value,
-                                           message=payload.get("message", "unknown error")))
+            message = payload.get("message", "unknown error")
+            if message == self._last_error_msg:
+                return  # duplicate or echo of the refusal already reported for this command
+            self._last_error_msg = message
+            self._emit_error(BackendError(code=ErrorCode.TRAINING_START_FAILED.value, message=message))
         # "ack" is intentionally not surfaced here - fire-and-forget
         # bookkeeping the contract doesn't require a listener for.
 
@@ -1103,6 +1118,12 @@ class MorpheusBackend:
             raw = await self._client.read_gatt_char(proto.CONTROL_EVT_UUID)
             payload = json.loads(bytes(raw).decode("utf-8"))
         except Exception:  # noqa: BLE001
+            return
+        self._echo_guard = (bytes(raw), time.monotonic() + 0.8)
+        # An error is an event, not state: the notification already delivered it, and
+        # this re-read returns the same event again. Re-emitting it made one refusal
+        # ("keyer busy") fail a later, unrelated command in the app.
+        if payload.get("evt") == "error":
             return
         self._handle_control_payload(payload)
 

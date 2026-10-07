@@ -1,5 +1,25 @@
 # Changelog
 
+## Source 2.8.6 — 2026-10-07
+
+- Perf (FND-02): once the link is secure the device requests a 7.5–15 ms connection
+  interval (latency 0, 4 s supervision timeout). Remote virtual-key press/release latency
+  on Linux/BlueZ drops from about 97 ms to about 57 ms (requested 30 ms hold measured as
+  57 ms; SYS-16). Hosts may ignore or adjust the request; behaviour is otherwise unchanged.
+- Includes 2.8.5 (FND-03, key released when the link drops). No protocol, UUID, security
+  or NVS changes; compatible with every existing client.
+- Known issue FND-01: roughly 5–10 % of reconnects to a bonded device still need a retry
+  (SYS-13 9/10 on hardware, unchanged by this release); clients recover automatically.
+
+## Source 2.8.5 — 2026-10-07
+
+- Fix (FND-03): a held virtual key is now released when the BLE link drops. Previously
+  the key stayed "down" until a later client sent `key_up`, and the device refused every
+  `set_keyer` with `keyer busy` in the meantime (reproduced 11/11 times on hardware).
+  `ble_control_service()` releases an orphaned key through the normal key-up path.
+- No protocol, UUID, security or NVS changes; compatible with every existing client.
+- Verified by native tests and the on-device negative test NEG-D14 / system test FS-N07.
+
 ## Desktop bridge 1.2.0 — 2026-10-06
 
 - Add multi-device discovery, actual BlueZ paired-device import, runtime scan/

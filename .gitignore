@@ -25,3 +25,4 @@ build/
 
 # graphify knowledge-graph output (generated, not source)
 graphify-out/
+test-results/

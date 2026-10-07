@@ -56,3 +56,15 @@ g++ -std=c++17 -Wall -Wextra \
   "$SCRIPT_DIR/test_keyer_metrics.cpp" "$REPO_ROOT/firmware/MORPHEUS/core_decoder.cpp" \
   -o "$OUT_DIR/test_keyer_metrics"
 "$OUT_DIR/test_keyer_metrics"
+
+# Negative tests: hostile input to the real decoder (overflow, disabled, wraparound, ...).
+g++ -std=c++17 -Wall -Wextra \
+  -I "$SCRIPT_DIR/arduino_stub" -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_decoder_negative.cpp" "$REPO_ROOT/firmware/MORPHEUS/core_decoder.cpp" \
+  -o "$OUT_DIR/test_decoder_negative"
+"$OUT_DIR/test_decoder_negative"
+
+# FND-03: orphaned virtual key (link lost while held) is released.
+g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_virtual_key_guard.cpp" -o "$OUT_DIR/test_virtual_key_guard"
+"$OUT_DIR/test_virtual_key_guard"

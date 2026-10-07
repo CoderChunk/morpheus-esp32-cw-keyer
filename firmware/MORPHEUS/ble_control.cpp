@@ -76,6 +76,7 @@
 #include "core_trainer.h"
 #include "core_games.h"
 #include "transport.h"
+#include "virtual_key_guard.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -642,6 +643,9 @@ void ble_control_init() {
 }
 
 void ble_control_service(unsigned long now) {
+  // The client that held the virtual key is gone: release it through the normal
+  // key-up path so the decoder, metrics and set_keyer see a completed element.
+  if (virtualKeyOrphaned(virtualKeyDown, transport_isConnected())) handleKeyUp();
   // Starting a drill/game from either BLE or the OLED ends the free-keying
   // measurement context, even if that session never receives a key edge.
   static bool keyerWasAvailable = true;

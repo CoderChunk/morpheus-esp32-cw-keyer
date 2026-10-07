@@ -1,5 +1,11 @@
 # MORPHEUS Backend WebSocket/JSON Protocol (Windows/Linux/macOS only)
 
+> **Status: debug / diagnostics route.** The Flutter UI (`morpheus_ui` 1.4+) talks to
+> MORPHEUS over native BLE on every platform and does not need this bridge. This
+> tool is kept so a BLE problem can be isolated: build the UI with
+> `--dart-define=MORPHEUS_TRANSPORT=bridge` (desktop only) to route it through the
+> `bleak` client here, and compare. The GATT contract itself is unchanged.
+
 ## Additive CW measurements — firmware 2.8.4
 
 `probeKeyerMetrics` accepts `{"id":"<1..24 ASCII letters/digits>","reset":false}`.

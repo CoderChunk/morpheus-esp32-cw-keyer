@@ -1,7 +1,7 @@
 """
 MORPHEUS transport-agnostic backend API.
 
-Implements the contract in MORPHEUS_BACKEND_API_REQUIREMENTS.md: BLE
+Implements the backend contract (see BACKEND_API.md): BLE
 connection/discovery, keyer telemetry, virtual key commands, training
 control, Linux in-process pairing, capability flags, and a structured
 error model - independent of any particular UI framework.
@@ -45,7 +45,7 @@ APPLICATION_VERSION = "1.2.0"
 
 # ---------------------------------------------------------------------------
 # Enumerations (string-valued so they serialize identically to the values in
-# MORPHEUS_BACKEND_API_REQUIREMENTS.md, whether or not a given consumer ever
+# BACKEND_API.md, whether or not a given consumer ever
 # actually serializes them - e.g. the Qt adapter passes them through as-is).
 # ---------------------------------------------------------------------------
 class ConnectionState(str, Enum):
@@ -169,7 +169,7 @@ class TrainingState:
     # The base keyer WPM (core_keyer_getWpm()) - what every mode except
     # ADAPTIVE actually plays targets at. Lets a client synthesize
     # listening audio that matches the device's real speed instead of
-    # guessing a fixed one (see MORPHEUS_BACKEND_API_REQUIREMENTS.md §8.3).
+    # guessing a fixed one.
     wpm: Optional[int] = None
     examScorePercent: Optional[int] = None
     examPassed: Optional[bool] = None
@@ -594,7 +594,7 @@ class MorpheusBackend:
 
     def answer_training(self, text: str) -> None:
         """Identification answer for LISTENING/COMBINED - see
-        MORPHEUS_BACKEND_API_REQUIREMENTS.md §8.2b. A no-op on the
+        BACKEND_API.md. A no-op on the
         device unless phase == "AWAIT_ANSWER"."""
         self._send_command({"cmd": "train_answer", "text": text}, operation="answerTraining")
 

@@ -2,8 +2,7 @@
 Qt-signal adapter over backend.MorpheusBackend.
 
 All the actual BLE/asyncio logic now lives in backend.py, which has no
-Qt dependency (see MORPHEUS_BACKEND_API_REQUIREMENTS.md /
-BACKEND_API.md - it's meant to be usable by any frontend, not just this
+Qt dependency (see BACKEND_API.md - it's meant to be usable by any frontend, not just this
 one). BleWorker's only job is translating the backend's plain-callback
 events into Qt signals so the rest of this app doesn't have to change:
 Qt auto-queues signal delivery across threads as long as this QObject

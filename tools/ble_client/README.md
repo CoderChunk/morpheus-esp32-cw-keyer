@@ -44,13 +44,16 @@ python3 morpheus_ble_client.py
 Leave the address field blank to auto-discover by name (`MORPHEUS-CW`),
 or paste a specific MAC/UUID if you have multiple units.
 
-## What's live vs. placeholder
+## What's live vs. placeholder (in this Qt client)
+
+The Flutter UI covers much more (keyer settings, device information, metrics, device
+management); this table describes only this reference client.
 
 | Sidebar section | Status |
 |---|---|
 | CW Keyer | Live — word telemetry (`BLE_WORD_CHAR_UUID`) |
-| Training | Live — start/stop any of the 6 modes, live drill state, virtual keying |
-| Games | Live — start/stop/pause/restart any of the 3 games, live game state, virtual keying |
+| Training | Live — start/stop any training mode, live drill state, virtual keying |
+| Games | Live — start/stop/pause/restart any of the 3 device games, live game state, virtual keying |
 | Statistics, Connectivity, Profiles, Settings, Diagnostics, Tools | Placeholder — no command exists yet on the BLE control protocol for these |
 | Help | Static info |
 
@@ -62,8 +65,8 @@ event schema on a new characteristic pair (`BLE_CONTROL_CMD_UUID` write,
 `BLE_WORD_CHAR_UUID` word-telemetry characteristic. `protocol.py` holds
 the UUID constants that must match `config.h`.
 
-Commands are compact JSON (no whitespace after `:`) written to
-`BLE_CONTROL_CMD_UUID`:
+Commands are compact JSON (no whitespace after `:`, at most 96 bytes) written to
+`BLE_CONTROL_CMD_UUID`; the full vocabulary is in `WS_PROTOCOL.md`:
 
 ```json
 {"cmd":"train_start","mode":"KOCH"}
@@ -89,7 +92,7 @@ corresponding page in `pages.py`.
 ## Files
 
 - `backend.py` — `MorpheusBackend`: the transport-agnostic backend (no
-  Qt import at all) implementing `BACKEND_API.md` / `MORPHEUS_BACKEND_API_REQUIREMENTS.md` -
+  Qt import at all) implementing `BACKEND_API.md` -
   connection, keyer telemetry, virtual key, training, pairing,
   capabilities, structured errors
 - `pairing_backend.py` — the BlueZ Agent1 D-Bus implementation, lazily
@@ -100,8 +103,7 @@ corresponding page in `pages.py`.
   client on Windows/Linux/macOS - see `WS_PROTOCOL.md`; Android/iOS use
   a native `flutter_reactive_ble` driver instead, see
   `MOBILE_ARCHITECTURE.md` and `MOBILE_BLE_PROTOCOL.md` for the
-  GATT-level wire format it implements, and `MOBILE_BLE_VALIDATION.md`
-  for the real-hardware test plan); not needed to run the Qt desktop
+  GATT-level wire format it implements); not needed to run the Qt desktop
   app
 - `morpheus_ble_client.py` — main window, sidebar navigation, styling
 - `ble_client_core.py` — `BleWorker`: a thin Qt-signal adapter over
@@ -111,7 +113,7 @@ corresponding page in `pages.py`.
 - `pairing_dialog.py` — the in-app "Pair New Device" dialog
 - `pages.py` — the CW Keyer / Training / Placeholder page widgets
 - `arcade.py` — the Games tab: six client-side Morse typing/arcade
-  games (no BLE involvement - see `UI_SPECIFICATION.md` §4)
+  games (no BLE involvement)
 - `protocol.py` — UUID/command-vocabulary constants plus the exact
   Koch order and Morse table (copied from firmware source)
 

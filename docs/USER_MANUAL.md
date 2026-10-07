@@ -1,6 +1,6 @@
 # MORPHEUS User Manual
 
-**Firmware version 2.1.0** — ESP32 CW keyer with real-time decoding, OLED
+**Firmware version 2.8.6** — ESP32 CW keyer with real-time decoding, OLED
 interface, training modes, games, and secure Bluetooth telemetry.
 
 ---
@@ -105,7 +105,9 @@ Toggle on/off: **Menu → CW Keyer → Decoder**.
 
 ## 4. Training
 
-**Menu → Training** — six modes, all scored and tracked in Statistics.
+**Menu → Training** — six modes, all scored and tracked in Statistics. Two
+further modes, **Listening** and **Combined**, are started from the MORPHEUS UI
+app over Bluetooth (see section 9) and are not in the on-device menu.
 
 | Mode | What it drills |
 |---|---|
@@ -115,6 +117,10 @@ Toggle on/off: **Menu → CW Keyer → Decoder**.
 | **Callsigns** | Randomly generated practice callsigns (not real assigned calls) |
 | **Adaptive** | Speed auto-adjusts: +1 WPM after 3 correct in a row, −2 WPM on a miss |
 | **Exam Mode** | Fixed 25-character test, 90% required to pass. Result (score, pass/fail) stays on screen until dismissed |
+
+In **Listening** mode you identify what MORPHEUS plays by typing or choosing an
+answer in the app, with no keying. **Combined** mode first asks for the
+identification and then for you to key the same character.
 
 Each round: MORPHEUS plays a target character/word, you key it back, and get
 immediate correct/incorrect feedback.
@@ -228,6 +234,15 @@ completed word (text, current WPM, keying mode, timestamp) to whichever
 paired device is currently connected — only **one active connection at
 a time**, even though multiple devices can be remembered (see below).
 
+### Companion app
+
+The [MORPHEUS UI](https://github.com/CoderChunk/morpheus_ui) app connects over this
+Bluetooth link. Besides showing the decoded text it can use the on-screen virtual key,
+start and stop training and games, change keyer settings, and read device information
+and keyer metrics. Firmware 2.8.3 or newer is required by the app; 2.8.6 is
+recommended. If the Bluetooth link drops while a virtual key is held, MORPHEUS
+releases the key.
+
 ### Pairing multiple devices
 
 MORPHEUS remembers up to **3 paired devices** (e.g. your phone and a
@@ -326,5 +341,3 @@ diagrams and design rationale.
 
 ---
 
-*For a breakdown of what's implemented vs. still in progress, see
-`docs/FUNCTIONALITY_STATUS.md`.*

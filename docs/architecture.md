@@ -2,87 +2,103 @@
 
 MORPHEUS is an event-driven ESP32 CW keyer. The Arduino sketch at
 `firmware/MORPHEUS/MORPHEUS.ino` is the integration layer: it initializes each
-module, calls each service function from `loop()`, and owns the event hooks that
-connect otherwise independent subsystems.
+module, calls each module's service function from `loop()`, and owns the event
+hooks that connect otherwise independent subsystems.
 
 ```text
 firmware/MORPHEUS/MORPHEUS.ino
-├── core_keyer      GPIO input, debounce, straight/paddle FSMs, sidetone timing
-├── core_decoder    DIT/DAH patterns, character lookup, word-gap detection
-├── display         OLED transcript, live dit/dah header readout, BLE status overlays
-├── transport       secure BLE pairing, bond allowlist, word notifications
-└── services        settings persistence, serial diagnostics, utility services
+├── core_keyer        GPIO input, debounce, straight/paddle FSMs, sidetone timing
+├── core_decoder      DIT/DAH patterns, character lookup, word-gap detection
+├── core_memory       5-slot memory keyer
+├── core_trainer      Koch, characters, words, callsigns, adaptive, exam,
+│                     listening and combined training modes
+├── core_games        Copy, Memory and Speed challenge games
+├── core_stats        session and lifetime statistics
+├── core_profiles     six named operating profiles
+├── core_clock        shared timing helpers
+├── core_led          status LED patterns
+├── transport         secure BLE pairing, bond allowlist, word notifications
+├── ble_control       BLE control channel: JSON commands in, events out
+├── display + ui_*    OLED renderer, menu system, screens, rotary-encoder input
+└── services          settings persistence, serial diagnostics, utilities
 ```
+
+`config.h` holds feature flags, pin assignments, limits and `FIRMWARE_VERSION`.
 
 ## Startup order
 
 `setup()` brings modules up in a deliberate order:
 
 1. Start Serial diagnostics when `FEATURE_SERIAL` is enabled.
-2. Sample the active-low bond-reset button before BLE is initialized.
-3. Initialize the keyer and decoder.
-4. Load persisted operator settings, which may update WPM, sidetone frequency,
-   and paddle reversal.
+2. Initialize the core modules: keyer, decoder, memory keyer, trainer, games,
+   statistics, profiles, clock and status LED.
+3. Initialize BLE transport (`transport_init()`) and then the BLE control
+   channel (`ble_control_init()`).
+4. Load persisted settings (`services_loadSettings()`) and record the session
+   start. This must come after `transport_init()`: loading a persisted
+   "BLE enabled" setting starts advertising, which needs the BLE stack to exist.
 5. Initialize the OLED display when `FEATURE_OLED` is enabled.
 6. Initialize services.
-7. Initialize BLE transport last, then clear BLE bonds if the boot-time
-   bond-reset hold was confirmed.
-
-Keeping BLE last ensures the display, settings, and keyer state are ready before
-external devices can pair or receive notifications.
 
 ## Main loop
 
-`loop()` stays non-blocking for normal keying operation. Each pass:
-
-1. Captures the keyer mode before servicing input.
-2. Runs `core_keyer_service(now)` to debounce GPIOs and emit key events.
-3. Logs mode changes when Serial diagnostics are enabled.
-4. Runs `core_decoder_service(now)` to finalize characters and words after
-   silence gaps.
-5. Runs settings persistence, BLE transport, OLED rendering, and Serial
-   diagnostics according to their feature flags.
-6. Optionally handles temporary debug serial commands when
-   `FEATURE_DEBUG_SERIAL_COMMANDS` is enabled.
+`loop()` stays non-blocking. Each pass runs, in order: the loop counter, the keyer
+(debounce and key events), the decoder (character and word gaps), the memory keyer,
+trainer, games, statistics, settings persistence and status LED, then BLE transport,
+the BLE control channel, the OLED/UI, Serial diagnostics (`FEATURE_SERIAL`) and the
+optional debug serial commands (`FEATURE_DEBUG_SERIAL_COMMANDS`).
 
 ## Event flow
 
-1. `core_keyer_service()` samples the mode switch, key tip, and key ring inputs.
-2. A completed DIT or DAH is emitted through `events_onKeyUp()` in
-   `MORPHEUS.ino`.
-3. `events_onKeyUp()` logs the element and feeds it to `core_decoder_addElement()`.
-4. `core_decoder_service()` waits for character and word gaps based on the
-   current keyer dit length.
-5. `events_onCharacterComplete()` logs decoded characters.
-6. `events_onWordComplete()` fans completed words out to the OLED transcript and
-   BLE notification path when those features are enabled.
+1. `core_keyer_service()` samples the key and paddle inputs. A key may also be
+   pressed remotely through the BLE `key_down` / `key_up` commands, which feed the
+   same path (marked `fromVirtualKey`).
+2. A completed DIT or DAH is emitted through `events_onKeyUp()` in `MORPHEUS.ino`,
+   which updates the BLE keyer metrics and statistics and feeds the element to
+   `core_decoder_addElement()`.
+3. `core_decoder_service()` waits for character and word gaps based on the current
+   dit length.
+4. `events_onCharacterComplete()` updates statistics and sends a live-word update
+   over BLE; `events_onPatternChanged()` sends the in-progress pattern.
+5. `events_onWordComplete()` fans the completed word out to the OLED transcript,
+   the statistics and the BLE word notification.
+6. Training and game modules can consume decoded input through their own sinks;
+   while one is active, the decoder output goes to it instead of the transcript.
+
+## BLE control channel
+
+`transport` only carries bytes: the GATT service, pairing, the bond allowlist and
+notification framing. `ble_control` owns the meaning of the control characteristics:
+JSON commands (virtual key, training and game control, keyer settings, device
+information, measurement probes) and the matching state, `ack` and `error` events.
+The wire format is specified in `tools/ble_client/WS_PROTOCOL.md` and
+`tools/ble_client/MOBILE_BLE_PROTOCOL.md`. A virtual key that is still held when the
+link drops is released by `ble_control_service()`.
 
 ## Module boundaries
 
 - `core_keyer` owns physical input state and timing. It does not include or call
-  `core_decoder`; it only emits key events through hooks declared in
-  `core_keyer.h`.
-- `core_decoder` consumes `ElementType` values produced by the keyer and exposes
-  only read-only decode-in-progress getters for display and diagnostics.
-- `display` owns OLED rendering and the display-specific BLE status vocabulary.
-  It snapshots BLE status under a short critical section before doing I2C work.
-- `transport` owns NimBLE setup, pairing, bond reset, trusted-device storage,
-  MTU-aware JSON notification construction, and BLE status updates pushed to the
-  display module.
-- `services` owns Serial diagnostics, operator settings persistence, factory
-  reset, uptime, and heap helpers. Its settings namespace is separate from BLE
-  bond/trusted-device storage.
+  `core_decoder`; it only emits key events through hooks declared in `core_keyer.h`.
+- `core_decoder` consumes `ElementType` values from the keyer and exposes only
+  read-only decode-in-progress getters.
+- `transport` owns NimBLE setup, pairing, bond reset, trusted-device storage and
+  MTU-aware JSON notification construction, and pushes status to the display.
+- `ble_control` owns the control-channel vocabulary and its state machines.
+- `display` and the `ui_*` modules own OLED rendering, menus and navigation. The UI
+  talks to the rest of the firmware through `ui_backend`.
+- `services` owns Serial diagnostics, settings persistence, factory reset, uptime
+  and heap helpers. Its settings namespace is separate from BLE bond storage.
 
 ## Feature flags
 
 Most optional behavior is controlled in `firmware/MORPHEUS/config.h`:
 
 - `FEATURE_OLED` gates OLED initialization and rendering.
-- `FEATURE_BLE` gates NimBLE transport and word notifications.
+- `FEATURE_BLE` gates the NimBLE transport and word notifications.
 - `FEATURE_SIDETONE` gates LEDC sidetone output.
-- `FEATURE_SERIAL` gates Serial diagnostics.
+- `FEATURE_SERIAL` gates Serial diagnostics (off by default).
 - `FEATURE_DEBUG_SERIAL_COMMANDS` enables temporary settings and bond-reset
-  commands for hardware validation.
+  commands for hardware validation (off by default).
 
-When a feature is disabled, its module still provides stub functions where
-needed so the public interfaces remain linkable.
+When a feature is disabled, its module still provides stub functions where needed so
+the public interfaces remain linkable.

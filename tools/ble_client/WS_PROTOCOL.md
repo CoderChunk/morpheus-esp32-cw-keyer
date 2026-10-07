@@ -62,18 +62,20 @@ local socket.
 python3 ws_server.py --host 127.0.0.1 --port 8765
 ```
 
-A Flutter app may bundle and spawn this as a subprocess, or connect to
-an already-running instance — this protocol doesn't care which.
+Start it in a separate terminal and build the UI with
+`--dart-define=MORPHEUS_TRANSPORT=bridge`; this protocol doesn't care who
+starts it.
 
-**Platform scope:** this WebSocket transport is for **Windows, Linux,
-and macOS only**. Android and iOS cannot host this Python process at
+**Platform scope:** this WebSocket transport is a desktop debug route
+for **Windows, Linux and macOS only**. Android and iOS cannot host this Python process at
 all (no iOS `bleak` backend, no D-Bus/BlueZ on either mobile OS, and
 iOS cannot spawn a persistent separate process in the first place) —
 see `MOBILE_ARCHITECTURE.md` for the mobile decision. The method/event/
-data-shape definitions below (§4-§6) are still the authoritative
-protocol spec on mobile; a native Dart driver implements them directly
-over GATT instead of over this WebSocket. Only §1 (Transport) and §10
-(Dart client sketch, which assumes this WebSocket) are desktop-specific.
+data-shape definitions below (§4-§6) are the authoritative
+protocol spec for both transports; the native Dart client (the default
+on every platform) implements them directly over GATT instead of over
+this WebSocket. Only §1 (Transport) and §10
+(Dart client sketch, which assumes this WebSocket) are bridge-specific.
 
 ---
 
@@ -486,8 +488,8 @@ machine right now (checked live, not hardcoded by platform). This is custom
 agent pairing; `getDeviceRuntime.usesSystemPairing` describes the OS fallback.
 `connectivityManagement` is true in bridge 1.2.0 for host discovery/management. Every
 `false` flag is a section with no BLE support yet — see
-`UI_SPECIFICATION.md` for what those sections need once the firmware
-exposes them; don't hide the section, disable it and say why.
+what those sections need once the firmware exposes them;
+don't hide the section, disable it and say why.
 
 ### 6.7 DeviceInfo
 
@@ -543,8 +545,7 @@ runtime) — fetch once and cache client-side.
 
 ## 8. Error codes
 
-Same codes as `BACKEND_API.md` §8 / `MORPHEUS_BACKEND_API_REQUIREMENTS.md`
-§11.1; the ones this server actually returns today:
+Same codes as `BACKEND_API.md` §8; the ones this server actually returns today:
 
 | Code | When |
 |---|---|
@@ -658,9 +659,6 @@ tolerated; older clients can continue using existing channels. NOTIFY is bounded
 and best effort; run/sequence permit dedup and unobserved-position accounting.
 No physical Morse decoding or firmware scoring is moved into Flutter.
 
-Full rationale/field limits/security/compatibility/test boundaries:
-`../../../morpheus_ui/PROTOCOL_CHANGES.md` (workspace sibling document).
-
 
 ## Additive UI-control support — firmware source2.8.3 (2026-10-03)
 
@@ -681,5 +679,4 @@ These are necessary for the new real keyer/lesson controls, not a trainer/decode
 rewrite. Older firmware supports baseline commands but cannot provide configured
 lessons or setter confirmation; clients gate2.8.3. Local Farnsworth remains local.
 
-Complete rationale, changed-file list and validation boundaries: workspace
-`morpheus_ui/PROTOCOL_CHANGES.md`. No hardware was flashed.
+

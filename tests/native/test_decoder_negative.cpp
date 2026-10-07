@@ -70,7 +70,7 @@ int main() {
   // NEG-F08 reverse lookup: unmapped characters and tiny/zero buffers are safe
   { char* b = new char[1]; CHECK(!core_decoder_lookupPattern('~', b, 1)); delete[] b; }
   { char* b = new char[2]; core_decoder_lookupPattern('S', b, 2); CHECK(strlen(b) < 2); delete[] b; }
-  { char b[1] = {'x'}; core_decoder_lookupPattern('S', b, 0); CHECK(b[0] == 'x'); }   // zero size: untouched
+  { char b[1] = {'x'}; CHECK(!core_decoder_lookupPattern('S', b, 0)); CHECK(b[0] == 'x'); }   // zero size: refused, untouched
   for (int c : {0, 1, 31, 32, 127, 128, 255}) { char out[16]; CHECK(!core_decoder_lookupPattern((char)c, out, sizeof out) || strlen(out) <= MAX_PATTERN_LEN); }
 
   // NEG-F09 a training sink that is released mid-session leaves normal decoding intact

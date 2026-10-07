@@ -239,6 +239,13 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 #endif
       }
     }
+    // Link is secure: ask for a short connection interval (after, never
+    // during, pairing so it cannot disturb the security exchange).
+    if (bleServer != nullptr) {
+      bleServer->updateConnParams(connInfo.getConnHandle(), BLE_CONN_INTERVAL_MIN,
+                                  BLE_CONN_INTERVAL_MAX, BLE_CONN_LATENCY,
+                                  BLE_CONN_SUPERVISION_TO);
+    }
     portENTER_CRITICAL(&bleStateMux);
     bleAwaitingTimeout = true;
     bleStateChangeMs = millis();

@@ -1,5 +1,14 @@
 # Changelog
 
+## Source 2.8.5 — 2026-10-07
+
+- Fix (FND-03): a held virtual key is now released when the BLE link drops. Previously
+  the key stayed "down" until a later client sent `key_up`, and the device refused every
+  `set_keyer` with `keyer busy` in the meantime (reproduced 11/11 times on hardware).
+  `ble_control_service()` releases an orphaned key through the normal key-up path.
+- No protocol, UUID, security or NVS changes; compatible with every existing client.
+- Verified by native tests and the on-device negative test NEG-D14 / system test FS-N07.
+
 ## Desktop bridge 1.2.0 — 2026-10-06
 
 - Add multi-device discovery, actual BlueZ paired-device import, runtime scan/

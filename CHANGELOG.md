@@ -1,5 +1,31 @@
 # Changelog
 
+## Source 2.8.9 — 2026-10-11
+
+- Fix (FND-04): a bonded central usually encrypts the link before the connect callback runs,
+  and NimBLE then reports authentication first. `onConnect` reset the link to "not secure"
+  and called `startSecurity()` on the already-encrypted link, restarting encryption on
+  every connect. The link now keeps its real security state, and MORPHEUS asks for
+  security only if the link is still unencrypted 1.5 s after connecting
+  (`BLE_SECURITY_DEFER_MS`), which is the case for a new device that has to pair.
+- Fix (FND-05): the trusted-address list and NimBLE's bond store could disagree (NimBLE
+  evicts its oldest bond when its store is full). An address with no bond kept a slot and
+  new devices were turned away as "list full" (seen on hardware: list 3/3, bonds 2).
+  Entries without a bond are now dropped at boot and before a "list full" rejection
+  (`trusted_list.h`).
+- A second connection that `onConnect` turns away no longer resets the active link's state,
+  and the deferred security request is dropped once the central has started pairing.
+- Investigated, not fixed by this release: on an Oppo CPH1911 (Android 10) about 1 in 6
+  strict reconnects fails while the phone encrypts the link (the controller ends it with a
+  MIC failure, HCI 0x3D; the phone reports status 8 / "Encryption failed"). It happens
+  before any firmware callback, with or without this release. The app (MORPHEUS UI)
+  retries such a connect once.
+- Measured on hardware (release build): Linux/BlueZ device system tests 29/30 on each of two
+  runs, with a different timing check failing each time (SYS-15, SYS-16; see the test
+  report), including 10/10 reconnects; bridge integration 10/10. Oppo, 40 strict reconnects
+  per run: 32/40 and 38/40 on the first attempt; with the app's single retry 37/40 and 40/40.
+- No protocol, UUID or NVS format changes; compatible with every existing client.
+
 ## Source 2.8.8 — 2026-10-07
 
 - Fix (FND-01): the device no longer crashes shortly after a client connects. The BLE

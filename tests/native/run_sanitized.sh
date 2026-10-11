@@ -28,6 +28,7 @@ run metrics   "$D/test_keyer_metrics.cpp" "$R/firmware/MORPHEUS/core_decoder.cpp
 run decneg    "$D/test_decoder_negative.cpp" "$R/firmware/MORPHEUS/core_decoder.cpp"
 run keyguard  "$D/test_virtual_key_guard.cpp"
 run cmdqueue  "$D/test_control_cmd_queue.cpp"
+run trusted   "$D/test_trusted_list.cpp"
 run fuzz      "$D/test_protocol_fuzz.cpp"
 run bench     "$D/bench_decoder.cpp" "$R/firmware/MORPHEUS/core_decoder.cpp"
 echo "OK - all native tests clean ($MODE)"

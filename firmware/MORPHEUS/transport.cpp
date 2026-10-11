@@ -7,6 +7,7 @@
 #include <NimBLEDevice.h>
 #include <Preferences.h>
 #include "control_cmd_queue.h"
+#include "trusted_list.h"
 #include <string.h>
 
 static NimBLEServer *bleServer = nullptr;
@@ -21,6 +22,10 @@ static portMUX_TYPE controlCmdMux = portMUX_INITIALIZER_UNLOCKED;
 static Preferences blePrefs;
 static volatile uint16_t bleConnHandle = BLE_CONN_HANDLE_INVALID;
 static volatile bool bleLinkSecure = false;
+// Security is requested from the main loop BLE_SECURITY_DEFER_MS after connecting, and only
+// if the central has not encrypted the link by then (FND-04, see onConnect).
+static volatile bool bleSecurityPending = false;
+static volatile unsigned long bleConnectMs = 0;
 static volatile unsigned long bleStateChangeMs = 0;
 static volatile bool bleAwaitingTimeout = false; // true while showing PAIR_OK/PAIR_FAIL
 // Multi-device pairing: up to BLE_TRUSTED_DEVICE_CAP remembered bonded
@@ -47,6 +52,27 @@ static bool addTrustedAddress(const char *addr) {
   trustedAddresses[trustedDeviceCount][sizeof(trustedAddresses[0]) - 1] = '\0';
   trustedDeviceCount++;
   return true;
+}
+
+static bool peerHasBond(const char *addr) {
+  int bonds = NimBLEDevice::getNumBonds();
+  for (int i = 0; i < bonds; i++) {
+    if (strcmp(NimBLEDevice::getBondedAddress(i).toString().c_str(), addr) == 0) return true;
+  }
+  return false;
+}
+
+static void saveTrustedDevices();
+
+// Drops trusted entries whose bond NimBLE no longer holds (see trusted_list.h).
+static void pruneTrustedDevices() {
+  uint8_t kept = pruneUnbondedTrusted(trustedAddresses, trustedDeviceCount, peerHasBond);
+  if (kept == trustedDeviceCount) return;
+#if FEATURE_SERIAL
+  Serial.print(F("EVT BLE_TRUSTED_PRUNED removed=")); Serial.println(trustedDeviceCount - kept);
+#endif
+  trustedDeviceCount = kept;
+  saveTrustedDevices();
 }
 
 static void saveTrustedDevices() {
@@ -156,6 +182,9 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
     // only connect (and become trusted on successful auth, see
     // onAuthenticationComplete) while there is still a free slot.
     if (trustedDeviceCount >= BLE_TRUSTED_DEVICE_CAP && !isTrustedAddress(peerAddr)) {
+      pruneTrustedDevices();
+    }
+    if (trustedDeviceCount >= BLE_TRUSTED_DEVICE_CAP && !isTrustedAddress(peerAddr)) {
 #if FEATURE_SERIAL
       Serial.print(F("EVT BLE_REJECT_FULL addr=")); Serial.println(peerAddr);
 #endif
@@ -163,7 +192,9 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
       return;
     }
     bleConnHandle = connInfo.getConnHandle();
-    bleLinkSecure = false;
+    // A bonded central can encrypt the link before this callback runs; NimBLE then reports
+    // onAuthenticationComplete first. Keep that result instead of resetting it (FND-04).
+    bleLinkSecure = connInfo.isEncrypted() && connInfo.isAuthenticated() && connInfo.isBonded();
     pairingWindowActive = false;   // a real connection ends the pairing window
     advertisingActive = false;     // NimBLE stops advertising once connected
     pushDisplayStatus(DISPLAY_LINK_CONNECTED);
@@ -171,16 +202,20 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
 #if FEATURE_SERIAL
     Serial.print(F("EVT BLE_CONNECT addr=")); Serial.println(peerAddr);
 #endif
-    bool started = NimBLEDevice::startSecurity(connInfo.getConnHandle());
-#if FEATURE_SERIAL
-    Serial.print(F("  startSecurity() returned ")); Serial.println(started ? "true" : "false");
-#endif
+    // Asking for security at the instant of connection restarted encryption the central
+    // had already started, and sometimes failed the link (FND-04). transport_service()
+    // asks later, only if the link is still unencrypted (a new device that needs pairing).
+    bleConnectMs = millis();
+    bleSecurityPending = !connInfo.isEncrypted();
   }
 
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override {
 #if FEATURE_SERIAL
     Serial.print(F("EVT BLE_DISCONNECT reason=")); Serial.println(reason);
 #endif
+    // A second connection turned away in onConnect must not reset the active link.
+    if (isCurrentlyConnected() && connInfo.getConnHandle() != bleConnHandle) return;
+    bleSecurityPending = false;
     bleConnHandle = BLE_CONN_HANDLE_INVALID;
     bleLinkSecure = false;
     portENTER_CRITICAL(&controlCmdMux);
@@ -200,6 +235,7 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
   }
 
   uint32_t onPassKeyDisplay() override {
+    bleSecurityPending = false;   // the central already started pairing
     uint32_t passkey = esp_random() % 1000000UL;
     pushDisplayStatus(DISPLAY_LINK_PAIRING, passkey);
     updateLedForCurrentState();
@@ -216,8 +252,11 @@ class KeyerBleServerCallbacks : public NimBLEServerCallbacks {
   }
 
   void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
+    // Ignore a second connection that onConnect turns away (the active link is unaffected).
+    if (isCurrentlyConnected() && connInfo.getConnHandle() != bleConnHandle) return;
     bool secure = connInfo.isEncrypted() && connInfo.isAuthenticated() && connInfo.isBonded();
     bleLinkSecure = secure;
+    bleSecurityPending = false;
 #if FEATURE_SERIAL
     Serial.print(F("EVT BLE_AUTH secure=")); Serial.println(secure ? 1 : 0);
 #endif
@@ -325,6 +364,7 @@ void transport_init() {
   NimBLEDevice::setSecurityAuth(true, true, true); // bonding, MITM, secure connections
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
   NimBLEDevice::setMTU(BLE_REQUESTED_MTU);
+  pruneTrustedDevices();   // needs NimBLE's bond store, loaded by init()
 
   bleServer = NimBLEDevice::createServer();
   bleServer->setCallbacks(new KeyerBleServerCallbacks());
@@ -410,6 +450,19 @@ void transport_service(unsigned long now) {
       portEXIT_CRITICAL(&controlCmdMux);
       if (!have) break;
       controlCommandHandler(cmd);
+    }
+  }
+
+  uint16_t handle = bleConnHandle;
+  if (bleSecurityPending && handle != BLE_CONN_HANDLE_INVALID &&
+      now - bleConnectMs >= BLE_SECURITY_DEFER_MS) {
+    bleSecurityPending = false;
+    if (bleServer != nullptr && !bleServer->getPeerInfoByHandle(handle).isEncrypted()) {
+      bool started = NimBLEDevice::startSecurity(handle);
+#if FEATURE_SERIAL
+      Serial.print(F("  startSecurity() returned ")); Serial.println(started ? "true" : "false");
+#endif
+      (void)started;
     }
   }
 

@@ -73,3 +73,8 @@ g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
   "$SCRIPT_DIR/test_control_cmd_queue.cpp" -o "$OUT_DIR/test_control_cmd_queue"
 "$OUT_DIR/test_control_cmd_queue"
 "$OUT_DIR/test_virtual_key_guard"
+
+# FND-05: trusted addresses whose bond is gone are dropped (no stale slot).
+g++ -std=c++17 -Wall -Wextra -I "$REPO_ROOT/firmware/MORPHEUS" \
+  "$SCRIPT_DIR/test_trusted_list.cpp" -o "$OUT_DIR/test_trusted_list"
+"$OUT_DIR/test_trusted_list"

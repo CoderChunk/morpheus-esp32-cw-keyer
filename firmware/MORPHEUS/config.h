@@ -40,7 +40,7 @@
 
 #define OLED_I2C_ADDR     0x3C
 
-static const char 		   FIRMWARE_VERSION[] 		 = "2.8.8";
+static const char 		   FIRMWARE_VERSION[] 		 = "2.8.9";
 
 static const int           WPM_MIN                   = 5;
 static const int           WPM_MAX                   = 40;
@@ -116,6 +116,9 @@ static const uint16_t BLE_CONN_INTERVAL_MIN      = 6;
 static const uint16_t BLE_CONN_INTERVAL_MAX      = 12;
 static const uint16_t BLE_CONN_LATENCY           = 0;
 static const uint16_t BLE_CONN_SUPERVISION_TO    = 400;  // 10 ms units = 4 s
+// Delay before MORPHEUS asks a connected central for security. A bonded central encrypts on
+// its own, usually before the connect callback; asking at once restarted that (FND-04).
+static const uint32_t BLE_SECURITY_DEFER_MS      = 1500;
 
 // ----------------------------------------------------------------------------
 // Training module tunables

@@ -1,6 +1,6 @@
 # MORPHEUS User Manual
 
-**Firmware version 2.8.8** — ESP32 CW keyer with real-time decoding, OLED
+**Firmware version 2.8.9** — ESP32 CW keyer with real-time decoding, OLED
 interface, training modes, games, and secure Bluetooth telemetry.
 
 ---
@@ -239,7 +239,7 @@ a time**, even though multiple devices can be remembered (see below).
 The [MORPHEUS UI](https://github.com/CoderChunk/morpheus_ui) app connects over this
 Bluetooth link. Besides showing the decoded text it can use the on-screen virtual key,
 start and stop training and games, change keyer settings, and read device information
-and keyer metrics. Firmware 2.8.3 or newer is required by the app; 2.8.8 is
+and keyer metrics. Firmware 2.8.3 or newer is required by the app; 2.8.9 is
 recommended. If the Bluetooth link drops while a virtual key is held, MORPHEUS
 releases the key.
 
@@ -262,6 +262,8 @@ time can actually be connected and receiving data.
 Once all 3 slots are used, a brand-new (never-paired) device cannot pair
 until you free a slot — see Bond Reset below. Any of your 3 already-
 trusted devices can still reconnect at any time, slots full or not.
+A slot whose device no longer has a stored bond is freed automatically
+(at start-up, or when a new device would otherwise be refused).
 
 **Menu → Diagnostics → BLE Status** (or Connectivity → Bluetooth →
 Status) shows how many devices are currently paired, e.g. `Paired: 2/3`.

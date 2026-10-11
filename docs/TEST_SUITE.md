@@ -25,6 +25,7 @@ core (build). For full AddressSanitizer: `sudo dnf install libasan libubsan` (ot
 | Level | Step | What | Test IDs | Files |
 |---|---|---|---|---|
 | Functional | H1, H2 | Real firmware modules on the host (decoder, trainer, keyer, games, protocol parsers, metrics); bridge logic | FT-01 … FT-10 | `tests/native/test_core_*.cpp`, `test_game_morse_protocol.cpp`, `test_keyer_*.cpp`, `tests/test_*.py` |
+| Regression | H2, H3 | Fixed hardware defects stay fixed: control commands run off the NimBLE host task (FND-01), a held virtual key is released on link loss (FND-03), trusted entries without a bond are dropped (FND-05) | RT-02 | `test_control_cmd_queue.cpp`, `test_virtual_key_guard.cpp`, `test_trusted_list.cpp` |
 | Non-functional | H3 | Parser fuzz (734,520 cases), hardened/sanitized build, decoder throughput | NFT-01 … NFT-03 | `test_protocol_fuzz.cpp`, `bench_decoder.cpp`, `run_sanitized.sh` |
 | Non-functional | B1, B2 | ESP32 build, `--warnings all`, flash/RAM budget (≤ 90% / ≤ 50%), growth vs a tag (≤ 5%) | NFT-04 … NFT-06 | `run_all.sh` |
 | Non-functional | D1, D3, D4 | Latency, burst, malformed input, reconnect reliability, soak | NFT-07 … NFT-11, NFT-13 | `tests/hardware/ble_system_test.py` |
@@ -47,7 +48,9 @@ FND-01 (about 10 % of reconnects failing) was a device crash — a stack overflo
 
 A red run is the truth. Details: `docs/test-reports/FIRMWARE_TEST_REPORT_*.md`.
 
-No defects are currently open.
+FND-04 (the connect callback reset an already-encrypted link to "not secure" and restarted encryption) and FND-05 (a trusted entry without a bond held a slot) were fixed in firmware 2.8.9.
+
+Open: on an Oppo CPH1911 (Android 10) 2–8 of 40 strict reconnects per run fail while the phone encrypts the link (MIC failure, HCI 0x3D, before any firmware callback), with or without 2.8.9. The app retries such a connect once; the strict reconnect tests still count it as a failure.
 
 ## Adding tests
 Host tests compile the real sources; add a `.cpp` to `tests/native/` and a `run` line in `run.sh` and

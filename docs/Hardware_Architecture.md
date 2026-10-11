@@ -2,7 +2,7 @@
 
 **Status:** Living document — authoritative reference for MORPHEUS hardware planning
 **Applies to:** All MORPHEUS hardware variants (OLED, TFT, and future revisions)
-**Baseline firmware:** 2.8.8 (OLED variant); the TFT variant is a plan only
+**Baseline firmware:** 2.8.9 (OLED variant); the TFT variant is a plan only
 **Document created:** 2026-07-04
 
 This document is maintained alongside the firmware and hardware design. Any GPIO
@@ -99,7 +99,7 @@ any of them should be a deliberate, documented choice, not a default.
 MORPHEUS ships as two hardware variants sharing the same firmware core:
 
 - **OLED variant** — compact, lower-cost, lower-power. The implemented
-  hardware (firmware 2.8.8).
+  hardware (firmware 2.8.9).
 - **TFT variant** — premium, richer graphical interface, PWM-controlled
   backlight for adjustable brightness and power management. Planned.
 

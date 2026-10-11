@@ -7,7 +7,7 @@ An open-source ESP32 CW keyer with real-time Morse decoding, adaptive Koch/Farns
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-ESP32-red)
 
-Current firmware: **2.8.8** (see [CHANGELOG.md](CHANGELOG.md)). Operating instructions are in [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
+Current firmware: **2.8.9** (see [CHANGELOG.md](CHANGELOG.md)). Operating instructions are in [docs/USER_MANUAL.md](docs/USER_MANUAL.md).
 The companion app is [MORPHEUS UI](https://github.com/CoderChunk/morpheus_ui) (Flutter; Linux tested, other platforms implemented).
 
 ---
@@ -303,8 +303,10 @@ Contributors are also encouraged to explore:
 * Test coverage for the games, stats, profiles and UI state machine (the keyer, decoder, trainer and BLE control protocol are covered)
 * Web dashboards, contest logging, network gateways, SDR integrations
 
-Known issue: about 5–10 % of reconnects to an already-bonded device need a retry; see the latest
-test report.
+Known issue: on some Android phones a reconnect to an already-bonded device occasionally fails
+while the phone encrypts the link (on an Oppo CPH1911, 2–8 of 40 per run; the radio controller
+reports a MIC failure before any firmware code runs). The companion app retries such a connect
+once. Linux/BlueZ reconnects pass 10/10. See the latest test report.
 
 ---
 

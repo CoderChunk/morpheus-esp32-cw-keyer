@@ -206,3 +206,27 @@ The smoke test ran on a board flashed with the 2.8.5 build plus the connection-i
 |---|---|
 | **FND-01** reconnect failures | **Root cause found and fixed.** A serial log from a debug build showed `Guru Meditation Error ... Stack canary watchpoint triggered (nimble_host)` about 250 ms after connecting: the control-write callback ran the command handler on the NimBLE host task and overflowed its stack. 2.8.8 queues the command in the callback and runs it on the main loop (`control_cmd_queue.h`; host test `test_control_cmd_queue.cpp`). The earlier `startSecurity()` race hypothesis was wrong. |
 | Verification | Debug build with serial logging: 60/60 reconnects, no panics. Release build: device system tests 30/30, reconnect gate 30/30 strict, bridge integration 10/10, UI system tests over native BLE and the bridge pass (FS-12 20/20 on both). A later 100-cycle run: 99/100; the single failure was `failed to discover services, device disconnected` (about 1 %), not yet analysed. |
+
+## Addendum — firmware 2.8.9 (2026-10-11)
+
+Investigated with a debug build (serial logging) on the device and Android logcat on an Oppo
+CPH1911 (Android 10), using the app's strict reconnect test (AS12, one attempt per cycle).
+
+| Finding | Status |
+|---|---|
+| **FND-04** security state reset on connect | **Fixed.** A bonded central usually encrypts before the connect callback; NimBLE then reports authentication first. `onConnect` reset the link to "not secure" and called `startSecurity()` on the encrypted link, restarting encryption on every connect (the log showed auth, connect, auth). The link now keeps its real state; security is requested 1.5 s after connecting, only if the link is still unencrypted. |
+| **FND-05** stale trusted entry | **Fixed.** The trusted list was 3/3 while NimBLE held 2 bonds; the extra entry (this test PC, whose bond the device had lost) blocked new devices as "list full". Entries without a bond are dropped at boot and before a "list full" rejection. Verified: the device now boots with 2/3. The PC had to pair again (its connect failed with HCI 0x05, authentication failure, because the device had no key). |
+| Android reconnect failures | **Open, outside the firmware.** Every failed cycle is a MIC failure (disconnect reason 573 = HCI 0x3D) while the phone encrypts, before any firmware callback; the phone logs "Encryption failed" and status 8. Same signature with and without the FND-04 fix, and in cycles where the firmware never called `startSecurity()`. The app now retries such a connect once. |
+
+| Run (Oppo, 40 strict cycles unless noted) | First attempt | With the app's retry |
+|---|---|---|
+| 2.8.8 + serial logging (20 cycles) | 16/20 | — |
+| 2.8.9 + serial logging | 35/40 | 39/40 |
+| 2.8.9 release | 39/40, 32/40 | 40/40, 37/40 (retry missed link losses reported during discovery) |
+| 2.8.9 release, final app | 38/40 | 40/40 |
+
+Linux/BlueZ on the 2.8.9 release build: device system tests 29/30 on each of two runs, with a
+different timing check failing each time. SYS-15 decoded "TT" once: the previous test's dah was
+still in the device's word. SYS-16 measured a requested 30 ms hold as 28 ms once: the two writes
+landed on different 7.5–15 ms connection events. Both passed on the other run; they are timing
+flakes, not regressions. SYS-13 reconnects 10/10, bridge integration 10/10.
